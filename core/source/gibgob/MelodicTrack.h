@@ -37,7 +37,10 @@ struct Note
     uint8_t pitch;   // MIDI note 0..127
     uint8_t velocity; // 1..127
     uint8_t flags;   // bit0 = selected (UI only)
-    uint8_t reserved;
+    uint8_t chanceInv; // 100 - probability in %, so 0 (old notes) = always plays
+
+    int chance() const { return 100 - (chanceInv > 100 ? 100 : chanceInv); }
+    void setChance(int c) { chanceInv = (uint8_t)(100 - (c < 0 ? 0 : (c > 100 ? 100 : c))); }
 };
 static_assert(sizeof(Note) == 8, "Note must fit exactly in one step slot");
 

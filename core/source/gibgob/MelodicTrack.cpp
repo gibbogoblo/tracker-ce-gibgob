@@ -109,6 +109,16 @@ struct TrackPlayState
 };
 
 TrackPlayState playState[kTracks];
+
+uint32_t s_rng = 0x6B8B4567;
+inline uint32_t nextRandom()
+{
+    // xorshift32: cheap and fine for note probability
+    s_rng ^= s_rng << 13;
+    s_rng ^= s_rng >> 17;
+    s_rng ^= s_rng << 5;
+    return s_rng;
+}
 volatile int s_playTick[kTracks];
 
 struct Audition
@@ -348,6 +358,11 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         Note n;
         memcpy(&n, base + i * sizeof(Note), sizeof(Note));
         if (n.start >= patternTicks || n.start != tickInPattern || n.length == 0)
+            continue;
+
+        // probability (Note button in the piano roll)
+        int chance = n.chance();
+        if (chance < 100 && (int)(nextRandom() % 100) >= chance)
             continue;
 
         uint8_t instrument = h.sound < kTotalInstrumentsCount ? h.sound : (uint8_t)track;

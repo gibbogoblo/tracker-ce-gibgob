@@ -9,7 +9,7 @@ class cPianoRoll : public ModuleBase
   public:
     enum Param : uint8_t
     {
-        kParamNote = 0, // Note button  (green)
+        kParamNote = 0, // Note button  (green): probability
         kParamVelocity, // Instr button (yellow)
         kParamNudge,    // FX1 button   (purple)
         kParamInversion, // FX2 button  (light blue)
@@ -60,6 +60,7 @@ class cPianoRoll : public ModuleBase
     int chordId = -1; // -1 = single note
     int inversion = 0;
     int velocity = 100;
+    int chance = 100; // % for new notes
     int nudge = 0;
     int lengthTicks = 48;
     int zoom = 0;

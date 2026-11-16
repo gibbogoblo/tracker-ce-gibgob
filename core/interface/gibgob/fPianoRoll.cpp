@@ -7,7 +7,7 @@
 //   Insert           1st: start selection box, 2nd: lock (select notes inside), 3rd: let go
 //   Delete           delete selection, or the note(s) under the cursor; cancels a box
 //   Top row 1..8     chord for the ghost (Shift = extended chords); press again = single note
-//   Note/Instr/FX1/FX2  choose what small +/- edits (colour-coded value boxes)
+//   Note/Instr/FX1/FX2  choose what small +/- edits: Probability / Velocity / Nudge / Inversion
 //   small +/-        edit chosen value
 //   big +/-          note length      Shift + big +/- = zoom (one square per press)
 //   Shift            toggles (red border while on)
@@ -212,12 +212,13 @@ void cPianoRoll::refreshView()
     if (idx < 0)
         idx = findNoteAt(p, track, view.cursorTick, view.cursorPitch);
 
-    int pitch = view.cursorPitch, vel = velocity, nud = nudge, len = lengthTicks;
+    int pitch = view.cursorPitch, vel = velocity, nud = nudge, len = lengthTicks, chn = chance;
     if (idx >= 0)
     {
         Note n = getNote(p, track, idx);
         pitch = n.pitch;
         vel = n.velocity;
+        chn = n.chance();
         len = n.length;
         nud = n.start % kTicksPerStep;
         if (nud > kTicksPerStep / 2)
@@ -243,8 +244,8 @@ void cPianoRoll::refreshView()
     else
         view.mode[0] = 0;
 
-    snprintf(view.params[0].label, sizeof(view.params[0].label), "Note");
-    snprintf(view.params[0].value, sizeof(view.params[0].value), "%s", mtNotes[pitch]);
+    snprintf(view.params[0].label, sizeof(view.params[0].label), "Prob");
+    snprintf(view.params[0].value, sizeof(view.params[0].value), "%d%%", chn);
     view.params[0].color = color::kNoteBtn;
     snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
     snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
@@ -490,6 +491,7 @@ void cPianoRoll::placeGhost()
         n.length = (uint16_t)lengthTicks;
         n.pitch = pitch;
         n.velocity = (uint8_t)velocity;
+        n.setChance(chance);
         if (addNote(p, track, n) < 0)
         {
             mtPopups.show(0, "Track is full (127 notes)", 1);
@@ -597,7 +599,7 @@ void cPianoRoll::changeParam(int delta)
     {
         switch (param)
         {
-            case kParamNote: moveCursor(0, delta); return;
+            case kParamNote: chance = clampInt(chance + delta * 5, 0, 100); break;
             case kParamVelocity: velocity = clampInt(velocity + delta, 1, 127); break;
             case kParamNudge:
                 nudge = clampInt(nudge + delta, -(kTicksPerStep / 2), kTicksPerStep / 2);
@@ -623,7 +625,7 @@ void cPianoRoll::changeParam(int delta)
         Note note = getNote(p, track, targets[i]);
         switch (param)
         {
-            case kParamNote: note.pitch = (uint8_t)clampInt(note.pitch + delta, 0, 127); break;
+            case kParamNote: note.setChance(note.chance() + delta * 5); break;
             case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
             case kParamNudge:
                 note.start = (uint16_t)clampInt(note.start + delta, 0, view.patternTicks - 1);
@@ -632,8 +634,6 @@ void cPianoRoll::changeParam(int delta)
         }
         setNote(p, track, targets[i], note);
     }
-    if (param == kParamNote && n == 1)
-        view.cursorPitch = getNote(p, track, targets[0]).pitch;
     markChanged();
     refreshView();
 }
