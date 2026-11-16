@@ -8,6 +8,7 @@
 #include "log.h"
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
+#include "gibgob/MelodicTrack.h"
 #include "mtStructs.h"
 #include "sampleRecorder/sampleRecorder.h"
 
@@ -244,6 +245,23 @@ AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
             inc_uStepGlobal();
             for (int trackIdx = 0; trackIdx < kAllTracks; trackIdx++)
             {
+                // GibGob OS: tracks 8..15 are hidden storage for melodic notes
+                if (trackIdx >= kSampleTracks)
+                {
+                    inc_uStep(trackIdx);
+                    continue;
+                }
+
+                if (gibgob::isMelodic(trackIdx))
+                {
+                    strPlayer::strPlayerTrack& pr = player.track[trackIdx];
+                    int patternTicks = (currentPattern->track[trackIdx].length + 1) *
+                                       gibgob::kTicksPerStep;
+                    int tick = pr.actual_pos * gibgob::kTicksPerStep + (pr.uStep - 1);
+                    gibgob::playMicroStep(trackIdx, tick, patternTicks);
+                }
+                // still run the normal step logic (clock out, metronome, positions);
+                // note output for melodic tracks is blocked in sendNoteOn()
                 play_microStep(trackIdx);
                 inc_uStep(trackIdx);
             }
@@ -1593,6 +1611,7 @@ void Sequencer::stop(StopContext context)
 
     songTimer.stop();
     stopAllOpenNotes();
+    gibgob::stopAll();
     cancelFxes();
 
     player.isPlay = 0;
@@ -2519,6 +2538,11 @@ void Sequencer::sendMidiChordOff([[maybe_unused]] uint8_t track,
 AUDIO_CORE_RAM void Sequencer::sendNoteOn(uint8_t track,
                                           strPlayer::strPlayerTrack::strSendStep* step)
 {
+    if (track < kSampleTracks && gibgob::isMelodic(track))
+    {
+        return; // GibGob OS: melodic tracks play from their piano roll notes
+    }
+
     bool toMidi = isMidiInstrument(step->instrument);
     bool toSynth = isSynthInstrument(step->instrument);
 
