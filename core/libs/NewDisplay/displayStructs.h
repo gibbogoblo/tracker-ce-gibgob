@@ -152,6 +152,8 @@ typedef enum enControlId
     controlIdImgGrid,
     controlIdSimpleBox,
     controlIdNotesKeyboardLabel,
+    controlIdGibGobPianoRoll,
+    controlIdGibGobTrackGrid,
 
     /*
      *

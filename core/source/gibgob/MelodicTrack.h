@@ -69,6 +69,8 @@ bool isMelodic(int track);
 void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
 void stopTrack(int track);
+// current play position of a track in micro steps, -1 when stopped
+int playheadTick(int track);
 
 // ---- audition (UI) ----
 void auditionOn(int track, uint8_t pitch, uint8_t velocity);

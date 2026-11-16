@@ -252,8 +252,9 @@ AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
                     continue;
                 }
 
-                if (gibgob::isMelodic(trackIdx))
                 {
+                    // always called: releases held melodic notes even if the next
+                    // pattern has this track set to Drum; only starts notes if Melodic
                     strPlayer::strPlayerTrack& pr = player.track[trackIdx];
                     int patternTicks = (currentPattern->track[trackIdx].length + 1) *
                                        gibgob::kTicksPerStep;

@@ -109,6 +109,7 @@ struct TrackPlayState
 };
 
 TrackPlayState playState[kTracks];
+volatile int s_playTick[kTracks];
 
 struct Audition
 {
@@ -320,6 +321,7 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         return;
 
     TrackPlayState& st = playState[track];
+    s_playTick[track] = tickInPattern;
 
     // 1. count down / release sounding notes
     for (auto& a : st.notes)
@@ -399,6 +401,13 @@ void stopTrack(int track)
     for (auto& a : playState[track].notes)
         if (a.remaining >= 0)
             releaseSlot(track, a);
+}
+
+int playheadTick(int track)
+{
+    if (!validTrack(track) || !sequencer.isPlay())
+        return -1;
+    return s_playTick[track];
 }
 
 void stopAll()

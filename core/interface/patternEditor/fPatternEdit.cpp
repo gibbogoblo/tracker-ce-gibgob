@@ -1,3 +1,5 @@
+#include "gibgob/gibgobHome.h"
+#include "core/interface.h"
 #include "mtStructs.h"
 #include "patternEditor/patternEditor.h"
 #include <assert.h>
@@ -971,7 +973,7 @@ void cPatternEditor::focusOnActual()
     }
 
     trackerPattern.firstVisibleTrack =
-      clamp<int8_t>(trackerPattern.firstVisibleTrack, 0, kAllTracks - columnCounts);
+      clamp<int8_t>(trackerPattern.firstVisibleTrack, 0, kSampleTracks - columnCounts);
 }
 
 void cPatternEditor::moveCursorByStep()
@@ -2360,7 +2362,7 @@ void cPatternEditor::previousTrack()
             PTE->trackerPattern.selectEndTrack = PTE->trackerPattern.actualTrack;
             if (cursorAtEdge)
             {
-                PTE->trackerPattern.selectStartTrack = kAllTracks - 1;
+                PTE->trackerPattern.selectStartTrack = kSampleTracks - 1;
             }
             PTE->trackerPattern.selectState = 2;
             PTE->isSelectingNow = 1;
@@ -2371,7 +2373,7 @@ void cPatternEditor::previousTrack()
             PTE->trackerPattern.selectEndTrack = PTE->trackerPattern.actualTrack;
             if (cursorAtEdge)
             {
-                PTE->trackerPattern.selectStartTrack = kAllTracks - 1;
+                PTE->trackerPattern.selectStartTrack = kSampleTracks - 1;
             }
             PTE->trackerPattern.selectState = 2;
         }
@@ -2416,7 +2418,7 @@ void cPatternEditor::nextTrack()
         }
 
         bool cursorAtEdge = true;
-        if (PTE->trackerPattern.actualTrack < kAllTracks - 1)
+        if (PTE->trackerPattern.actualTrack < kSampleTracks - 1)
         {
             PTE->trackerPattern.actualTrack++;
             cursorAtEdge = false;
@@ -2430,7 +2432,7 @@ void cPatternEditor::nextTrack()
             PTE->trackerPattern.selectEndTrack = PTE->trackerPattern.actualTrack;
             if (cursorAtEdge)
             {
-                PTE->trackerPattern.selectStartTrack = kAllTracks - 1;
+                PTE->trackerPattern.selectStartTrack = kSampleTracks - 1;
             }
             PTE->trackerPattern.selectState = 2;
             PTE->isSelectingNow = 1;
@@ -2441,7 +2443,7 @@ void cPatternEditor::nextTrack()
             PTE->trackerPattern.selectEndTrack = PTE->trackerPattern.actualTrack;
             if (cursorAtEdge)
             {
-                PTE->trackerPattern.selectStartTrack = kAllTracks - 1;
+                PTE->trackerPattern.selectStartTrack = kSampleTracks - 1;
             }
             PTE->trackerPattern.selectState = 2;
         }
@@ -2458,7 +2460,7 @@ void cPatternEditor::nextTrack()
         // if(PTE->patternViewMode == 0 && PTE->trackerPattern.firstVisibleTrack < 4 )
         // PTE->trackerPattern.firstVisibleTrack++;
 
-        if (PTE->trackerPattern.actualTrack < kAllTracks - 1)
+        if (PTE->trackerPattern.actualTrack < kSampleTracks - 1)
             PTE->trackerPattern.actualTrack++;
         PTE->focusOnActual();
     }
@@ -2489,7 +2491,7 @@ void cPatternEditor::previousStep()
             PTE->trackerPattern.selectStartStep = 0;
             PTE->trackerPattern.selectStartTrack = 0;
             PTE->trackerPattern.selectEndStep = PTE->trackerPattern.patternLength - 1;
-            PTE->trackerPattern.selectEndTrack = kAllTracks - 1;
+            PTE->trackerPattern.selectEndTrack = kSampleTracks - 1;
             PTE->trackerPattern.selectState = 2;
             PTE->isSelectingNow = 1;
         }
@@ -2856,10 +2858,17 @@ static void functFx2(uint8_t state)
     }
 }
 
+// GibGob OS: a quick tap on Pattern (Fn1 on the Mini) returns to the main grid.
+static elapsedMillis s_patternPressTime;
+static bool s_patternPressedHere = false;
+
 static void functPattern(uint8_t state)
 {
     if (state == buttonPress)
     {
+        s_patternPressedHere = true;
+        s_patternPressTime = 0;
+
         if (PTE->fillState == 1)
         {
             return;
@@ -2867,8 +2876,21 @@ static void functPattern(uint8_t state)
 
         PTE->cancelPopups();
     }
+    else if (state == buttonRelease && s_patternPressedHere && s_patternPressTime < 250 &&
+             PTE->fillState == 0 && sequencer.sequencialSwitch_GetNext() == 0 &&
+             PTE->patternViewMode == 0)
+    {
+        s_patternPressedHere = false;
+        uint32_t track = (uint32_t)PTE->trackerPattern.actualTrack;
+        if (track >= (uint32_t)kSampleTracks)
+            track = 0;
+        mtInterface.deactivateModule(PTE);
+        mtInterface.activateModule(&gibgobHome, track);
+        return;
+    }
     else if (state == buttonRelease && PTE->patternButtonReleaseActive)
     {
+        s_patternPressedHere = false;
         PTE->setPatternViewMode(0);
         if (sequencer.sequencialSwitch_GetNext() > 0)
         {

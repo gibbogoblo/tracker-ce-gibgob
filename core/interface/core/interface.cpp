@@ -1,3 +1,5 @@
+#include "gibgob/gibgobHome.h"
+#include "gibgob/pianoRoll.h"
 #include <string.h>
 
 #include "core/interface.h"
@@ -54,7 +56,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 13;
+const uint8_t Interface::modulesCount = 15;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -69,6 +71,8 @@ const hModule Interface::modules[modulesCount] = {
     &imageViewer,       // 10
     &globalFileBrowser, // 11
     &masterParams,      // 12
+    &gibgobHome,        // 13  GibGob OS main grid
+    &pianoRoll,         // 14  GibGob OS piano roll
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;
@@ -77,7 +81,7 @@ const uint32_t Interface::modulesButtons[modulesButtonsCount][3] = {
     { interfaceButtonMaster, 12, 0 },
     { interfaceButtonParams, 5, mtInstEditModeParams },
     { interfaceButtonFile, 0, 0 },
-    { interfaceButtonPattern, 2, 0 },
+    { interfaceButtonPattern, 13, 0 }, // GibGob OS: Pattern opens the main grid
     { interfaceButtonSamplePlay, 3, 0 },
     { interfaceButtonSampleEdit, 6, 0 },
     { interfaceButtonSampleRec, 8, 0 },
@@ -265,7 +269,7 @@ void Interface::processStartScreen()
 #ifdef TRACKER_MINI
             initSpecialMiniTrackerButtons();
 #endif
-            activateModule(&patternEditor, 0);
+            activateModule(&gibgobHome, 0); // GibGob OS: boot to the main grid
             unmuteAudioOutByKey();
 
 #ifdef TRACKER_MINI
