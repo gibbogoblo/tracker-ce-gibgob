@@ -21,7 +21,7 @@ class cGibGobHome : public ModuleBase
     void moveCursor(int dCol, int dRow);
     void openTrack();
     void openTracker();
-    void toggleType();
+    void setType(bool melodic);
     void toggleMute();
     void changeSound(int dir);
     void clearTrack();
@@ -31,8 +31,6 @@ class cGibGobHome : public ModuleBase
 
     gibgob::TrackGridView view;
     hControl grid = -1;
-    hControl label[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-    hControl bgLabel = -1;
     char titleText[40];
 };
 

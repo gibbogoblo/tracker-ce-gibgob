@@ -2,6 +2,7 @@
 #define GIBGOB_TRACKGRIDCONTROL_H_
 
 #include "displayControls.h"
+#include "gibgob/gibgobUi.h"
 
 namespace gibgob
 {
@@ -14,14 +15,16 @@ struct TrackTile
     char detail[32]; // "12 steps" / "8 notes"
     bool melodic;
     bool muted;
-    bool active;     // currently sounding / has content at playhead
+    bool active;     // sounding at the playhead
 };
 
 struct TrackGridView
 {
     TrackTile tiles[8];
     int cursor = 0;
+    bool shift = false;
     char info[96] = { 0 };
+    BottomBar bar;
 };
 
 class TrackGridControl : public cDisplayControl

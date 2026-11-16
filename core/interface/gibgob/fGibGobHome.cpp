@@ -3,8 +3,9 @@
 // Controls
 //   D-pad        select track
 //   Middle       open track (Melodic -> piano roll, Drum -> tracker editor)
-//   Top row      1 Type  2 Mute  3 Open  4 Sound-  5 Sound+  6 Clear(+Shift)  8 Tracker
-//   small +/-    change sound of a Melodic track
+//   +/- (any)    + = Melodic, - = Drum
+//   Top row      1 Mute  2 Open  3 Sound-  4 Sound+  5 Clear(+Shift)  8 Tracker
+//   Shift        toggles (red border while on)
 //   Play         play / stop pattern (Shift+Play = song)
 //   Pattern(Fn1) open the classic tracker for the selected track
 
@@ -17,6 +18,7 @@
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/pianoRoll.h"
+#include "gibgob/gibgobUi.h"
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
 #include "patternEditor/patternEditor.h"
@@ -29,8 +31,8 @@ static cGibGobHome* GH = &gibgobHome;
 
 using namespace gibgob;
 
-static const char* const kLabels[8] = { "Type", "Mute", "Open", "Sound -",
-                                        "Sound +", "Clear", "", "Tracker" };
+static const char* const kLabels[8] = { "Mute",  "Open", "Sound -", "Sound +",
+                                        "Clear", "",     "",        "Tracker" };
 
 static void functPlay(uint8_t state);
 static void functUp(uint8_t state);
@@ -41,6 +43,7 @@ static void functMiddle(uint8_t state);
 static void functTopRow(uint8_t button, uint8_t state);
 static void functEncoder(int16_t value);
 static void functPattern(uint8_t state);
+static void functShift(uint8_t state);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
 
@@ -73,34 +76,10 @@ void cGibGobHome::initDisplayControls()
     prop.x = 0;
     prop.y = 29;
     prop.w = 800;
-    prop.h = 394;
+    prop.h = 451;
     prop.style = controlStyleShow;
     prop.data = &view;
     grid = display.createControl<TrackGridControl>(&prop);
-
-    strControlProperties prop2;
-    prop2.text = nullptr;
-    prop2.colors = nullptr;
-    prop2.value = 255;
-    prop2.style = controlStyleNoTransparency | controlStyleShow;
-    prop2.x = 0;
-    prop2.w = 800;
-    prop2.y = 425;
-    prop2.h = 54;
-    bgLabel = display.createControl<cBgLabel>(&prop2);
-
-    for (uint8_t i = 0; i < 8; i++)
-    {
-        strControlProperties lp;
-        lp.colors = display.getTheme().activeLabelsColors;
-        lp.text = kLabels[i];
-        lp.style = (controlStyleShow | controlStyleCenterX | controlStyleCenterY | controlStyleFont3);
-        lp.x = (800 / 8) * i + (800 / 16);
-        lp.y = 424;
-        lp.w = 800 / 8 - 6;
-        lp.h = 55;
-        label[i] = display.createControl<cLabel>(&lp);
-    }
 }
 
 void cGibGobHome::start(uint32_t options)
@@ -114,9 +93,7 @@ void cGibGobHome::start(uint32_t options)
     titleBar->setTitle(titleText);
 
     setDefaultScreenFunct();
-    refreshLabels();
     refreshTiles();
-    display.refreshControl(bgLabel);
     display.synchronizeRefresh();
 }
 
@@ -137,6 +114,7 @@ void cGibGobHome::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonRight, functRight);
     ip->setButtonObj(interfaceButtonMiniMiddle, functMiddle);
     ip->setButtonObj(interfaceButtonMiniMenu, functMenu);
+    ip->setButtonObj(interfaceButtonShift, functShift);
 
     for (uint8_t b = interfaceButton0; b <= interfaceButton7; b++)
         ip->setButtonObj(b, functTopRow);
@@ -161,8 +139,14 @@ void cGibGobHome::refreshLabels()
 {
     for (int i = 0; i < 8; i++)
     {
-        display.setControlText(label[i], kLabels[i]);
-        display.refreshControl(label[i]);
+        view.bar.text[i] = kLabels[i];
+        view.bar.fill[i] = 0;
+        view.bar.highlighted[i] = false;
+    }
+    if (mtProject.values.trackMute[cursor])
+    {
+        view.bar.fill[0] = color::kShiftBorder;
+        view.bar.highlighted[0] = true;
     }
 }
 
@@ -230,6 +214,8 @@ void cGibGobHome::refreshTiles()
     }
 
     view.cursor = cursor;
+    view.shift = shiftActive();
+    refreshLabels();
     snprintf(view.info,
              sizeof(view.info),
              "Pattern %d   %d steps   %s",
@@ -288,10 +274,11 @@ void cGibGobHome::openTracker()
     mtInterface.activateModule(&patternEditor, 0);
 }
 
-void cGibGobHome::toggleType()
+void cGibGobHome::setType(bool toMelodic)
 {
     Sequencer::strPattern* p = current();
-    bool toMelodic = !isMelodic(p, cursor);
+    if (isMelodic(p, cursor) == toMelodic)
+        return;
     stopTrack(cursor);
     setTrackType(p, cursor, toMelodic ? TrackType::Melodic : TrackType::Drum);
     newFileManager.setActualPatternStructChanged();
@@ -338,9 +325,9 @@ void cGibGobHome::changeSound(int dir)
 
 void cGibGobHome::clearTrack()
 {
-    if (!buttons->isButtonPressed(interfaceButtonShift))
+    if (!shiftActive())
     {
-        mtPopups.show(0, "Hold Shift + Clear to erase this track", 1);
+        mtPopups.show(0, "Turn Shift on, then Clear, to erase this track", 1);
         return;
     }
     Sequencer::strPattern* p = current();
@@ -377,7 +364,7 @@ static void functPlay(uint8_t state)
         return;
     if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
     {
-        if (GH->buttons->isButtonPressed(interfaceButtonShift))
+        if (shiftActive())
             sequencer.playSong();
         else
             sequencer.playPattern();
@@ -422,12 +409,11 @@ static void functTopRow(uint8_t button, uint8_t state)
         return;
     switch (button - interfaceButton0)
     {
-        case 0: GH->toggleType(); break;
-        case 1: GH->toggleMute(); break;
-        case 2: GH->openTrack(); break;
-        case 3: GH->changeSound(-1); break;
-        case 4: GH->changeSound(1); break;
-        case 5: GH->clearTrack(); break;
+        case 0: GH->toggleMute(); break;
+        case 1: GH->openTrack(); break;
+        case 2: GH->changeSound(-1); break;
+        case 3: GH->changeSound(1); break;
+        case 4: GH->clearTrack(); break;
         case 7: GH->openTracker(); break;
         default: break;
     }
@@ -435,7 +421,16 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functEncoder(int16_t value)
 {
-    GH->changeSound(value > 0 ? 1 : -1);
+    // any +/- button: + = Melodic, - = Drum
+    GH->setType(value > 0);
+}
+
+static void functShift(uint8_t state)
+{
+    if (state != buttonPress)
+        return;
+    g_shiftLatched = !g_shiftLatched;
+    GH->refreshTiles();
 }
 
 static void functPattern(uint8_t state)
