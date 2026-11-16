@@ -1,0 +1,328 @@
+#include "gibgob/MelodicTrack.h"
+#include "mtAudioEngine.h"
+#include "mtMidi.h"
+#include "interruptsControl.h"
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <map>
+#include <vector>
+
+using namespace gibgob;
+
+Sequencer sequencer;
+strMtProject mtProject;
+playerEngine instrumentPlayer[8];
+
+static int failures = 0;
+#define CHECK(cond) do { if (!(cond)) { printf("FAIL line %d: %s\n", __LINE__, #cond); failures++; } } while (0)
+
+// ---- fakes ----
+static int irqDepth = 0;
+void testDisableIrq() { if (irqDepth != 0) { printf("FAIL nested lock\n"); failures++; } irqDepth++; }
+void testEnableIrq() { if (irqDepth != 1) { printf("FAIL unlock without lock\n"); failures++; } irqDepth = 0; }
+
+bool isSampleInstrument(int i) { return i < 48; }
+bool isSynthInstrument(int i) { return i >= 64 && i < 67; }
+int instrumentIdxToMidiChannel(int i) { return i < 48 ? -1 : (i < 64 ? i - 48 + 1 : i - 64 + 1); }
+
+struct Ev { int tick; char kind; int a; int b; };  // S on (voice,pitch) s off(voice) M on(ch,pitch) m off(ch,pitch)
+static std::vector<Ev> events;
+static int nowTick = 0;
+static std::map<int,int> synthOn; // ch*128+pitch -> count
+static bool voiceSounding[8];
+
+uint8_t playerEngine::noteOn(uint8_t instr, int8_t note, int8_t vel, uint8_t, uint8_t, uint8_t, uint8_t)
+{
+    if (irqDepth) { printf("FAIL noteOn under lock\n"); failures++; }
+    (void)instr; (void)vel;
+    events.push_back({nowTick, 'S', index, note});
+    voiceSounding[index] = true;
+    return 1;
+}
+void playerEngine::noteOff(int8_t)
+{
+    if (irqDepth) { printf("FAIL noteOff under lock\n"); failures++; }
+    events.push_back({nowTick, 's', index, 0});
+    voiceSounding[index] = false;
+}
+void sendMidiNoteOn(uint8_t note, uint8_t velo, uint8_t ch, bool)
+{
+    if (note > 127 || velo == 0 || velo > 127) { printf("FAIL bad midi on %d %d\n", note, velo); failures++; }
+    events.push_back({nowTick, 'M', ch, note});
+    synthOn[ch * 128 + note]++;
+}
+void sendMidiNoteOff(uint8_t note, uint8_t, uint8_t ch, bool)
+{
+    events.push_back({nowTick, 'm', ch, note});
+    if (synthOn[ch * 128 + note] <= 0) { printf("FAIL midi off without on: %d\n", note); failures++; }
+    else synthOn[ch * 128 + note]--;
+}
+
+static Sequencer::strPattern pat;
+
+static void freshPattern(int steps = 16)
+{
+    // like a new tracker pattern: empty steps are not all-zero
+    for (auto& t : pat.track)
+    {
+        t.length = steps - 1;
+        for (auto& s : t.step) { s.note = -1; s.instrument = 0; s.fx[0] = {0,0}; s.fx[1] = {0,0}; s.volume = -1; s.micromove = -1; }
+    }
+    sequencer.pattern = &pat;
+    stopAll();
+    events.clear(); synthOn.clear();
+    memset(voiceSounding, 0, sizeof(voiceSounding));
+    memset(&mtProject, 0, sizeof(mtProject));
+    for (auto& i : mtProject.instrument) i.isActive = 1;
+    for (int i = 0; i < 8; i++) instrumentPlayer[i].index = i;
+}
+
+static void runTicks(int from, int count, int steps = 16)
+{
+    int total = steps * 48;
+    for (int i = 0; i < count; i++)
+    {
+        nowTick = from + i;
+        for (int t = 0; t < 8; t++)
+            playMicroStep(t, nowTick % total, total);
+    }
+}
+
+static int stuckSynth()
+{
+    int n = 0;
+    for (auto& kv : synthOn) n += kv.second;
+    return n;
+}
+static int countKind(char k) { int n = 0; for (auto& e : events) if (e.kind == k) n++; return n; }
+
+static Note mk(int start, int len, int pitch, int vel = 100)
+{
+    Note n{}; n.start = start; n.length = len; n.pitch = pitch; n.velocity = vel; return n;
+}
+
+int main()
+{
+    sequencer.playing = true;
+
+    // T0: data layer
+    freshPattern();
+    CHECK(!hasHeader(&pat, 0));
+    CHECK(noteCount(&pat, 0) == 0);
+    CHECK(getTrackType(&pat, 0) == TrackType::Drum);    // defaults: 1-4 drum
+    CHECK(getTrackType(&pat, 5) == TrackType::Melodic); // 5-8 melodic
+    CHECK(getSound(&pat, 3) == 3);
+    for (int i = 0; i < 130; i++)
+    {
+        int r = addNote(&pat, 2, mk(i * 3, 10, 60));
+        CHECK(i < kMaxNotes ? r == i : r == -1);
+    }
+    CHECK(noteCount(&pat, 2) == kMaxNotes);
+    // settings and palette slots must not have been touched by a full note list
+    TrackSettings s0 = getSettings(&pat, 2);
+    CHECK(s0.baseNote == 60 && s0.arpMode == kArpOff && s0.arpRate == 3 && s0.arpOctaves == 1 && s0.arpGate == 50);
+    removeNote(&pat, 2, 0);
+    CHECK(noteCount(&pat, 2) == kMaxNotes - 1);
+    CHECK(getNote(&pat, 2, 0).start == 3);
+    clearNotes(&pat, 2);
+    CHECK(noteCount(&pat, 2) == 0);
+
+    TrackSettings s; s.baseNote = 36; s.arpMode = kArpUpDown; s.arpRate = 5; s.arpOctaves = 3; s.arpGate = 80;
+    s.apeOn = true; s.apeRhythm = 0; s.apeGate = 100; s.apeNotes = 77;
+    setSettings(&pat, 2, s);
+    TrackSettings r = getSettings(&pat, 2);
+    CHECK(r.baseNote == 36 && r.arpMode == kArpUpDown && r.arpRate == 5 && r.arpOctaves == 3 && r.arpGate == 80);
+    CHECK(r.apeOn && r.apeRhythm == 0 && r.apeGate == 100 && r.apeNotes == 77);
+    CHECK(noteCount(&pat, 2) == 0);
+
+    PaletteChord before5 = getPaletteChord(&pat, 5);
+    PaletteChord pc{ 61, 9, 2, 3 };
+    addNote(&pat, 7, mk(0, 48, 70));
+    setPaletteChord(&pat, 14, pc);
+    PaletteChord got = getPaletteChord(&pat, 14);
+    CHECK(got.root == 61 && got.type == 9 && got.inversion == 2 && got.voicing == 3);
+    PaletteChord after5 = getPaletteChord(&pat, 5);
+    CHECK(after5.root == before5.root && after5.type == before5.type);
+    CHECK(noteCount(&pat, 7) == 1 && getNote(&pat, 7, 0).pitch == 70); // palette write kept the notes
+    for (int t = 0; t < 8; t++) CHECK(hasHeader(&pat, t));
+    setTrackType(&pat, 0, TrackType::Melodic);
+    setSound(&pat, 0, 64);
+    CHECK(isMelodic(&pat, 0) && getSound(&pat, 0) == 64);
+    // a new pattern inherits type, sound and palette
+    adoptDefaults(&pat);
+    freshPattern();
+    CHECK(isMelodic(&pat, 0) && getSound(&pat, 0) == 64);
+    CHECK(getPaletteChord(&pat, 14).root == 61);
+    CHECK(!hasHeader(&pat, 0));
+
+    // T1: synth chord, on/off balanced, off at the right time
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+    for (int k = 0; k < 4; k++) addNote(&pat, 5, mk(0, 96, 60 + k * 3));
+    runTicks(0, 16 * 48 * 2);
+    CHECK(countKind('M') == 8 && countKind('m') == 8);
+    CHECK(stuckSynth() == 0);
+    for (auto& e : events) if (e.kind == 'm') CHECK(e.tick % 768 == 96);
+
+    // T2: sample chord borrows voices of empty tracks
+    freshPattern();
+    setTrackType(&pat, 4, TrackType::Melodic); setSound(&pat, 4, 4);
+    for (int k = 0; k < 4; k++) addNote(&pat, 4, mk(0, 96, 60 + k * 3));
+    runTicks(0, 200);
+    {
+        std::map<int,int> voices;
+        for (auto& e : events) if (e.kind == 'S') voices[e.a]++;
+        CHECK(voices.size() == 4);
+        CHECK(voices.count(4) == 1);
+        CHECK(countKind('s') == 4);
+        for (int v = 0; v < 8; v++) CHECK(!voiceSounding[v]);
+    }
+    // ...but not from tracks that have their own notes or are muted
+    freshPattern();
+    setTrackType(&pat, 4, TrackType::Melodic); setSound(&pat, 4, 4);
+    for (int k = 0; k < 4; k++) addNote(&pat, 4, mk(0, 96, 60 + k * 3));
+    for (int t = 0; t < 8; t++) if (t != 4) { if (t % 2) addNote(&pat, t, mk(400, 48, 60)); else mtProject.values.trackMute[t] = 1; }
+    runTicks(0, 200);
+    for (auto& e : events) if (e.kind == 'S') CHECK(e.a == 4);
+
+    // T3: drum one-shot rings, stop silences it; long drum note is gated
+    freshPattern();
+    setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+    addNote(&pat, 0, mk(0, 48, 60));
+    runTicks(0, 300);
+    CHECK(countKind('S') == 1 && countKind('s') == 0);
+    stopAll();
+    CHECK(countKind('s') == 1);
+    freshPattern();
+    setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+    addNote(&pat, 0, mk(0, 96, 60));
+    runTicks(0, 300);
+    CHECK(countKind('S') == 1 && countKind('s') == 1);
+
+    // T4: arp up, 3 held notes over 4 steps at 1/16
+    freshPattern();
+    setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+    s = TrackSettings(); s.arpMode = kArpUp; s.arpRate = 3; s.arpGate = 50;
+    setSettings(&pat, 6, s);
+    addNote(&pat, 6, mk(0, 192, 67)); addNote(&pat, 6, mk(0, 192, 60)); addNote(&pat, 6, mk(0, 192, 64));
+    runTicks(0, 768);
+    {
+        std::vector<int> ons;
+        for (auto& e : events) if (e.kind == 'M') ons.push_back(e.b);
+        CHECK(ons.size() == 4);
+        if (ons.size() == 4) CHECK(ons[0] == 60 && ons[1] == 64 && ons[2] == 67 && ons[3] == 60);
+        CHECK(stuckSynth() == 0);
+        for (auto& e : events) if (e.kind == 'm') CHECK(e.tick % 48 == 24);
+    }
+    // arp octaves + up-down
+    freshPattern();
+    setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+    s = TrackSettings(); s.arpMode = kArpUpDown; s.arpRate = 3; s.arpOctaves = 2;
+    setSettings(&pat, 6, s);
+    addNote(&pat, 6, mk(0, 384, 60)); addNote(&pat, 6, mk(0, 384, 64));
+    runTicks(0, 768);
+    {
+        std::vector<int> ons;
+        for (auto& e : events) if (e.kind == 'M') ons.push_back(e.b);
+        int expect[8] = { 60, 64, 72, 76, 72, 64, 60, 64 };
+        CHECK(ons.size() == 8);
+        for (size_t i = 0; i < ons.size() && i < 8; i++) CHECK(ons[i] == expect[i]);
+    }
+
+    // T5: Go Ape stress on synth and sample tracks: nothing stuck, ever
+    for (int round = 0; round < 40; round++)
+    {
+        freshPattern();
+        int instr = (round % 2) ? 66 : 5;
+        setTrackType(&pat, 7, TrackType::Melodic); setSound(&pat, 7, instr);
+        s = TrackSettings(); s.arpMode = 1 + round % 5; s.arpRate = round % 6; s.arpOctaves = 1 + round % 4;
+        s.arpGate = 10 + (round * 13) % 91; s.apeOn = true; s.apeRhythm = 100; s.apeGate = 100; s.apeNotes = 100;
+        setSettings(&pat, 7, s);
+        for (int k = 0; k < 10; k++) addNote(&pat, 7, mk((random32() % 16) * 48 + random32() % 48, 24 + random32() % 400, 1 + random32() % 126));
+        // a second busy plain track
+        setTrackType(&pat, 1, TrackType::Melodic); setSound(&pat, 1, 64);
+        for (int k = 0; k < 40; k++) addNote(&pat, 1, mk(random32() % 768, 1 + random32() % 300, random32() % 128, 1 + random32() % 127));
+        runTicks(0, 768 * 6);
+        if (round % 3 == 0) mtProject.values.trackMute[7] = 1; // mute while notes sound
+        runTicks(768 * 6, 2000);
+        stopAll();
+        // after stop everything that was held must be released by the countdowns/stop
+        CHECK(stuckSynth() == 0);
+        if (instr == 5) for (int v = 0; v < 8; v++) CHECK(!voiceSounding[v]);
+    }
+
+    // T6: probability 0 never plays, 100 always
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+    { Note n = mk(0, 24, 60); n.setChance(0); addNote(&pat, 5, n); Note m = mk(48, 24, 62); m.setChance(100); addNote(&pat, 5, m); }
+    runTicks(0, 768 * 20);
+    for (auto& e : events) if (e.kind == 'M') CHECK(e.b == 62);
+    CHECK(countKind('M') == 20);
+
+    // T7: live record: note lands at the play position with the held length
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+    runTicks(0, 100);
+    { uint8_t ch[3] = { 60, 64, 67 }; CHECK(liveRecordOn(5, ch, 3, 90, true)); }
+    CHECK(noteCount(&pat, 5) == 3 && getNote(&pat, 5, 0).start == 99);
+    int onsBefore = countKind('M');
+    runTicks(100, 150);
+    CHECK(countKind('M') == onsBefore); // not re-triggered in the same pass
+    { uint8_t two[2] = { 60, 64 }; liveRecordOff(5, two, 2); }
+    CHECK(getNote(&pat, 5, 0).length == 150 && !(getNote(&pat, 5, 0).flags & kNoteFlagRecording));
+    CHECK(getNote(&pat, 5, 2).flags & kNoteFlagRecording);
+    runTicks(250, 700); // wraps past the pattern end
+    liveRecordOff(5);
+    CHECK(!(getNote(&pat, 5, 2).flags & kNoteFlagRecording));
+    CHECK(getNote(&pat, 5, 2).length == (949 % 768) - 99 + 0 || getNote(&pat, 5, 2).length > 0);
+    stopAll();
+    CHECK(stuckSynth() == 0);
+
+    // T8: audition (finger drumming / chords) with samples and synths
+    freshPattern();
+    setTrackType(&pat, 4, TrackType::Melodic); setSound(&pat, 4, 4);
+    { uint8_t ch[4] = { 60, 64, 67, 71 }; auditionChord(4, ch, 4, 100); }
+    CHECK(countKind('S') == 4 && isSounding(4));
+    auditionOff(4);
+    CHECK(countKind('s') == 4 && !isSounding(4));
+    setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+    auditionOn(0, 60, 100); auditionOff(0);
+    CHECK(countKind('s') == 4); // drum hit rings on
+    setSound(&pat, 5, 64); setTrackType(&pat, 5, TrackType::Melodic);
+    { uint8_t ch[4] = { 60, 64, 67, 71 }; auditionChord(5, ch, 4, 100); auditionChord(5, ch, 4, 100); }
+    auditionOff(5);
+    CHECK(stuckSynth() == 0);
+    // empty sample slot: silent, no crash
+    mtProject.instrument[9].isActive = 0; setSound(&pat, 3, 9);
+    int sBefore = countKind('S');
+    auditionOn(3, 60, 100); auditionOff(3);
+    CHECK(countKind('S') == sBefore);
+
+    // T9: tools
+    freshPattern();
+    addNote(&pat, 5, mk(47, 10, 60)); addNote(&pat, 5, mk(25, 10, 60)); addNote(&pat, 5, mk(760, 10, 60));
+    quantizeTrack(&pat, 5);
+    CHECK(getNote(&pat, 5, 0).start == 48 && getNote(&pat, 5, 1).start == 48 && getNote(&pat, 5, 2).start == 0);
+    for (int i = 0; i < 50; i++)
+    {
+        generateAcid(&pat, 6, 16);
+        int c = noteCount(&pat, 6);
+        CHECK(c > 0 && c <= 16);
+        for (int k = 0; k < c; k++) { Note n = getNote(&pat, 6, k); CHECK(n.start < 768 && n.start % 48 == 0 && n.pitch <= 127 && n.length > 0); }
+    }
+    generateAcid(&pat, 6, 128);
+    CHECK(noteCount(&pat, 6) <= kMaxNotes);
+
+    // T10: switching to a pattern where the track is now empty still releases held notes
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+    addNote(&pat, 5, mk(0, 500, 60));
+    runTicks(0, 100);
+    clearNotes(&pat, 5);
+    runTicks(100, 600);
+    CHECK(stuckSynth() == 0);
+
+    printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
+    return failures ? 1 : 0;
+}

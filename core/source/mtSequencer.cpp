@@ -2539,9 +2539,15 @@ void Sequencer::sendMidiChordOff([[maybe_unused]] uint8_t track,
 AUDIO_CORE_RAM void Sequencer::sendNoteOn(uint8_t track,
                                           strPlayer::strPlayerTrack::strSendStep* step)
 {
-    if (track < kSampleTracks && gibgob::isMelodic(track))
+    if (track < kSampleTracks)
     {
-        return; // GibGob OS: melodic tracks play from their piano roll notes
+        // GibGob OS: a track with GibGob note data plays only from that data.
+        // Old tracker steps still sound on tracks that have none (old projects).
+        if (gibgob::hasHeader(gibgob::current(), track))
+        {
+            return;
+        }
+        gibgob::markLegacyPlayed(track);
     }
 
     bool toMidi = isMidiInstrument(step->instrument);

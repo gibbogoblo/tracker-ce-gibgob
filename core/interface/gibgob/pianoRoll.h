@@ -9,10 +9,10 @@ class cPianoRoll : public ModuleBase
   public:
     enum Param : uint8_t
     {
-        kParamNote = 0, // Note button  (green): probability
-        kParamVelocity, // Instr button (yellow)
-        kParamNudge,    // FX1 button   (purple)
-        kParamInversion, // FX2 button  (light blue)
+        kParamProb = 0,  // Note button  (green)
+        kParamVelocity,  // Instr button (yellow)
+        kParamNudge,     // FX1 button   (purple)
+        kParamInversion, // FX2 button   (light blue)
         kParamCount
     };
 
@@ -33,8 +33,8 @@ class cPianoRoll : public ModuleBase
     void refreshView();
 
     // actions
-    void pressUp(bool repeat);
-    void pressDown(bool repeat);
+    void pressUp();
+    void pressDown();
     void pressLeft();
     void pressRight();
     void pressMiddle();
@@ -44,8 +44,10 @@ class cPianoRoll : public ModuleBase
     void changeParam(int delta);
     void changeLength(int deltaGrid);
     void changeZoom(int delta);
-    void pressChordButton(int button);
+    void topButton(int button, bool pressed);
+    void releaseAllButtons();
     void auditionGhost(bool on);
+    void openTrackPage();
 
     // helpers
     void moveCursor(int dTicks, int dPitch);
@@ -55,25 +57,32 @@ class cPianoRoll : public ModuleBase
     int selectInBox();
     void clearSelection();
     int selectionCount();
+    bool padsMode(); // sliced sample: the top row plays slices instead of chords
+    int chordNoteCount();
 
     int track = 0;
-    int chordId = -1; // -1 = single note
+    int chordSlot = -1; // palette slot of the ghost chord, -1 = single note
     int inversion = 0;
     int velocity = 100;
     int chance = 100; // % for new notes
     int nudge = 0;
     int lengthTicks = 48;
     int zoom = 0;
-    uint8_t param = kParamNote;
+    uint8_t param = kParamProb;
     Mode mode = Mode::Idle;
     bool autoAudition = false;
     uint32_t auditionOffAt = 0;
     int lastPlayheadDrawn = -2;
 
+    bool held[8] = { false };
+    bool heldRecording[8] = { false };
+    uint8_t heldNotes[8][gibgob::kMaxChordNotes];
+    uint8_t heldCount[8] = { 0 };
+
     gibgob::PianoRollView view;
     hControl grid = -1;
     char titleText[40];
-    char barText[8][12];
+    char barText[8][16];
 };
 
 extern cPianoRoll pianoRoll;

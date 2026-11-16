@@ -1,13 +1,16 @@
-// GibGob OS - main screen: 8 track tiles
+// GibGob OS - main sequencer: 8 track lanes
 //
-// Controls
-//   D-pad        select track
-//   Middle       open track (Melodic -> piano roll, Drum -> tracker editor)
-//   +/- (any)    + = Melodic, - = Drum
-//   Top row      1 Mute  2 Open  3 Sound-  4 Sound+  5 Clear(+Shift)  8 Tracker
-//   Shift        toggles (red border while on)
-//   Play         play / stop pattern (Shift+Play = song)
-//   Pattern(Fn1) open the classic tracker for the selected track
+//   D-pad            move cursor (Shift: Left/Right = 4 steps, Up/Down = previous/next pattern)
+//   Middle           Drum lane: toggle a step.  Melodic lane: open the piano roll
+//   Insert           open the track in the piano roll (Shift+Insert = track page)
+//   Delete           delete the step under the cursor (Shift+Delete = clear the track)
+//   Top row 1..8     play track 1..8 (finger drumming); recorded while Rec is on and playing
+//                    Shift + top row = mute / unmute that track
+//   Note/Instr/FX1/FX2  choose what small +/- edits: Probability / Velocity / Nudge / Pitch
+//   small +/-        edit that value (Shift + small +/- = change the track's sound)
+//   big +/-          step length          (Shift + big +/- = zoom)
+//   Rec              toggle live recording        Play = play / stop (Shift = song)
+//   Shift            toggles (red border while on)
 
 #include "gibgob/gibgobHome.h"
 
@@ -17,54 +20,82 @@
 #include "core/songTimer.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
-#include "gibgob/pianoRoll.h"
+#include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobUi.h"
+#include "gibgob/pianoRoll.h"
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
-#include "patternEditor/patternEditor.h"
 
 #include <stdio.h>
 #include <string.h>
 
 cGibGobHome gibgobHome;
 static cGibGobHome* GH = &gibgobHome;
+static elapsedMillis s_clock;
 
 using namespace gibgob;
 
-static const char* const kLabels[8] = { "Mute",  "Open", "Sound -", "Sound +",
-                                        "Clear", "",     "",        "Tracker" };
-
 static void functPlay(uint8_t state);
+static void functRec(uint8_t state);
 static void functUp(uint8_t state);
 static void functDown(uint8_t state);
 static void functLeft(uint8_t state);
 static void functRight(uint8_t state);
 static void functMiddle(uint8_t state);
-static void functTopRow(uint8_t button, uint8_t state);
-static void functEncoder(int16_t value);
-static void functPattern(uint8_t state);
+static void functInsert(uint8_t state);
+static void functDelete(uint8_t state);
 static void functShift(uint8_t state);
+static void functTopRow(uint8_t button, uint8_t state);
+static void functParamButton(uint8_t button, uint8_t state);
+static void functEncoder(int16_t value);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
+
+static int clampInt(int v, int lo, int hi)
+{
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+static void markChanged()
+{
+    newFileManager.setActualPatternStructChanged();
+}
 
 // ---------------------------------------------------------------------------
 void gibgobSoundName(uint8_t instrument, char* out, int outLen)
 {
-    if (isSampleInstrument(instrument))
+    if (outLen <= 0)
+        return;
+    if (instrument >= kTotalInstrumentsCount)
+    {
+        snprintf(out, (size_t)outLen, "?");
+    }
+    else if (isSampleInstrument(instrument))
     {
         const strInstrument& in = mtProject.instrument[instrument];
         if (in.isActive && in.sample.file_name[0])
-            snprintf(out, outLen, "%02d %s", instrument + 1, in.sample.file_name);
+        {
+            // file name without its extension
+            int n = 0;
+            while (n < outLen - 1 && n < 31 && in.sample.file_name[n] && in.sample.file_name[n] != '.')
+            {
+                out[n] = in.sample.file_name[n];
+                n++;
+            }
+            out[n] = 0;
+        }
         else
-            snprintf(out, outLen, "%02d (empty)", instrument + 1);
+        {
+            snprintf(out, (size_t)outLen, "empty %d", instrument + 1);
+        }
     }
     else if (isSynthInstrument(instrument))
     {
-        snprintf(out, outLen, "Synth %d", instrumentIdxToMidiChannel(instrument));
+        snprintf(out, (size_t)outLen, "Synth %d", instrumentIdxToMidiChannel(instrument));
     }
     else
     {
-        snprintf(out, outLen, "MIDI ch %d", instrumentIdxToMidiChannel(instrument));
+        snprintf(out, (size_t)outLen, "MIDI %d", instrumentIdxToMidiChannel(instrument));
     }
     out[outLen - 1] = 0;
 }
@@ -74,31 +105,40 @@ void cGibGobHome::initDisplayControls()
 {
     strControlProperties prop;
     prop.x = 0;
-    prop.y = 29;
-    prop.w = 800;
-    prop.h = 451;
+    prop.y = kScreenTop;
+    prop.w = kScreenW;
+    prop.h = kScreenH;
     prop.style = controlStyleShow;
     prop.data = &view;
-    grid = display.createControl<TrackGridControl>(&prop);
+    grid = display.createControl<LaneControl>(&prop);
 }
 
 void cGibGobHome::start(uint32_t options)
 {
     moduleRefresh = 1;
-    cursor = (int)(options % kTracks);
+    cursorTrack = (int)(options % kTracks);
+    for (int i = 0; i < 8; i++)
+    {
+        held[i] = false;
+        heldRecording[i] = false;
+    }
+    lastPattern = -1; // forces the defaults to be read again
+    lastPlayPos = -2;
 
     songTimer.show();
-    snprintf(titleText, sizeof(titleText), "GibGob OS  -  Pattern %d", mtProject.values.actualPattern);
+    snprintf(titleText, sizeof(titleText), "GibGob OS");
     titleBar->show();
     titleBar->setTitle(titleText);
 
     setDefaultScreenFunct();
-    refreshTiles();
+    refresh();
     display.synchronizeRefresh();
 }
 
 void cGibGobHome::stop()
 {
+    releaseAllButtons();
+    auditionOff(cursorTrack);
     moduleRefresh = 0;
 }
 
@@ -108,251 +148,506 @@ void cGibGobHome::setDefaultScreenFunct()
     ip->clearAllPots();
 
     ip->setButtonObj(interfaceButtonPlay, functPlay);
+    ip->setButtonObj(interfaceButtonRec, functRec);
     ip->setButtonObj(interfaceButtonUp, functUp);
     ip->setButtonObj(interfaceButtonDown, functDown);
     ip->setButtonObj(interfaceButtonLeft, functLeft);
     ip->setButtonObj(interfaceButtonRight, functRight);
     ip->setButtonObj(interfaceButtonMiniMiddle, functMiddle);
-    ip->setButtonObj(interfaceButtonMiniMenu, functMenu);
+    ip->setButtonObj(interfaceButtonInsert, functInsert);
+    ip->setButtonObj(interfaceButtonDelete, functDelete);
     ip->setButtonObj(interfaceButtonShift, functShift);
+    ip->setButtonObj(interfaceButtonMiniMenu, functMenu);
 
     for (uint8_t b = interfaceButton0; b <= interfaceButton7; b++)
         ip->setButtonObj(b, functTopRow);
 
-    ip->setButtonObj(interfaceButtonPattern, functPattern);
+    ip->setButtonObj(interfaceButtonNote, functParamButton);
+    ip->setButtonObj(interfaceButtonInstr, functParamButton);
+    ip->setButtonObj(interfaceButtonFx1, functParamButton);
+    ip->setButtonObj(interfaceButtonFx2, functParamButton);
 
-    ip->setButtonObj(interfaceButtonPerformance, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonParams, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonFile, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonConfig, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonMaster, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSamplePlay, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleEdit, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleRec, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleLoad, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSong, buttonPress, functSwitchModule);
+    bindModuleSwitchButtons(ip, functSwitchModule);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
 
-void cGibGobHome::refreshLabels()
-{
-    for (int i = 0; i < 8; i++)
-    {
-        view.bar.text[i] = kLabels[i];
-        view.bar.fill[i] = 0;
-        view.bar.highlighted[i] = false;
-    }
-    if (mtProject.values.trackMute[cursor])
-    {
-        view.bar.fill[0] = color::kShiftBorder;
-        view.bar.highlighted[0] = true;
-    }
-}
-
-void cGibGobHome::refreshTiles()
+// ---------------------------------------------------------------------------
+// notes that belong to the step under the cursor (within half a step of it)
+int cGibGobHome::cellNotes(int* out, int maxOut)
 {
     const Sequencer::strPattern* p = current();
-    int playTickAll = sequencer.isPlay() ? sequencer.getActualPos() : -1;
+    int tick = cursorStep * kTicksPerStep;
+    int count = noteCount(p, cursorTrack);
+    int n = 0;
+    for (int i = 0; i < count && n < maxOut; i++)
+    {
+        Note note = getNote(p, cursorTrack, i);
+        if (note.start >= tick - kTicksPerStep / 2 && note.start < tick + kTicksPerStep / 2)
+            out[n++] = i;
+    }
+    return n;
+}
+
+void cGibGobHome::refresh()
+{
+    const Sequencer::strPattern* p = current();
+
+    if (lastPattern != mtProject.values.actualPattern)
+    {
+        lastPattern = mtProject.values.actualPattern;
+        adoptDefaults(p);
+    }
+
+    int patternSteps = p->track[0].length + 1;
+    cursorStep = clampInt(cursorStep, 0, patternSteps - 1);
+    cursorTrack = clampInt(cursorTrack, 0, kTracks - 1);
+    stepsVisible = clampInt(stepsVisible, 4, 32);
+
+    view.pattern = p;
+    view.patternTicks = patternSteps * kTicksPerStep;
+    view.stepsVisible = stepsVisible;
+    view.cursorTrack = cursorTrack;
+    view.cursorTick = cursorStep * kTicksPerStep;
+    view.shift = shiftActive();
+    view.playheadTick = playheadTick(cursorTrack);
+
+    // scroll just enough to keep the cursor visible
+    int firstStep = view.firstTick / kTicksPerStep;
+    if (cursorStep < firstStep)
+        firstStep = cursorStep;
+    if (cursorStep >= firstStep + stepsVisible)
+        firstStep = cursorStep - stepsVisible + 1;
+    if (firstStep + stepsVisible > patternSteps)
+        firstStep = patternSteps - stepsVisible;
+    if (firstStep < 0)
+        firstStep = 0;
+    view.firstTick = firstStep * kTicksPerStep;
 
     for (int t = 0; t < kTracks; t++)
     {
-        TrackTile& tile = view.tiles[t];
-        tile.melodic = isMelodic(p, t);
-        tile.muted = mtProject.values.trackMute[t];
-
-        const char* name = mtProject.values.TrackNames[t];
-        if (name[0])
-            snprintf(tile.title, sizeof(tile.title), "%d  %s", t + 1, name);
-        else
-            snprintf(tile.title, sizeof(tile.title), "Track %d", t + 1);
-
-        snprintf(tile.type, sizeof(tile.type), "%s", tile.melodic ? "MELODIC" : "DRUM");
-
-        tile.active = false;
-        if (tile.melodic)
-        {
-            gibgobSoundName(getSound(p, t), tile.sound, sizeof(tile.sound));
-            int count = noteCount(p, t);
-            snprintf(tile.detail, sizeof(tile.detail), "%d notes", count);
-
-            int ph = playheadTick(t);
-            for (int i = 0; ph >= 0 && i < count; i++)
-            {
-                Note n = getNote(p, t, i);
-                if (ph >= n.start && ph < n.start + n.length)
-                {
-                    tile.active = true;
-                    break;
-                }
-            }
-        }
-        else
-        {
-            int steps = 0;
-            int firstInstr = -1;
-            int len = p->track[t].length + 1;
-            for (int s = 0; s < len; s++)
-            {
-                const auto& st = p->track[t].step[s];
-                if (st.note >= 0)
-                {
-                    steps++;
-                    if (firstInstr < 0)
-                        firstInstr = st.instrument;
-                }
-            }
-            if (firstInstr >= 0)
-                gibgobSoundName((uint8_t)firstInstr, tile.sound, sizeof(tile.sound));
-            else
-                snprintf(tile.sound, sizeof(tile.sound), "(no steps)");
-            snprintf(tile.detail, sizeof(tile.detail), "%d steps", steps);
-
-            if (playTickAll >= 0 && playTickAll < len && p->track[t].step[playTickAll].note >= 0)
-                tile.active = true;
-        }
+        LaneInfo& lane = view.lanes[t];
+        char name[12];
+        gibgobSoundName(getSound(p, t), name, sizeof(name));
+        snprintf(lane.name, sizeof(lane.name), "%d %.9s", t + 1, name);
+        lane.melodic = isMelodic(p, t);
+        lane.muted = mtProject.values.trackMute[t] != 0;
+        lane.sounding = isSounding(t);
     }
 
-    view.cursor = cursor;
-    view.shift = shiftActive();
-    refreshLabels();
-    snprintf(view.info,
-             sizeof(view.info),
-             "Pattern %d   %d steps   %s",
-             mtProject.values.actualPattern,
-             p->track[0].length + 1,
-             sequencer.isPlay() ? "PLAYING" : "STOPPED");
+    // values of the step under the cursor, or the defaults for new steps
+    int targets[kMaxNotes];
+    int n = cellNotes(targets, kMaxNotes);
+    TrackSettings settings = getSettings(p, cursorTrack);
+    int vel = velocity, chn = chance, nud = nudge, pitch = settings.baseNote;
+    if (n > 0)
+    {
+        Note note = getNote(p, cursorTrack, targets[0]);
+        vel = note.velocity;
+        chn = note.chance();
+        nud = note.start - view.cursorTick;
+        pitch = note.pitch;
+    }
+
+    snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Step %d/%d", mtProject.values.actualPattern,
+             cursorTrack + 1, cursorStep + 1, patternSteps);
+
+    if (g_recArmed)
+    {
+        snprintf(view.mode, sizeof(view.mode), "REC");
+        view.modeColor = color::kRec;
+    }
+    else
+    {
+        view.mode[0] = 0;
+    }
+
+    snprintf(view.params[0].label, sizeof(view.params[0].label), "Prob");
+    snprintf(view.params[0].value, sizeof(view.params[0].value), "%d%%", chn);
+    view.params[0].color = color::kNoteBtn;
+    snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
+    snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
+    view.params[1].color = color::kInstrBtn;
+    snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
+    snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
+    view.params[2].color = color::kFx1Btn;
+    snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
+    snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
+    view.params[3].color = color::kFx2Btn;
+    view.selectedParam = param;
+
+    // bottom bar: the 8 track buttons
+    for (int i = 0; i < 8; i++)
+    {
+        bool muted = view.lanes[i].muted;
+        if (view.shift)
+        {
+            snprintf(barText[i], sizeof(barText[i]), muted ? "Muted %d" : "Mute %d", i + 1);
+            view.bar.fill[i] = muted ? color::kShiftBorder : 0;
+            view.bar.highlighted[i] = muted;
+        }
+        else
+        {
+            snprintf(barText[i], sizeof(barText[i]), muted ? "%d  M" : "%d", i + 1);
+            view.bar.fill[i] = view.lanes[i].melodic ? color::kMelodic : color::kDrum;
+            view.bar.highlighted[i] = view.lanes[i].sounding && !muted;
+        }
+        view.bar.text[i] = barText[i];
+    }
+
+    uint8_t mask = 0;
+    for (int t = 0; t < kTracks; t++)
+        if (view.lanes[t].sounding)
+            mask |= (uint8_t)(1u << t);
+    lastSounding = mask;
 
     display.refreshControl(grid);
 }
 
 void cGibGobHome::update()
 {
-    int pos = sequencer.isPlay() ? sequencer.getActualPos() : -1;
-    if (pos != lastPlayStep)
+    bool changed = false;
+
+    if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
     {
-        lastPlayStep = pos;
-        refreshTiles();
+        auditionOffAt = 0;
+        if (!held[cursorTrack])
+            auditionOff(cursorTrack);
     }
+
+    if (lastPattern != mtProject.values.actualPattern)
+        changed = true;
+
+    int ph = playheadTick(cursorTrack);
+    int pos = ph < 0 ? -1 : ph / (kTicksPerStep / 2);
+    if (pos != lastPlayPos)
+    {
+        lastPlayPos = pos;
+        changed = true;
+    }
+
+    uint8_t mask = 0;
+    for (int t = 0; t < kTracks; t++)
+        if (isSounding(t))
+            mask |= (uint8_t)(1u << t);
+    if (mask != lastSounding)
+        changed = true;
+
+    if (changed)
+        refresh();
 }
 
 // ---------------------------------------------------------------------------
-void cGibGobHome::moveCursor(int dCol, int dRow)
+// actions
+
+void cGibGobHome::moveCursor(int dStep, int dTrack)
 {
-    int c = cursor % 4 + dCol;
-    int r = cursor / 4 + dRow;
-    if (c < 0)
-        c = 0;
-    if (c > 3)
-        c = 3;
-    if (r < 0)
-        r = 0;
-    if (r > 1)
-        r = 1;
-    cursor = r * 4 + c;
-    refreshTiles();
+    cursorStep += dStep;
+    cursorTrack += dTrack;
+    refresh();
 }
 
-void cGibGobHome::openTrack()
+void cGibGobHome::openPianoRoll()
 {
-    if (isMelodic(current(), cursor))
+    int t = cursorTrack;
+    pianoRoll.view.cursorTick = cursorStep * kTicksPerStep;
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+}
+
+void cGibGobHome::openTrackPage()
+{
+    uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPageTrack, cGibGobPages::kFromHome, cursorTrack);
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibgobPages, options);
+}
+
+void cGibGobHome::pressMiddle()
+{
+    Sequencer::strPattern* p = current();
+    if (isMelodic(p, cursorTrack))
     {
-        int t = cursor;
-        mtInterface.deactivateModule(this);
-        mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+        openPianoRoll();
+        return;
+    }
+
+    int targets[kMaxNotes];
+    int n = cellNotes(targets, kMaxNotes);
+    if (n > 0)
+    {
+        // indices come back ascending: remove from the last so they stay valid
+        for (int i = n - 1; i >= 0; i--)
+            removeNote(p, cursorTrack, targets[i]);
     }
     else
     {
-        openTracker();
+        TrackSettings settings = getSettings(p, cursorTrack);
+        int patternTicks = (p->track[cursorTrack].length + 1) * kTicksPerStep;
+        Note note{};
+        note.start = (uint16_t)clampInt(cursorStep * kTicksPerStep + nudge, 0, patternTicks - 1);
+        note.length = (uint16_t)lengthTicks;
+        note.pitch = settings.baseNote;
+        note.velocity = (uint8_t)velocity;
+        note.setChance(chance);
+        if (addNote(p, cursorTrack, note) < 0)
+            mtPopups.show(0, "Track is full (125 notes)", 1);
+        else
+            auditionOn(cursorTrack, note.pitch, note.velocity);
     }
+    markChanged();
+    refresh();
 }
 
-void cGibGobHome::openTracker()
-{
-    patternEditor.trackerPattern.actualTrack = (int8_t)cursor;
-    mtInterface.deactivateModule(this);
-    mtInterface.activateModule(&patternEditor, 0);
-}
-
-void cGibGobHome::setType(bool toMelodic)
+void cGibGobHome::pressDelete()
 {
     Sequencer::strPattern* p = current();
-    if (isMelodic(p, cursor) == toMelodic)
-        return;
-    stopTrack(cursor);
-    setTrackType(p, cursor, toMelodic ? TrackType::Melodic : TrackType::Drum);
-    newFileManager.setActualPatternStructChanged();
-    refreshTiles();
+    if (shiftActive())
+    {
+        stopTrack(cursorTrack);
+        clearNotes(p, cursorTrack);
+        mtPopups.show(0, "Track cleared", 1);
+    }
+    else
+    {
+        int targets[kMaxNotes];
+        int n = cellNotes(targets, kMaxNotes);
+        if (n == 0)
+            return;
+        for (int i = n - 1; i >= 0; i--)
+            removeNote(p, cursorTrack, targets[i]);
+    }
+    markChanged();
+    refresh();
 }
 
-void cGibGobHome::toggleMute()
+void cGibGobHome::changeParam(int delta)
 {
-    mtProject.values.trackMute[cursor] = !mtProject.values.trackMute[cursor];
-    engine.muteTrack(cursor, mtProject.values.trackMute[cursor]);
-    if (mtProject.values.trackMute[cursor])
-        stopTrack(cursor);
-    newFileManager.setProjectStructChanged();
-    refreshTiles();
+    Sequencer::strPattern* p = current();
+    int targets[kMaxNotes];
+    int n = cellNotes(targets, kMaxNotes);
+    int patternTicks = (p->track[cursorTrack].length + 1) * kTicksPerStep;
+    int cellTick = cursorStep * kTicksPerStep;
+
+    if (n == 0)
+    {
+        // no step here: change the defaults used for new steps
+        switch (param)
+        {
+            case kParamProb: chance = clampInt(chance + delta * 5, 0, 100); break;
+            case kParamVelocity: velocity = clampInt(velocity + delta, 1, 127); break;
+            case kParamNudge:
+                nudge = clampInt(nudge + delta, -(kTicksPerStep / 2), kTicksPerStep / 2 - 1);
+                break;
+            case kParamPitch:
+            {
+                TrackSettings s = getSettings(p, cursorTrack);
+                s.baseNote = (uint8_t)clampInt(s.baseNote + delta, 0, 127);
+                setSettings(p, cursorTrack, s);
+                markChanged();
+                auditionOn(cursorTrack, s.baseNote, (uint8_t)velocity);
+                auditionOffAt = (uint32_t)s_clock + 200;
+                break;
+            }
+            default: break;
+        }
+        refresh();
+        return;
+    }
+
+    for (int i = 0; i < n; i++)
+    {
+        Note note = getNote(p, cursorTrack, targets[i]);
+        switch (param)
+        {
+            case kParamProb: note.setChance(note.chance() + delta * 5); break;
+            case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
+            case kParamNudge:
+            {
+                // keep the note inside this step's half-step window
+                int lo = clampInt(cellTick - kTicksPerStep / 2, 0, patternTicks - 1);
+                int hi = clampInt(cellTick + kTicksPerStep / 2 - 1, 0, patternTicks - 1);
+                note.start = (uint16_t)clampInt(note.start + delta, lo, hi);
+                break;
+            }
+            case kParamPitch: note.pitch = (uint8_t)clampInt(note.pitch + delta, 0, 127); break;
+            default: break;
+        }
+        setNote(p, cursorTrack, targets[i], note);
+    }
+    markChanged();
+    refresh();
+}
+
+void cGibGobHome::changeLength(int delta)
+{
+    Sequencer::strPattern* p = current();
+    int targets[kMaxNotes];
+    int n = cellNotes(targets, kMaxNotes);
+    int maxLen = Sequencer::MAXSTEP * kTicksPerStep;
+    int minLen = kTicksPerStep / 2;
+
+    if (n == 0)
+    {
+        lengthTicks = clampInt(lengthTicks + delta * kTicksPerStep, minLen, maxLen);
+        char msg[32];
+        snprintf(msg, sizeof(msg), "New step length: %d.%d", lengthTicks / kTicksPerStep,
+                 (lengthTicks % kTicksPerStep) * 10 / kTicksPerStep);
+        mtPopups.show(0, msg, 1);
+        return;
+    }
+    for (int i = 0; i < n; i++)
+    {
+        Note note = getNote(p, cursorTrack, targets[i]);
+        int len = note.length + delta * kTicksPerStep;
+        // going down from one step lands on half a step
+        if (note.length == kTicksPerStep && delta < 0)
+            len = minLen;
+        if (note.length == minLen && delta > 0)
+            len = kTicksPerStep;
+        note.length = (uint16_t)clampInt(len, minLen, maxLen);
+        setNote(p, cursorTrack, targets[i], note);
+        lengthTicks = note.length;
+    }
+    markChanged();
+    refresh();
+}
+
+void cGibGobHome::changeZoom(int delta)
+{
+    stepsVisible = clampInt(stepsVisible + delta, 4, 32);
+    refresh();
 }
 
 static bool soundUsable(int instr)
 {
     if (isSampleInstrument(instr))
-        return mtProject.instrument[instr].isActive;
+        return mtProject.instrument[instr].isActive == 1;
     return isSynthInstrument(instr);
 }
 
 void cGibGobHome::changeSound(int dir)
 {
     Sequencer::strPattern* p = current();
-    if (!isMelodic(p, cursor))
-    {
-        mtPopups.show(0, "Drum tracks pick sounds per step", 1);
-        return;
-    }
-    int instr = getSound(p, cursor);
+    int instr = getSound(p, cursorTrack);
     for (int tries = 0; tries < kTotalInstrumentsCount; tries++)
     {
         instr = (instr + dir + kTotalInstrumentsCount) % kTotalInstrumentsCount;
         if (soundUsable(instr))
             break;
     }
-    stopTrack(cursor);
-    setSound(p, cursor, (uint8_t)instr);
-    newFileManager.setActualPatternStructChanged();
-    refreshTiles();
-}
-
-void cGibGobHome::clearTrack()
-{
-    if (!shiftActive())
+    if (!soundUsable(instr))
     {
-        mtPopups.show(0, "Turn Shift on, then Clear, to erase this track", 1);
+        mtPopups.show(0, "No sounds loaded yet", 1);
         return;
     }
-    Sequencer::strPattern* p = current();
-    stopTrack(cursor);
-    if (isMelodic(p, cursor))
+    auditionOff(cursorTrack);
+    stopTrack(cursorTrack);
+    setSound(p, cursorTrack, (uint8_t)instr);
+    markChanged();
+    refresh();
+}
+
+void cGibGobHome::changePattern(int delta)
+{
+    if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
     {
-        clearNotes(p, cursor);
+        mtPopups.show(0, "Stop playback to change pattern", 1);
+        return;
     }
-    else
+    int target = clampInt(mtProject.values.actualPattern + delta, PATTERN_INDEX_MIN, PATTERN_INDEX_MAX);
+    if (target == mtProject.values.actualPattern)
+        return;
+
+    releaseAllButtons();
+    stopAll();
+
+    // same sequence the stock pattern editor uses
+    sequencer.sequencialSwitch_Reset();
+    newFileManager.saveWorkspacePatternNow(mtProject.values.actualPattern);
+    mtProject.values.actualPattern = (uint8_t)target;
+    newFileManager.loadWorkspacePatternNow(mtProject.values.actualPattern);
+    sequencer.switchRamPatternsNow();
+
+    refresh();
+}
+
+void cGibGobHome::toggleMute(int track)
+{
+    mtProject.values.trackMute[track] = !mtProject.values.trackMute[track];
+    engine.muteTrack((uint8_t)track, mtProject.values.trackMute[track]);
+    if (mtProject.values.trackMute[track])
+        stopTrack(track);
+    newFileManager.setProjectStructChanged();
+    refresh();
+}
+
+void cGibGobHome::trackButton(int track, bool pressed)
+{
+    if (!pressed)
     {
-        for (auto& st : p->track[cursor].step)
+        if (!held[track])
+            return;
+        held[track] = false;
+        auditionOff(track);
+        if (heldRecording[track])
         {
-            st.note = Sequencer::STEP_NOTE_EMPTY;
-            st.instrument = 0;
-            st.fx[0].type = st.fx[0].value = 0;
-            st.fx[1].type = st.fx[1].value = 0;
-            st.volume = Sequencer::STEP_VELO_DEFAULT;
-            st.micromove = -1;
+            liveRecordOff(track, &heldPitch[track], 1);
+            heldRecording[track] = false;
+            markChanged();
+        }
+        refresh();
+        return;
+    }
+
+    if (shiftActive())
+    {
+        toggleMute(track);
+        return;
+    }
+
+    Sequencer::strPattern* p = current();
+    uint8_t pitch = getSettings(p, track).baseNote;
+    held[track] = true;
+    heldPitch[track] = pitch;
+    auditionOn(track, pitch, (uint8_t)velocity);
+
+    if (g_recArmed && sequencer.isPlay())
+    {
+        // melodic tracks record how long the button is held, drum hits are one step
+        bool hold = isMelodic(p, track);
+        if (liveRecordOn(track, &pitch, 1, (uint8_t)velocity, hold))
+        {
+            heldRecording[track] = hold;
+            markChanged();
+        }
+        else
+        {
+            mtPopups.show(0, "Track is full (125 notes)", 1);
         }
     }
-    newFileManager.setActualPatternStructChanged();
-    refreshTiles();
+    refresh();
+}
+
+void cGibGobHome::releaseAllButtons()
+{
+    for (int t = 0; t < kTracks; t++)
+    {
+        if (!held[t])
+            continue;
+        held[t] = false;
+        auditionOff(t);
+        if (heldRecording[t])
+        {
+            liveRecordOff(t, &heldPitch[t], 1);
+            heldRecording[t] = false;
+            markChanged();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
+// button handlers
+
 static bool pressOrRepeat(uint8_t s)
 {
     return s == buttonPress || s == buttonHold;
@@ -371,58 +666,80 @@ static void functPlay(uint8_t state)
     }
     else
     {
+        GH->releaseAllButtons();
         sequencer.stop();
     }
-    GH->refreshTiles();
+    GH->refresh();
+}
+
+static void functRec(uint8_t state)
+{
+    if (state != buttonPress)
+        return;
+    g_recArmed = !g_recArmed;
+    GH->refresh();
 }
 
 static void functUp(uint8_t s)
 {
-    if (pressOrRepeat(s))
-        GH->moveCursor(0, -1);
+    if (!pressOrRepeat(s))
+        return;
+    if (shiftActive())
+    {
+        if (s == buttonPress)
+            GH->changePattern(-1);
+        return;
+    }
+    GH->moveCursor(0, -1);
 }
+
 static void functDown(uint8_t s)
 {
-    if (pressOrRepeat(s))
-        GH->moveCursor(0, 1);
+    if (!pressOrRepeat(s))
+        return;
+    if (shiftActive())
+    {
+        if (s == buttonPress)
+            GH->changePattern(1);
+        return;
+    }
+    GH->moveCursor(0, 1);
 }
+
 static void functLeft(uint8_t s)
 {
     if (pressOrRepeat(s))
-        GH->moveCursor(-1, 0);
+        GH->moveCursor(shiftActive() ? -4 : -1, 0);
 }
+
 static void functRight(uint8_t s)
 {
     if (pressOrRepeat(s))
-        GH->moveCursor(1, 0);
+        GH->moveCursor(shiftActive() ? 4 : 1, 0);
 }
 
 static void functMiddle(uint8_t state)
 {
     if (state == buttonPress)
-        GH->openTrack();
+        GH->pressMiddle();
+    else if (state == buttonRelease)
+        auditionOff(GH->cursorTrack);
 }
 
-static void functTopRow(uint8_t button, uint8_t state)
+static void functInsert(uint8_t state)
 {
     if (state != buttonPress)
         return;
-    switch (button - interfaceButton0)
-    {
-        case 0: GH->toggleMute(); break;
-        case 1: GH->openTrack(); break;
-        case 2: GH->changeSound(-1); break;
-        case 3: GH->changeSound(1); break;
-        case 4: GH->clearTrack(); break;
-        case 7: GH->openTracker(); break;
-        default: break;
-    }
+    if (shiftActive())
+        GH->openTrackPage();
+    else
+        GH->openPianoRoll();
 }
 
-static void functEncoder(int16_t value)
+static void functDelete(uint8_t state)
 {
-    // any +/- button: + = Melodic, - = Drum
-    GH->setType(value > 0);
+    if (state == buttonPress)
+        GH->pressDelete();
 }
 
 static void functShift(uint8_t state)
@@ -430,13 +747,52 @@ static void functShift(uint8_t state)
     if (state != buttonPress)
         return;
     g_shiftLatched = !g_shiftLatched;
-    GH->refreshTiles();
+    GH->refresh();
 }
 
-static void functPattern(uint8_t state)
+static void functTopRow(uint8_t button, uint8_t state)
 {
+    int idx = button - interfaceButton0;
+    if (idx < 0 || idx >= kTracks)
+        return;
     if (state == buttonPress)
-        GH->openTracker();
+        GH->trackButton(idx, true);
+    else if (state == buttonRelease)
+        GH->trackButton(idx, false);
+}
+
+static void functParamButton(uint8_t button, uint8_t state)
+{
+    if (state != buttonPress)
+        return;
+    if (button == interfaceButtonNote)
+        GH->param = cGibGobHome::kParamProb;
+    else if (button == interfaceButtonInstr)
+        GH->param = cGibGobHome::kParamVelocity;
+    else if (button == interfaceButtonFx1)
+        GH->param = cGibGobHome::kParamNudge;
+    else if (button == interfaceButtonFx2)
+        GH->param = cGibGobHome::kParamPitch;
+    GH->refresh();
+}
+
+static void functEncoder(int16_t value)
+{
+    // the Mini's big +/- send +/-10, the small ones +/-1
+    bool big = value >= 10 || value <= -10;
+    int dir = value > 0 ? 1 : -1;
+    if (shiftActive())
+    {
+        if (big)
+            GH->changeZoom(-dir); // big + = zoom in (fewer steps on screen)
+        else
+            GH->changeSound(dir);
+        return;
+    }
+    if (big)
+        GH->changeLength(dir);
+    else
+        GH->changeParam(value);
 }
 
 static void functSwitchModule(uint8_t button)

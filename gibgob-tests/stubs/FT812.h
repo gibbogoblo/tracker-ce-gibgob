@@ -1,0 +1,16 @@
+#pragma once
+#include <stdint.h>
+#define RECTS 9
+#define SRC_ALPHA 2
+#define ONE_MINUS_SRC_ALPHA 4
+#define OPT_CENTERX 512
+#define OPT_CENTERY 1024
+#define OPT_RIGHTX 2048
+void API_COLOR(uint32_t c);
+void API_COLOR_A(uint8_t a);
+void API_BEGIN(int prim);
+void API_END();
+void API_VERTEX2F(int16_t x, int16_t y);
+void API_LINE_WIDTH(int w);
+void API_BLEND_FUNC(int a, int b);
+void API_CMD_TEXT(int16_t x, int16_t y, int16_t font, uint16_t options, const char* s);

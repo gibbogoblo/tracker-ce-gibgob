@@ -1,17 +1,20 @@
-// GibGob OS - piano roll editor for Melodic tracks
+// GibGob OS - piano roll editor (any track)
 //
 //   D-pad            move cursor (Shift: Up/Down = octave, Left/Right = 4 steps)
 //                    while notes are selected: moves the selected notes
 //   Middle           empty square: place ghost note/chord. On a note: grab it (select).
 //                    While notes are grabbed: let go. Shift+Middle = auto-audition on/off
 //   Insert           1st: start selection box, 2nd: lock (select notes inside), 3rd: let go
+//                    Shift+Insert = track page (sound, arp, Go Ape, chord palette)
 //   Delete           delete selection, or the note(s) under the cursor; cancels a box
-//   Top row 1..8     chord for the ghost (Shift = extended chords); press again = single note
+//   Top row 1..8     chord palette slot for the ghost (Shift = second bank); press again
+//                    for a single note. Sliced samples: the 8 buttons play slices.
+//                    While Rec is on and playing, what you play is recorded.
 //   Note/Instr/FX1/FX2  choose what small +/- edits: Probability / Velocity / Nudge / Inversion
 //   small +/-        edit chosen value
 //   big +/-          note length      Shift + big +/- = zoom (one square per press)
-//   Shift            toggles (red border while on)
-//   Play             play/stop (Shift = song)      Pattern (Fn1) = main grid
+//   Rec              toggle live recording        Play = play / stop (Shift = song)
+//   Shift            toggles (red border while on)   Pattern (Fn1) = main sequencer
 
 #include "gibgob/pianoRoll.h"
 
@@ -23,6 +26,7 @@
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
+#include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobUi.h"
 #include "mtStructs.h"
 
@@ -67,9 +71,9 @@ void cPianoRoll::initDisplayControls()
 {
     strControlProperties prop;
     prop.x = 0;
-    prop.y = 29;
-    prop.w = 800;
-    prop.h = 451;
+    prop.y = kScreenTop;
+    prop.w = kScreenW;
+    prop.h = kScreenH;
     prop.style = controlStyleShow;
     prop.data = &view;
     grid = display.createControl<PianoRollControl>(&prop);
@@ -80,15 +84,26 @@ void cPianoRoll::start(uint32_t options)
     moduleRefresh = 1;
     track = (int)(options % kTracks);
 
-    Sequencer::strPattern* p = current();
-    if (!isMelodic(p, track))
+    for (int i = 0; i < 8; i++)
     {
-        setTrackType(p, track, TrackType::Melodic);
-        markChanged();
+        held[i] = false;
+        heldRecording[i] = false;
+        heldCount[i] = 0;
     }
     clearSelection();
     mode = Mode::Idle;
     view.boxActive = false;
+    auditionOffAt = 0;
+    lastPlayheadDrawn = -2;
+
+    if (padsMode())
+    {
+        // sliced sample: start on the slices
+        chordSlot = -1;
+        if (view.cursorPitch < FIRST_BEAT_SLICE_NOTE || view.cursorPitch > FIRST_BEAT_SLICE_NOTE + 47)
+            view.cursorPitch = FIRST_BEAT_SLICE_NOTE;
+        view.topPitch = view.cursorPitch + 8;
+    }
 
     songTimer.hide();
     snprintf(titleText, sizeof(titleText), "Track %d  -  Piano Roll", track + 1);
@@ -102,6 +117,7 @@ void cPianoRoll::start(uint32_t options)
 
 void cPianoRoll::stop()
 {
+    releaseAllButtons();
     auditionOff(track);
     clearSelection();
     mode = Mode::Idle;
@@ -134,23 +150,27 @@ void cPianoRoll::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonFx2, functParamButton);
 
     ip->setButtonObj(interfaceButtonPattern, functPattern);
-
-    ip->setButtonObj(interfaceButtonPerformance, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonParams, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonFile, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonConfig, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonMaster, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSamplePlay, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleEdit, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleRec, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSampleLoad, buttonPress, functSwitchModule);
-    ip->setButtonObj(interfaceButtonSong, buttonPress, functSwitchModule);
+    bindModuleSwitchButtons(ip, functSwitchModule);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
 
 // ---------------------------------------------------------------------------
-// view
+bool cPianoRoll::padsMode()
+{
+    uint8_t sound = getSound(current(), track);
+    if (!isSampleInstrument(sound))
+        return false;
+    const strInstrument& in = mtProject.instrument[sound];
+    return in.isActive == 1 && in.playMode == playModeBeatSlice;
+}
+
+int cPianoRoll::chordNoteCount()
+{
+    if (chordSlot < 0)
+        return 1;
+    return chordType(getPaletteChord(current(), chordSlot).type).count;
+}
 
 void cPianoRoll::refreshView()
 {
@@ -174,7 +194,10 @@ void cPianoRoll::refreshView()
         view.firstTick = view.cursorTick;
     if (view.cursorTick + view.gridTicks > view.firstTick + vis)
         view.firstTick = view.cursorTick + view.gridTicks - vis;
-    view.firstTick = clampInt(view.firstTick, 0, view.patternTicks);
+    if (view.firstTick + vis > view.patternTicks)
+        view.firstTick = view.patternTicks - vis;
+    if (view.firstTick < 0)
+        view.firstTick = 0;
     view.firstTick -= view.firstTick % view.gridTicks;
 
     // scroll vertically
@@ -184,11 +207,30 @@ void cPianoRoll::refreshView()
         view.topPitch = view.cursorPitch + view.rowsVisible - 1;
     view.topPitch = clampInt(view.topPitch, view.rowsVisible - 1, 127);
 
-    // ghost
+    // ghost: a single note, or the palette chord's shape on the cursor note
+    bool pads = padsMode();
+    if (pads)
+        chordSlot = -1;
     view.showGhost = (mode == Mode::Idle);
     view.ghostLength = lengthTicks;
     view.ghostNudge = nudge;
-    view.ghostCount = buildChord(chordId, view.cursorPitch, inversion, view.ghostPitches, 6);
+    PaletteChord ghostChord{};
+    if (chordSlot >= 0)
+    {
+        ghostChord = getPaletteChord(p, chordSlot);
+        view.ghostCount = buildChordNotes(ghostChord.type, view.cursorPitch, inversion, ghostChord.voicing,
+                                          view.ghostPitches, kMaxChordNotes);
+        if (view.ghostCount == 0)
+        {
+            view.ghostPitches[0] = (uint8_t)view.cursorPitch;
+            view.ghostCount = 1;
+        }
+    }
+    else
+    {
+        view.ghostPitches[0] = (uint8_t)view.cursorPitch;
+        view.ghostCount = 1;
+    }
     view.playheadTick = playheadTick(track);
 
     // box
@@ -203,12 +245,19 @@ void cPianoRoll::refreshView()
         view.boxActive = false;
     }
 
-    // values shown: selection / note under cursor / ghost defaults
+    // values shown: selection / note under cursor / defaults for new notes
     int idx = -1;
     int count = noteCount(p, track);
-    for (int i = 0; i < count && idx < 0; i++)
+    int sel = 0;
+    for (int i = 0; i < count; i++)
+    {
         if (getNote(p, track, i).flags & kNoteFlagSelected)
-            idx = i;
+        {
+            if (idx < 0)
+                idx = i;
+            sel++;
+        }
+    }
     if (idx < 0)
         idx = findNoteAt(p, track, view.cursorTick, view.cursorPitch);
 
@@ -221,21 +270,22 @@ void cPianoRoll::refreshView()
         chn = n.chance();
         len = n.length;
         nud = n.start % kTicksPerStep;
-        if (nud > kTicksPerStep / 2)
+        if (nud >= kTicksPerStep / 2)
             nud -= kTicksPerStep;
     }
 
-    snprintf(view.title,
-             sizeof(view.title),
-             "%s %s  Step %d  Len %d.%02d",
-             mtNotes[pitch],
-             chordName(chordId),
-             view.cursorTick / kTicksPerStep + 1,
-             len / kTicksPerStep,
+    snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", mtNotes[pitch],
+             chordSlot >= 0 ? chordType(ghostChord.type).label : (pads ? "Slice" : "Note"),
+             view.cursorTick / kTicksPerStep + 1, len / kTicksPerStep,
              (len % kTicksPerStep) * 100 / kTicksPerStep);
 
-    int sel = selectionCount();
-    if (mode == Mode::BoxDrag)
+    view.modeColor = color::kBox;
+    if (g_recArmed)
+    {
+        snprintf(view.mode, sizeof(view.mode), "REC");
+        view.modeColor = color::kRec;
+    }
+    else if (mode == Mode::BoxDrag)
         snprintf(view.mode, sizeof(view.mode), "BOX");
     else if (mode == Mode::Move)
         snprintf(view.mode, sizeof(view.mode), "MOVE %d", sel);
@@ -258,14 +308,24 @@ void cPianoRoll::refreshView()
     view.params[3].color = color::kFx2Btn;
     view.selectedParam = param;
 
-    // bottom bar: chord bank (Shift = extended)
+    // bottom bar: slices for a sliced sample, otherwise the chord palette
     int bank = view.shift ? 1 : 0;
     for (int i = 0; i < 8; i++)
     {
-        snprintf(barText[i], sizeof(barText[i]), "%s", kChordTypes[bank][i].label);
+        int slot = bank * 8 + i;
+        if (pads)
+        {
+            snprintf(barText[i], sizeof(barText[i]), "Slice %d", slot + 1);
+            view.bar.fill[i] = color::kDrum;
+            view.bar.highlighted[i] = (view.cursorPitch == FIRST_BEAT_SLICE_NOTE + slot);
+        }
+        else
+        {
+            paletteChordName(getPaletteChord(p, slot), barText[i], sizeof(barText[i]));
+            view.bar.fill[i] = bank ? color::kFx2Btn : color::kMelodic;
+            view.bar.highlighted[i] = (chordSlot == slot);
+        }
         view.bar.text[i] = barText[i];
-        view.bar.fill[i] = bank ? color::kFx2Btn : color::kMelodic;
-        view.bar.highlighted[i] = (chordId == bank * kChordButtons + i);
     }
 
     display.refreshControl(grid);
@@ -275,8 +335,12 @@ void cPianoRoll::update()
 {
     if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
     {
-        auditionOff(track);
         auditionOffAt = 0;
+        bool anyHeld = false;
+        for (int i = 0; i < 8; i++)
+            anyHeld = anyHeld || held[i];
+        if (!anyHeld)
+            auditionOff(track);
     }
 
     int ph = playheadTick(track);
@@ -284,8 +348,8 @@ void cPianoRoll::update()
     if (phStep != lastPlayheadDrawn)
     {
         lastPlayheadDrawn = phStep;
-        view.playheadTick = ph;
-        display.refreshControl(grid);
+        // live-recorded notes appear as they are played
+        refreshView();
     }
 }
 
@@ -311,7 +375,7 @@ void cPianoRoll::clearSelection()
         Note n = getNote(p, track, i);
         if (n.flags & kNoteFlagSelected)
         {
-            n.flags &= ~kNoteFlagSelected;
+            n.flags &= (uint8_t)~kNoteFlagSelected;
             setNote(p, track, i, n);
         }
     }
@@ -352,7 +416,7 @@ int cPianoRoll::selectInBox()
     return selected;
 }
 
-// indices to edit: selection, else note(s) of the ghost chord under the cursor
+// indices to edit: the selection, else the note(s) of the ghost under the cursor
 static int collectTargets(int* out, int maxOut)
 {
     const Sequencer::strPattern* p = current();
@@ -366,7 +430,12 @@ static int collectTargets(int* out, int maxOut)
     for (int g = 0; g < PR->view.ghostCount && n < maxOut; g++)
     {
         int idx = findNoteAt(p, PR->track, PR->view.cursorTick, PR->view.ghostPitches[g]);
-        if (idx >= 0)
+        if (idx < 0)
+            continue;
+        bool dup = false;
+        for (int k = 0; k < n; k++)
+            dup = dup || out[k] == idx;
+        if (!dup)
             out[n++] = idx;
     }
     return n;
@@ -440,7 +509,7 @@ void cPianoRoll::moveSelection(int dTicks, int dPitch)
     }
 }
 
-void cPianoRoll::pressUp(bool)
+void cPianoRoll::pressUp()
 {
     int d = shiftActive() ? 12 : 1;
     if (mode == Mode::Move)
@@ -449,7 +518,7 @@ void cPianoRoll::pressUp(bool)
         moveCursor(0, d);
 }
 
-void cPianoRoll::pressDown(bool)
+void cPianoRoll::pressDown()
 {
     int d = shiftActive() ? -12 : -1;
     if (mode == Mode::Move)
@@ -494,7 +563,7 @@ void cPianoRoll::placeGhost()
         n.setChance(chance);
         if (addNote(p, track, n) < 0)
         {
-            mtPopups.show(0, "Track is full (127 notes)", 1);
+            mtPopups.show(0, "Track is full (125 notes)", 1);
             break;
         }
         any = true;
@@ -508,11 +577,12 @@ void cPianoRoll::pressMiddle()
     switch (mode)
     {
         case Mode::Idle:
-            if (selectUnderCursor())
+        {
+            int idx = findNoteAt(current(), track, view.cursorTick, view.cursorPitch);
+            if (idx >= 0 && selectUnderCursor())
             {
                 mode = Mode::Move; // grabbed a note
-                Note n = getNote(current(), track,
-                                 findNoteAt(current(), track, view.cursorTick, view.cursorPitch));
+                Note n = getNote(current(), track, idx);
                 auditionOn(track, n.pitch, n.velocity);
             }
             else
@@ -521,6 +591,7 @@ void cPianoRoll::pressMiddle()
                 placeGhost();
             }
             break;
+        }
         case Mode::Move:
             clearSelection(); // let go
             mode = Mode::Idle;
@@ -597,22 +668,24 @@ void cPianoRoll::changeParam(int delta)
 
     if (n == 0)
     {
+        // nothing under the cursor: change what the next placed note gets
         switch (param)
         {
-            case kParamNote: chance = clampInt(chance + delta * 5, 0, 100); break;
+            case kParamProb: chance = clampInt(chance + delta * 5, 0, 100); break;
             case kParamVelocity: velocity = clampInt(velocity + delta, 1, 127); break;
             case kParamNudge:
-                nudge = clampInt(nudge + delta, -(kTicksPerStep / 2), kTicksPerStep / 2);
+                nudge = clampInt(nudge + delta, -(kTicksPerStep / 2), kTicksPerStep / 2 - 1);
                 break;
             case kParamInversion:
             {
-                int c = chordNoteCount(chordId);
-                inversion = (inversion + delta + c * 4) % c;
+                int c = chordNoteCount();
+                inversion = ((inversion + delta) % c + c) % c;
                 break;
             }
+            default: break;
         }
         refreshView();
-        if (autoAudition || param == kParamInversion)
+        if (mode == Mode::Idle && (autoAudition || param == kParamInversion))
         {
             auditionGhost(true);
             auditionOffAt = (uint32_t)s_clock + 250;
@@ -625,7 +698,7 @@ void cPianoRoll::changeParam(int delta)
         Note note = getNote(p, track, targets[i]);
         switch (param)
         {
-            case kParamNote: note.setChance(note.chance() + delta * 5); break;
+            case kParamProb: note.setChance(note.chance() + delta * 5); break;
             case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
             case kParamNudge:
                 note.start = (uint16_t)clampInt(note.start + delta, 0, view.patternTicks - 1);
@@ -642,20 +715,30 @@ void cPianoRoll::changeLength(int deltaGrid)
 {
     Sequencer::strPattern* p = current();
     int step = view.gridTicks;
+    int minLen = step / 2;
     int maxLen = Sequencer::MAXSTEP * kTicksPerStep;
     int targets[kMaxNotes];
     int n = collectTargets(targets, kMaxNotes);
 
+    auto stepLength = [&](int len) {
+        // half a step is the shortest; from there lengths move in whole steps
+        if (len <= minLen && deltaGrid > 0)
+            return step;
+        if (len == step && deltaGrid < 0)
+            return minLen;
+        return clampInt(len + deltaGrid * step, minLen, maxLen);
+    };
+
     if (n == 0)
     {
-        lengthTicks = clampInt(lengthTicks + deltaGrid * step, step / 2, maxLen);
+        lengthTicks = stepLength(lengthTicks);
         refreshView();
         return;
     }
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, track, targets[i]);
-        note.length = (uint16_t)clampInt(note.length + deltaGrid * step, step / 2, maxLen);
+        note.length = (uint16_t)stepLength(note.length);
         setNote(p, track, targets[i], note);
         lengthTicks = note.length;
     }
@@ -669,17 +752,115 @@ void cPianoRoll::changeZoom(int delta)
     refreshView();
 }
 
-void cPianoRoll::pressChordButton(int button)
+void cPianoRoll::topButton(int button, bool pressed)
 {
-    int id = (shiftActive() ? kChordButtons : 0) + button;
-    chordId = (chordId == id) ? kChordNone : id;
-    inversion %= chordNoteCount(chordId);
-    refreshView();
-    if (mode == Mode::Idle)
+    if (button < 0 || button >= 8)
+        return;
+
+    if (!pressed)
     {
-        auditionGhost(true);
-        auditionOffAt = (uint32_t)s_clock + 300;
+        if (!held[button])
+            return;
+        held[button] = false;
+        if (heldRecording[button])
+        {
+            liveRecordOff(track, heldNotes[button], heldCount[button]);
+            heldRecording[button] = false;
+            markChanged();
+        }
+        bool anyHeld = false;
+        for (int i = 0; i < 8; i++)
+            anyHeld = anyHeld || held[i];
+        if (!anyHeld && auditionOffAt == 0)
+            auditionOff(track);
+        refreshView();
+        return;
     }
+
+    Sequencer::strPattern* p = current();
+    bool recording = g_recArmed && sequencer.isPlay();
+    bool pads = padsMode();
+    int slot = (shiftActive() ? 8 : 0) + button;
+
+    uint8_t notes[kMaxChordNotes];
+    int n = 0;
+    if (pads)
+    {
+        int pitch = clampInt(FIRST_BEAT_SLICE_NOTE + slot, 0, 127);
+        notes[0] = (uint8_t)pitch;
+        n = 1;
+        chordSlot = -1;
+        view.cursorPitch = pitch;
+    }
+    else
+    {
+        if (chordSlot == slot && !recording)
+        {
+            // pressing the selected chord again goes back to a single note
+            chordSlot = -1;
+            inversion = 0;
+            refreshView();
+            return;
+        }
+        PaletteChord c = getPaletteChord(p, slot);
+        chordSlot = slot;
+        inversion = c.inversion;
+        view.cursorPitch = c.root;
+        n = buildPaletteChord(c, notes, kMaxChordNotes);
+        if (n == 0)
+        {
+            notes[0] = c.root;
+            n = 1;
+        }
+    }
+
+    held[button] = true;
+    heldCount[button] = (uint8_t)n;
+    for (int i = 0; i < n; i++)
+        heldNotes[button][i] = notes[i];
+
+    auditionOffAt = 0;
+    auditionChord(track, notes, n, (uint8_t)velocity);
+
+    if (recording)
+    {
+        // slices on a drum track are single hits; everything else records its held length
+        bool hold = !(pads && !isMelodic(p, track));
+        if (liveRecordOn(track, notes, n, (uint8_t)velocity, hold))
+        {
+            heldRecording[button] = hold;
+            markChanged();
+        }
+        else
+        {
+            mtPopups.show(0, "Track is full (125 notes)", 1);
+        }
+    }
+    refreshView();
+}
+
+void cPianoRoll::releaseAllButtons()
+{
+    for (int i = 0; i < 8; i++)
+    {
+        if (!held[i])
+            continue;
+        held[i] = false;
+        if (heldRecording[i])
+        {
+            liveRecordOff(track, heldNotes[i], heldCount[i]);
+            heldRecording[i] = false;
+            markChanged();
+        }
+    }
+    auditionOff(track);
+}
+
+void cPianoRoll::openTrackPage()
+{
+    uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPageTrack, cGibGobPages::kFromPianoRoll, track);
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibgobPages, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -703,25 +884,29 @@ static void functPlay(uint8_t state)
     }
     else
     {
+        PR->releaseAllButtons();
         sequencer.stop();
     }
+    PR->refreshView();
 }
 
 static void functRec(uint8_t state)
 {
-    if (state == buttonPress)
-        mtPopups.show(0, "Live recording to piano roll: coming soon", 1);
+    if (state != buttonPress)
+        return;
+    g_recArmed = !g_recArmed;
+    PR->refreshView();
 }
 
 static void functUp(uint8_t s)
 {
     if (pressOrRepeat(s))
-        PR->pressUp(s == buttonHold);
+        PR->pressUp();
 }
 static void functDown(uint8_t s)
 {
     if (pressOrRepeat(s))
-        PR->pressDown(s == buttonHold);
+        PR->pressDown();
 }
 static void functLeft(uint8_t s)
 {
@@ -750,7 +935,11 @@ static void functMiddle(uint8_t state)
     }
     else if (state == buttonRelease)
     {
-        auditionOff(PR->track);
+        bool anyHeld = false;
+        for (int i = 0; i < 8; i++)
+            anyHeld = anyHeld || PR->held[i];
+        if (!anyHeld && PR->auditionOffAt == 0)
+            auditionOff(PR->track);
     }
 }
 
@@ -762,7 +951,11 @@ static void functDelete(uint8_t state)
 
 static void functInsert(uint8_t state)
 {
-    if (state == buttonPress)
+    if (state != buttonPress)
+        return;
+    if (shiftActive())
+        PR->openTrackPage();
+    else
         PR->pressInsert();
 }
 
@@ -787,11 +980,11 @@ static void functEncoder(int16_t value)
 
 static void functTopRow(uint8_t button, uint8_t state)
 {
-    if (state != buttonPress)
-        return;
     int idx = button - interfaceButton0;
-    if (idx >= 0 && idx < kChordButtons)
-        PR->pressChordButton(idx);
+    if (state == buttonPress)
+        PR->topButton(idx, true);
+    else if (state == buttonRelease)
+        PR->topButton(idx, false);
 }
 
 static void functParamButton(uint8_t button, uint8_t state)
@@ -799,7 +992,7 @@ static void functParamButton(uint8_t button, uint8_t state)
     if (state != buttonPress)
         return;
     if (button == interfaceButtonNote)
-        PR->param = cPianoRoll::kParamNote;
+        PR->param = cPianoRoll::kParamProb;
     else if (button == interfaceButtonInstr)
         PR->param = cPianoRoll::kParamVelocity;
     else if (button == interfaceButtonFx1)

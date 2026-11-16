@@ -4,7 +4,7 @@
 InterfaceMenuPopup mtMenuPopup;
 
 const uint8_t kMenuModulesCount = 11;
-const char* const kModuleNamesList[kMenuModulesCount] = { "Pattern",
+const char* const kModuleNamesList[kMenuModulesCount] = { "Sequencer",
                                                           "Instrument Parameters",
                                                           "Sample Playback",
                                                           "Master",
@@ -26,7 +26,7 @@ uint32_t performOptions[2] = { 1, 2 };
 InterfaceMenuPopup::ModuleModes performModes = { 2, performOptions, { 2, 0 } };
 
 const InterfaceMenuPopup::ModuleRef InterfaceMenuPopup::modules[kMenuModulesCount] = {
-    { mtInterface.modules[2], interfaceButtonPattern, 0, nullptr },
+    { mtInterface.modules[13], interfaceButtonPattern, 0, nullptr }, // GibGob OS main sequencer
     { mtInterface.modules[5], interfaceButtonParams, 0, &instrumentParamModes },
     { mtInterface.modules[3], interfaceButtonSamplePlay, 0, nullptr },
     { mtInterface.modules[12], interfaceButtonMaster, 0, &masterModes },
