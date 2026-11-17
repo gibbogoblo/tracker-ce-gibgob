@@ -4,6 +4,7 @@
 #include "mtSequencer.h"
 
 #include "fileManager.h"
+#include "gibgob/MelodicTrack.h"
 
 #include <cstring>
 
@@ -20,6 +21,7 @@ bool cFileManager::createNewProjectInWorkspace()
     currentProjectPatch[0] = 0;
 
     getDefaultProject(&mtProject);
+    gibgob::resetDefaults(); // GibGob OS: new projects start with the factory track layout
     mtProject.values.projectNotSavedFlag = 2; // nie zapiany do folderu Projects
     mtProject.values.actualPattern = 1;
 

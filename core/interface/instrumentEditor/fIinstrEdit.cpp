@@ -2,6 +2,7 @@
 #include "core/interface.h"
 #include "gibgob/gibgobPages.h"
 #include "gibgob/pianoRoll.h"
+#include "gibgob/gibgobUi.h"
 #include "mtWavetableEnvelopes.h"
 
 #include "core/interfaceMenuPopup.h"
@@ -1002,7 +1003,7 @@ static void functSwitchModule(uint8_t button)
 static void openGibGobChordPalette()
 {
     uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPagePalette, cGibGobPages::kFromInstrumentEditor,
-                                                 pianoRoll.track);
+                                                 gibgob::soundParametersTrack());
     mtInterface.deactivateModule(IE);
     mtInterface.activateModule(&gibgobPages, options);
 }

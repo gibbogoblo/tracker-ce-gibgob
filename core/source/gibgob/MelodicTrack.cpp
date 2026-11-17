@@ -118,6 +118,7 @@ Defaults g_def = {
     },
     50,
 };
+const Defaults kFactoryDefaults = g_def;
 
 // ---------------- header access ----------------
 bool readHeader(const Sequencer::strPattern* p, int track, Header& h)
@@ -984,6 +985,11 @@ int findNoteAt(const Sequencer::strPattern* p, int track, int tick, int pitch)
             return i;
     }
     return -1;
+}
+
+void resetDefaults()
+{
+    g_def = kFactoryDefaults;
 }
 
 void adoptDefaults(const Sequencer::strPattern* p)

@@ -116,6 +116,15 @@ int main()
     CHECK(getTrackType(&pat, 0) == TrackType::Drum);    // defaults: 1-4 drum
     CHECK(getTrackType(&pat, 5) == TrackType::Melodic); // 5-8 melodic
     CHECK(getSound(&pat, 3) == 3);
+    // a changed layout carries into new patterns, but not into a new project
+    setTrackType(&pat, 0, TrackType::Melodic);
+    setTrackType(&pat, 6, TrackType::Drum);
+    freshPattern();
+    CHECK(getTrackType(&pat, 0) == TrackType::Melodic && getTrackType(&pat, 6) == TrackType::Drum);
+    resetDefaults();
+    freshPattern();
+    for (int t = 0; t < 8; t++)
+        CHECK(getTrackType(&pat, t) == (t < 4 ? TrackType::Drum : TrackType::Melodic));
     for (int i = 0; i < 130; i++)
     {
         int r = addNote(&pat, 2, mk(i * 3, 10, 60));

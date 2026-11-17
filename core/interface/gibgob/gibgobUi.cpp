@@ -63,8 +63,23 @@ void screenOpened()
     s_shiftDown = false;
 }
 
+static int s_soundTrack = 0;
+
+int soundParametersTrack()
+{
+    const Sequencer::strPattern* p = current();
+    const int instr = mtProject.values.lastUsedInstrument;
+    if (getSound(p, s_soundTrack) == instr)
+        return s_soundTrack;
+    for (int t = 0; t < kTracks; t++)
+        if (getSound(p, t) == instr)
+            return t;
+    return s_soundTrack;
+}
+
 void openSoundParameters(ModuleBase* from, int track)
 {
+    s_soundTrack = track & 7;
     uint8_t sound = getSound(current(), track);
     mtProject.values.lastUsedInstrument = sound;
     mtInterface.deactivateModule(from);

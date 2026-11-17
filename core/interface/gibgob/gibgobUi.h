@@ -66,6 +66,10 @@ void screenOpened();
 // Button 2 (Params): open the parameters of the sound on this track
 // (sample parameters, or the synth's pages).
 void openSoundParameters(ModuleBase* from, int track);
+// the track whose sound the instrument editor is showing (for the chord
+// palette's audition): the track that opened it, or the first track using
+// the instrument being edited
+int soundParametersTrack();
 
 // Play pressed while stopped: with Rec armed, one bar of count-in first
 void playFromStop();

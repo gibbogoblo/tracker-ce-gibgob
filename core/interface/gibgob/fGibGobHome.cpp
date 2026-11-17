@@ -577,18 +577,6 @@ void cGibGobHome::changeGlobalLength(int delta, bool big)
     refresh();
 }
 
-void cGibGobHome::setTrackTypeHere(bool melodic)
-{
-    Sequencer::strPattern* p = current();
-    if (isMelodic(p, cursorTrack) == melodic)
-        return;
-    beginEdit(kEditSound);
-    stopTrack(cursorTrack);
-    setTrackType(p, cursorTrack, melodic ? TrackType::Melodic : TrackType::Drum);
-    markChanged();
-    refresh();
-}
-
 void cGibGobHome::changeParam(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
@@ -979,10 +967,9 @@ static void functEncoder(int16_t value)
     int dir = value > 0 ? 1 : -1;
     if (GH->cursorStep < 0)
     {
-        // on the track name: +/- choose the sound, big +/- the track type
-        if (big)
-            GH->setTrackTypeHere(dir > 0);
-        else
+        // on the track name: small +/- choose the sound. Big +/- is kept free
+        // for now (the track type is changed in the track settings only).
+        if (!big)
             GH->changeSound(dir);
         return;
     }

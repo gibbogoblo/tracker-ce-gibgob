@@ -138,6 +138,9 @@ int findNoteAt(const Sequencer::strPattern* p, int track, int tick, int pitch);
 // Remember this pattern's track types, sounds and palette as the defaults for
 // patterns that have no GibGob data yet (so a new pattern starts the same way).
 void adoptDefaults(const Sequencer::strPattern* p);
+// back to the factory layout (tracks 1-4 drums, 5-8 melodic, sounds 1-8,
+// default chord palette, straight swing). Called for every new project.
+void resetDefaults();
 
 // ---- track length ----
 // steps of the pattern (the longest track); every track loops inside it

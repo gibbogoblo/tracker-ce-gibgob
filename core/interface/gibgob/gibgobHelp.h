@@ -17,7 +17,7 @@ static const char* const kHelpMain[] = {
     "Top row: play tracks (record with Rec)",
     "Note/Instr/FX1/FX2: Len/Vel/Nudge/Pitch",
     "Big +/-: step length (Len: 16..128)",
-    "On name: +/- sound, big +/- type",
+    "On name: small +/- sound",
     "Rec: live rec (stopped: 1 bar count-in)",
     "Hold Rec 1 s: quantized rec on / off",
     "Play: play / stop (stop ends live rec)",

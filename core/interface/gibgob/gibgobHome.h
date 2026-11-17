@@ -46,7 +46,6 @@ class cGibGobHome : public ModuleBase
     void changeSound(int dir);
     void changeTempo(float delta);
     void changeSwing(int delta);
-    void setTrackTypeHere(bool melodic);
     void changeGlobalLength(int delta, bool big);
     void insertNote();
     void changePattern(int delta);
