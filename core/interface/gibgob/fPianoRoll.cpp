@@ -1,22 +1,5 @@
-// GibGob OS - piano roll editor (any track)
-//
-//   D-pad            move cursor (Shift: Up/Down = octave, Left/Right = 4 steps)
-//                    while notes are grabbed / selected: moves them
-//   Middle           empty square: place ghost note/chord. On a note: grab it.
-//                    While notes are grabbed: let go. Shift+Middle = auto-audition on/off
-//   Insert           1st: start selection box, 2nd: lock (select notes inside), 3rd: let go
-//   Delete           delete the note(s) under the cursor or the selection; on an empty
-//                    square: back to a single-note ghost. Shift+Delete = clear the track
-//   Top row 1..8     play that chord of the palette and move the ghost onto it (Shift =
-//                    second bank). Sliced samples: the 8 buttons play slices.
-//                    While Rec is on and playing, what you play is recorded.
-//   Note/Instr/FX1/FX2  small +/- edits: Probability / Velocity / Nudge / Inversion
-//                    Shift+Note = Quantize menu, Shift+Instr = Acid menu, Shift+FX1 = Arp menu
-//   small +/-        edit the note under the cursor (no selection needed)
-//   big +/-          note length      Shift + big +/- = zoom (one square per press)
-//   Rec              live recording on/off     Shift+Rec = undo
-//   Play             play / stop (Shift = song)
-//   Shift            toggles (red border while on)   Pattern (Fn1) = main sequencer
+// GibGob OS - piano roll editor (melodic tracks)
+// Every shortcut is listed in gibgobHelp.h (Shift + Menu shows them).
 
 #include "gibgob/pianoRoll.h"
 
@@ -28,6 +11,7 @@
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
+#include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobUi.h"
 #include "mtStructs.h"
@@ -57,6 +41,7 @@ static void functParamButton(uint8_t button, uint8_t state);
 static void functPattern(uint8_t state);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
+static void functParams(uint8_t state);
 
 static void markChanged()
 {
@@ -96,7 +81,12 @@ void cPianoRoll::initDisplayControls()
 void cPianoRoll::start(uint32_t options)
 {
     moduleRefresh = 1;
+    screenOpened();
     track = (int)(options % kTracks);
+    view.help.active = false;
+    view.help.title = "Piano roll - shortcuts";
+    view.help.lines = kHelpPianoRoll;
+    view.help.count = (int)(sizeof(kHelpPianoRoll) / sizeof(kHelpPianoRoll[0]));
 
     for (int i = 0; i < 8; i++)
     {
@@ -170,6 +160,7 @@ void cPianoRoll::setDefaultScreenFunct()
 
     ip->setButtonObj(interfaceButtonPattern, functPattern);
     bindModuleSwitchButtons(ip, functSwitchModule);
+    ip->setButtonObj(interfaceButtonParams, functParams);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -325,22 +316,47 @@ void cPianoRoll::refreshView()
     view.params[3].color = color::kFx2Btn;
     view.selectedParam = param;
 
-    // bottom bar: slices for a sliced sample, otherwise the chord palette
-    int bank = view.shift ? 1 : 0;
+    if (view.shift)
+    {
+        // what the coloured buttons do with Shift
+        static const char* const kShiftNames[4] = { "Quantize", "Acid", "Arp", "" };
+        for (int i = 0; i < 4; i++)
+        {
+            snprintf(view.params[i].label, sizeof(view.params[i].label), "%s", kShiftNames[i]);
+            view.params[i].value[0] = 0;
+        }
+        view.selectedParam = -1;
+    }
+
+    // bottom bar: Shift = utilities; sliced sample = slices; otherwise
+    // button 1 = single note and buttons 2-8 = the chord palette
+    static const char* const kUtility[8] = { "Oct -", "Oct +", "Semi -", "Semi +",
+                                             "Copy",  "Paste", "Double", "Legato" };
     for (int i = 0; i < 8; i++)
     {
-        int slot = bank * 8 + i;
-        if (pads)
+        if (view.shift)
         {
-            snprintf(barText[i], sizeof(barText[i]), "Slice %d", slot + 1);
+            snprintf(barText[i], sizeof(barText[i]), "%s", kUtility[i]);
+            view.bar.fill[i] = 0;
+            view.bar.highlighted[i] = false;
+        }
+        else if (pads)
+        {
+            snprintf(barText[i], sizeof(barText[i]), "Slice %d", i + 1);
             view.bar.fill[i] = color::kDrum;
-            view.bar.highlighted[i] = (view.cursorPitch == FIRST_BEAT_SLICE_NOTE + slot);
+            view.bar.highlighted[i] = (view.cursorPitch == FIRST_BEAT_SLICE_NOTE + i);
+        }
+        else if (i == 0)
+        {
+            snprintf(barText[i], sizeof(barText[i]), "Note");
+            view.bar.fill[i] = color::kMelodic;
+            view.bar.highlighted[i] = (chordSlot < 0);
         }
         else
         {
-            paletteChordName(getPaletteChord(p, slot), barText[i], sizeof(barText[i]));
-            view.bar.fill[i] = bank ? color::kFx2Btn : color::kMelodic;
-            view.bar.highlighted[i] = (chordSlot == slot);
+            paletteChordName(getPaletteChord(p, i - 1), barText[i], sizeof(barText[i]));
+            view.bar.fill[i] = color::kMelodic;
+            view.bar.highlighted[i] = (chordSlot == i - 1);
         }
         view.bar.text[i] = barText[i];
     }
@@ -855,19 +871,32 @@ void cPianoRoll::topButton(int button, bool pressed)
     }
 
     Sequencer::strPattern* p = current();
+    if (shiftActive())
+    {
+        utility(button);
+        return;
+    }
     bool recording = g_recArmed && sequencer.isPlay();
     bool pads = padsMode();
-    int slot = (shiftActive() ? 8 : 0) + button;
+    int slot = button - 1; // buttons 2-8 = palette chords 1-7
 
     uint8_t notes[kMaxChordNotes];
     int n = 0;
     if (pads)
     {
-        int pitch = clampInt(FIRST_BEAT_SLICE_NOTE + slot, 0, 127);
+        int pitch = clampInt(FIRST_BEAT_SLICE_NOTE + button, 0, 127);
         notes[0] = (uint8_t)pitch;
         n = 1;
         chordSlot = -1;
         view.cursorPitch = pitch;
+    }
+    else if (button == 0)
+    {
+        // single note at the cursor
+        chordSlot = -1;
+        inversion = 0;
+        notes[0] = (uint8_t)view.cursorPitch;
+        n = 1;
     }
     else
     {
@@ -924,6 +953,60 @@ void cPianoRoll::releaseAllButtons()
         }
     }
     auditionOff(track);
+}
+
+void cPianoRoll::utility(int button)
+{
+    Sequencer::strPattern* p = current();
+    switch (button)
+    {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        {
+            static const int kShift[4] = { -12, 12, -1, 1 };
+            beginEdit(kEditTool);
+            transposeNotes(p, track, kShift[button]);
+            markChanged();
+            break;
+        }
+        case 4:
+            copyTrack(p, track);
+            mtPopups.show(0, "Track copied", 1);
+            break;
+        case 5:
+            if (!hasClipboard())
+            {
+                mtPopups.show(0, "Copy a track first", 1);
+                return;
+            }
+            beginEdit(kEditTool);
+            pasteTrack(p, track);
+            markChanged();
+            mtPopups.show(0, "Pasted", 1);
+            break;
+        case 6:
+            beginEdit(kEditTool);
+            if (duplicateTrack(p, track))
+            {
+                markChanged();
+                mtPopups.show(0, "Track doubled", 1);
+            }
+            else
+            {
+                mtPopups.show(0, "Can't double: max 128 steps / 124 notes", 2);
+            }
+            break;
+        case 7:
+            beginEdit(kEditTool);
+            legatoNotes(p, track);
+            markChanged();
+            mtPopups.show(0, "Legato", 1);
+            break;
+        default: return;
+    }
+    refreshView();
 }
 
 void cPianoRoll::openTrackPage()
@@ -1390,12 +1473,12 @@ static void functPlay(uint8_t state)
 {
     if (state != buttonPress)
         return;
-    if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
+    if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP && !sequencer.isCountingIn())
     {
         if (shiftActive() && !inMenu())
             sequencer.playSong();
         else
-            sequencer.playPattern();
+            playFromStop();
     }
     else
     {
@@ -1581,8 +1664,22 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
+    if (state == buttonPress && !inMenu() && (shiftActive() || PR->view.help.active))
+    {
+        toggleHelp(PR->view.help, PR->ip);
+        PR->refreshView();
+        return;
+    }
+    if (PR->view.help.active)
+        return;
     if (state == buttonPress)
         mtMenuPopup.showModulePopup(PR);
     else if (state == buttonRelease)
         mtMenuPopup.hideModulePopup(PR);
+}
+
+static void functParams(uint8_t state)
+{
+    if (state == buttonPress && !inMenu())
+        openSoundParameters(PR, PR->track);
 }

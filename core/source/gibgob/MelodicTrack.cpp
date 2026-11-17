@@ -7,6 +7,13 @@
 
 #include <string.h>
 
+#if __has_include("cr_section_macros.h")
+#include "cr_section_macros.h"
+#endif
+#ifndef __NOINIT
+#define __NOINIT(x)
+#endif
+
 namespace gibgob
 {
 
@@ -83,6 +90,7 @@ struct Defaults
     uint8_t melodic[kTracks];
     uint8_t sound[kTracks];
     PaletteChord palette[kPaletteSize];
+    uint8_t swing;
 };
 
 Defaults g_def = {
@@ -108,6 +116,7 @@ Defaults g_def = {
       { 40, 2, 0, 0 },  // E Dom7
       { 45, 12, 0, 0 }, // A m add9
     },
+    50,
 };
 
 // ---------------- header access ----------------
@@ -331,6 +340,7 @@ struct VoiceUse
     bool on;
 };
 VoiceUse voiceUse[kTracks];
+int8_t s_lastVoiceOwner[kTracks] = { -1, -1, -1, -1, -1, -1, -1, -1 }; // track that last played each voice
 uint8_t s_triggeredVoices = 0; // voices we started since the last stop
 bool s_legacyPlayed[kTracks];
 
@@ -400,6 +410,7 @@ int allocVoice(int track, uint8_t serial, int forceVoice = -1)
     voiceUse[v].track = (int8_t)track;
     voiceUse[v].serial = serial;
     voiceUse[v].on = true;
+    s_lastVoiceOwner[v] = (int8_t)track;
     s_triggeredVoices |= (uint8_t)(1u << v);
     return v;
 }
@@ -438,6 +449,28 @@ void releaseActive(int track, ActiveNote& a)
         soundOffPoly(a.instrument, a.pitch);
     }
     a.remaining = -1;
+}
+
+// stop everything sounding on the track right now, ringing drum hits included
+void chokeTrack(int track, TrackPlayState& st)
+{
+    for (auto& a : st.notes)
+    {
+        if (a.remaining < 0)
+            continue;
+        a.oneShot = false; // force the note-off
+        releaseActive(track, a);
+    }
+    // hits whose step is over but which still ring on a voice of this track
+    for (int v = 0; v < kTracks; v++)
+    {
+        if (s_lastVoiceOwner[v] != track || !(s_triggeredVoices & (1u << v)))
+            continue;
+        if (voiceUse[v].on)
+            continue; // in use by a note that is still running
+        instrumentPlayer[v].noteOff();
+        s_triggeredVoices &= (uint8_t)~(1u << v);
+    }
 }
 
 // per-note sound changes (slide, accent, filter envelope) as the engine's
@@ -705,7 +738,8 @@ bool arpStep(ArpState& a, const TrackSettings& s, uint32_t runTick, ArpOut& out)
 
     out.pitch = (uint8_t)clampInt(outPitch, 0, 127);
     out.velocity = (uint8_t)clampInt(outVel, 1, 127);
-    out.gate = (int16_t)clampInt(gate, 2, rate * 2);
+    // an arp note always ends before the next one starts: notes never overlap
+    out.gate = (int16_t)clampInt(gate, 2, rate);
     return true;
 }
 
@@ -959,6 +993,97 @@ void adoptDefaults(const Sequencer::strPattern* p)
         if (readStoredChord(p, i, c))
             g_def.palette[i] = c;
     }
+    if (p->swingRez >= 25.0f && p->swingRez <= 75.0f)
+        g_def.swing = (uint8_t)(p->swingRez + 0.5f);
+}
+
+int patternSwing(const Sequencer::strPattern* p)
+{
+    if (p != nullptr && p->swingRez >= 25.0f && p->swingRez <= 75.0f)
+        return (int)(p->swingRez + 0.5f);
+    return g_def.swing;
+}
+
+void setPatternSwing(Sequencer::strPattern* p, int value)
+{
+    if (p == nullptr)
+        return;
+    value = clampInt(value, 25, 75);
+    p->swingRez = (float)value;
+    g_def.swing = (uint8_t)value;
+}
+
+// ---------------- note utilities ----------------
+__NOINIT(EXTERNAL_RAM) static Note s_clip[kMaxNotes];
+static int s_clipCount = -1;
+static int s_clipSteps = 16;
+
+void transposeNotes(Sequencer::strPattern* p, int track, int semitones)
+{
+    int count = noteCount(p, track);
+    bool anySelected = false;
+    for (int i = 0; i < count; i++)
+        anySelected = anySelected || (getNote(p, track, i).flags & kNoteFlagSelected);
+    for (int i = 0; i < count; i++)
+    {
+        Note n = getNote(p, track, i);
+        if (anySelected && !(n.flags & kNoteFlagSelected))
+            continue;
+        n.pitch = (uint8_t)clampInt(n.pitch + semitones, 0, 127);
+        setNote(p, track, i, n);
+    }
+}
+
+void legatoNotes(Sequencer::strPattern* p, int track)
+{
+    int count = noteCount(p, track);
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
+    for (int i = 0; i < count; i++)
+    {
+        Note n = getNote(p, track, i);
+        // the next later start, wrapping round to the first note of the loop
+        int next = -1, first = trackTicks;
+        for (int k = 0; k < count; k++)
+        {
+            int s = getNote(p, track, k).start;
+            if (s > n.start && (next < 0 || s < next))
+                next = s;
+            if (s < first)
+                first = s;
+        }
+        int len = next >= 0 ? next - n.start : trackTicks - n.start + first;
+        n.length = (uint16_t)clampInt(len, 1, 0x7FFF);
+        setNote(p, track, i, n);
+    }
+}
+
+void copyTrack(const Sequencer::strPattern* p, int track)
+{
+    int count = noteCount(p, track);
+    for (int i = 0; i < count; i++)
+    {
+        s_clip[i] = getNote(p, track, i);
+        s_clip[i].flags &= (uint8_t)~(kNoteFlagSelected | kNoteFlagRecording);
+    }
+    s_clipCount = count;
+    s_clipSteps = trackSteps(p, track);
+}
+
+bool pasteTrack(Sequencer::strPattern* p, int track)
+{
+    if (s_clipCount < 0)
+        return false;
+    stopTrack(track);
+    clearNotes(p, track);
+    for (int i = 0; i < s_clipCount; i++)
+        addNote(p, track, s_clip[i]);
+    setTrackSteps(p, track, s_clipSteps);
+    return true;
+}
+
+bool hasClipboard()
+{
+    return s_clipCount >= 0;
 }
 
 // =====================================================================
@@ -1351,8 +1476,11 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         }
         else
         {
-            // drum hits of up to one step ring out; longer notes are gated
+            // drum tracks are monophonic: a new hit cuts the one before.
+            // Hits of up to one step ring out until then; longer ones are gated.
             bool oneShot = drum && n.length <= kTicksPerStep;
+            if (drum)
+                chokeTrack(track, st);
             startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
         }
     }

@@ -274,6 +274,9 @@ void cSampleImporter::start(uint32_t options)
     {
         interfaceGlobals.refreshFileExplorer = false;
 
+        // GibGob OS: start in /Instruments
+        newFileManager.presetExplorerFolder("/Instruments");
+
         if (newFileManager.browseSdCard(nullptr))
         {
             SI->ip->blockAllInputs();

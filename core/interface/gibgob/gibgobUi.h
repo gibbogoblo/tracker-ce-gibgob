@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 class InputProcessor;
+class ModuleBase;
 
 namespace gibgob
 {
@@ -40,6 +41,31 @@ void undoEdit();
 
 // display name of a track: its name if renamed, else its sound's name
 void trackDisplayName(int track, char* out, int outLen);
+
+// Called by every GibGob screen when it opens: Shift starts off.
+void screenOpened();
+
+// Button 2 (Params): open the parameters of the sound on this track
+// (sample parameters, or the synth's pages).
+void openSoundParameters(ModuleBase* from, int track);
+
+// Play pressed while stopped: with Rec armed, one bar of count-in first
+void playFromStop();
+
+// Big +/- on lengths: jump to the nearest of 16, 32, 48, 64, 128 steps, then
+// step between those values.
+int snapLength(int steps, int dir);
+
+// ---- shortcut help (Shift + Menu) ----
+struct HelpView
+{
+    bool active = false;
+    const char* title = nullptr;
+    const char* const* lines = nullptr;
+    int count = 0;
+};
+// opens / closes the help window; while it is open only Menu works
+void toggleHelp(HelpView& help, InputProcessor* ip);
 
 // ---- palette ----
 namespace color
@@ -83,6 +109,7 @@ void color(uint32_t c);
 void alpha(int a);                              // 0..255
 void rect(int x1, int y1, int x2, int y2);
 void frame(int x1, int y1, int x2, int y2, int t); // outline of thickness t
+void setLighten(bool on); // Shift on: everything a little lighter
 void text(int x, int y, int fontHandle, uint16_t options, const char* str);
 void end();
 } // namespace draw
@@ -103,6 +130,8 @@ struct BottomBar
 };
 void drawBottomBar(const BottomBar& bar, int fontHandle);
 void drawShiftBorder();
+// full-screen list of shortcuts; returns true if drawn (the caller then stops)
+bool drawHelp(const HelpView& help, int fontRegular, int fontBold);
 
 // ---- four colour-coded value boxes (Note / Instr / FX1 / FX2) ----
 struct ParamBox

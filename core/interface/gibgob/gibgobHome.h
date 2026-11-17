@@ -15,6 +15,7 @@ class cGibGobHome : public ModuleBase
         kParamNudge,      // FX1 button   (purple)
         kParamPitch,      // FX2 button   (light blue)
         kParamTempo,      // Shift + FX1: BPM
+        kParamSwing,      // Shift + FX2: swing
         kParamCount
     };
 
@@ -37,6 +38,8 @@ class cGibGobHome : public ModuleBase
     void changeZoom(int delta);
     void changeSound(int dir);
     void changeTempo(float delta);
+    void changeSwing(int delta);
+    void setTrackTypeHere(bool melodic);
     void changePattern(int delta);
     void toggleMute(int track);
     void trackButton(int track, bool pressed);

@@ -1907,7 +1907,7 @@ static void functLoadWav()
     cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
     cfg.title = "Load WAV - Sample Editor";
     cfg.contextKey = "se_load_wav";
-    cfg.initialDirectory = "/Samples";
+    cfg.initialDirectory = "/Instruments";
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;
     cfg.returnModuleOptions = 1;
@@ -1962,7 +1962,7 @@ static void functExportWav()
     cfg.mode = GlobalFileBrowserConfig::Mode::kSaveWav;
     cfg.title = "Export WAV - Sample Editor";
     cfg.contextKey = "se_export_wav";
-    cfg.initialDirectory = "/Samples";
+    cfg.initialDirectory = "/Instruments";
     cfg.defaultFileName = defName;
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;
@@ -2324,7 +2324,7 @@ static void openModularParamFileBrowser(int paramIdx)
     }
     cfg.title = std::string(isSave ? "Save " : "Load ") +
                 (params.labelsText[paramIdx] ? params.labelsText[paramIdx] : "File");
-    cfg.initialDirectory = isWav ? "/Samples" : "/";
+    cfg.initialDirectory = isWav ? "/Instruments" : "/";
     cfg.defaultFileName = defName;
     cfg.extensionFilter = extStr;
     cfg.contextKey = keyBuf;

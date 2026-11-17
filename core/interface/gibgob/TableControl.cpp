@@ -47,6 +47,13 @@ void TableControl::update()
 
     draw::begin(kDrawBudget);
 
+    if (drawHelp(view->help, fRegular, fBold))
+    {
+        draw::end();
+        return;
+    }
+    draw::setLighten(view->shift);
+
     draw::color(color::kBg);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
 

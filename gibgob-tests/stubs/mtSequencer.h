@@ -30,9 +30,12 @@ class Sequencer
                 int8_t micromove;
             } step[MAXSTEP + 1];
         } track[kAllTracks];
+        float swingRez = 0.0f;
     };
     strPattern* getActualPattern() { return pattern; }
     bool isPlay() { return playing; }
+    void startCountIn() {}
+    void playPattern() { playing = true; }
     strPattern* pattern = nullptr;
     bool playing = false;
 };

@@ -762,6 +762,8 @@ class Sequencer
     void playSong(void);
     void playSongFromPosition(uint8_t songPos);
     void recStart(void);
+    void startCountIn(void); // GibGob OS: one bar of metronome, then play
+    bool isCountingIn(void);
     void showPreRollPopup();
     bool startRecOnExtClk_Active(void);
     void startRecOnExtClk_Reset(void);

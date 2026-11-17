@@ -1,21 +1,5 @@
 // GibGob OS - main sequencer: 8 track lanes
-//
-//   D-pad            move cursor; Left from step 1 reaches the track name column
-//                    (Shift: Left/Right = 4 steps, Up/Down = previous/next pattern)
-//   Middle           on a track name: track page (sound, sample loading, length)
-//                    Drum lane: toggle a step.   Melodic lane: open the piano roll
-//   Insert           open the track in the piano roll.  Shift+Insert = duplicate track
-//   Delete           delete the step under the cursor.  Shift+Delete = clear the track
-//   Top row 1..8     play track 1..8 (finger drumming); recorded while Rec is on and playing
-//                    Shift + top row = mute / unmute that track
-//   Note / Instr / FX1 / FX2   small +/- edits: Length / Velocity / Nudge / Pitch
-//   Shift + FX1      BPM
-//   big +/-          step length (Length: 4 steps, BPM: 10)   Shift + big +/- = zoom
-//   Shift + small +/-  change the track's sound
-//   Rec              live recording on/off (metronome on while armed)
-//   Shift + Rec      undo
-//   Play             play / stop (Shift = song)
-//   Shift            toggles (red border while on); hold Shift + +/- = master volume
+// Every shortcut is listed in gibgobHelp.h (Shift + Menu shows them).
 
 #include "gibgob/gibgobHome.h"
 
@@ -26,6 +10,8 @@
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobPages.h"
+#include "gibgob/gibgobHelp.h"
+#include "gibgob/drumSeq.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "mtAudioEngine.h"
@@ -67,6 +53,7 @@ static void functParamButton(uint8_t button, uint8_t state);
 static void functEncoder(int16_t value);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
+static void functParams(uint8_t state);
 
 static int clampInt(int v, int lo, int hi)
 {
@@ -133,6 +120,11 @@ void cGibGobHome::initDisplayControls()
 void cGibGobHome::start(uint32_t options)
 {
     moduleRefresh = 1;
+    screenOpened();
+    view.help.active = false;
+    view.help.title = "Main sequencer - shortcuts";
+    view.help.lines = kHelpMain;
+    view.help.count = (int)(sizeof(kHelpMain) / sizeof(kHelpMain[0]));
     cursorTrack = (int)(options % kTracks);
     for (int i = 0; i < 8; i++)
     {
@@ -186,6 +178,7 @@ void cGibGobHome::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonFx2, functParamButton);
 
     bindModuleSwitchButtons(ip, functSwitchModule);
+    ip->setButtonObj(interfaceButtonParams, functParams);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -273,11 +266,10 @@ void cGibGobHome::refresh()
     }
 
     if (cursorStep < 0)
-        snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Middle: track settings",
-                 mtProject.values.actualPattern, cursorTrack + 1);
+        snprintf(view.title, sizeof(view.title), "Pat %d   Middle: track settings", mtProject.values.actualPattern);
     else
-        snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Step %d/%d", mtProject.values.actualPattern,
-                 cursorTrack + 1, cursorStep + 1, laneSteps);
+        snprintf(view.title, sizeof(view.title), "Pat %d   Step %d/%d", mtProject.values.actualPattern,
+                 cursorStep + 1, laneSteps);
 
     if (g_recArmed)
     {
@@ -289,27 +281,66 @@ void cGibGobHome::refresh()
         view.mode[0] = 0;
     }
 
-    snprintf(view.params[0].label, sizeof(view.params[0].label), "Len");
-    snprintf(view.params[0].value, sizeof(view.params[0].value), "%d", laneSteps);
-    view.params[0].color = color::kNoteBtn;
-    snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
-    snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
-    view.params[1].color = color::kInstrBtn;
-    if (param == kParamTempo)
+    for (int i = 0; i < 4; i++)
     {
+        view.params[i].label[0] = 0;
+        view.params[i].value[0] = 0;
+    }
+    view.params[0].color = color::kNoteBtn;
+    view.params[1].color = color::kInstrBtn;
+    view.params[2].color = color::kFx1Btn;
+    view.params[3].color = color::kFx2Btn;
+
+    if (cursorStep < 0)
+    {
+        // on the track name: +/- choose the sound, big +/- the type
+        char sound[12];
+        gibgobSoundName(getSound(p, cursorTrack), sound, sizeof(sound));
+        snprintf(view.params[0].label, sizeof(view.params[0].label), "+/-");
+        snprintf(view.params[0].value, sizeof(view.params[0].value), "%.9s", sound);
+        snprintf(view.params[1].label, sizeof(view.params[1].label), "Big+/-");
+        snprintf(view.params[1].value, sizeof(view.params[1].value), "%s",
+                 isMelodic(p, cursorTrack) ? "Melodic" : "Drum");
+        view.selectedParam = -1;
+    }
+    else if (view.shift)
+    {
+        // what the coloured buttons do with Shift
         snprintf(view.params[2].label, sizeof(view.params[2].label), "BPM");
         snprintf(view.params[2].value, sizeof(view.params[2].value), "%d", (int)(mtProject.values.globalTempo + 0.5f));
+        snprintf(view.params[3].label, sizeof(view.params[3].label), "Swing");
+        snprintf(view.params[3].value, sizeof(view.params[3].value), "%d%%", patternSwing(p));
+        view.selectedParam = -1;
     }
     else
     {
-        snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
-        snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
+        snprintf(view.params[0].label, sizeof(view.params[0].label), "Len");
+        snprintf(view.params[0].value, sizeof(view.params[0].value), "%d", laneSteps);
+        snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
+        snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
+        if (param == kParamTempo)
+        {
+            snprintf(view.params[2].label, sizeof(view.params[2].label), "BPM");
+            snprintf(view.params[2].value, sizeof(view.params[2].value), "%d",
+                     (int)(mtProject.values.globalTempo + 0.5f));
+        }
+        else
+        {
+            snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
+            snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
+        }
+        if (param == kParamSwing)
+        {
+            snprintf(view.params[3].label, sizeof(view.params[3].label), "Swing");
+            snprintf(view.params[3].value, sizeof(view.params[3].value), "%d%%", patternSwing(p));
+        }
+        else
+        {
+            snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
+            snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
+        }
+        view.selectedParam = (param == kParamTempo) ? 2 : (param == kParamSwing ? 3 : param);
     }
-    view.params[2].color = color::kFx1Btn;
-    snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
-    snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
-    view.params[3].color = color::kFx2Btn;
-    view.selectedParam = (param == kParamTempo) ? 2 : param;
 
     // bottom bar: the 8 track buttons, named after their tracks
     for (int i = 0; i < 8; i++)
@@ -395,9 +426,18 @@ void cGibGobHome::moveCursor(int dStep, int dTrack)
 void cGibGobHome::openPianoRoll()
 {
     int t = cursorTrack;
-    pianoRoll.view.cursorTick = (cursorStep < 0 ? 0 : cursorStep) * kTicksPerStep;
+    int step = cursorStep < 0 ? 0 : cursorStep;
     mtInterface.deactivateModule(this);
-    mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+    if (isMelodic(current(), t))
+    {
+        pianoRoll.view.cursorTick = step * kTicksPerStep;
+        mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+    }
+    else
+    {
+        drumSeq.cursorStep = step;
+        mtInterface.activateModule(&drumSeq, (uint32_t)t);
+    }
 }
 
 void cGibGobHome::openTrackPage()
@@ -513,6 +553,27 @@ void cGibGobHome::changeTempo(float delta)
     refresh();
 }
 
+void cGibGobHome::changeSwing(int delta)
+{
+    Sequencer::strPattern* p = current();
+    beginEdit(kEditParam);
+    setPatternSwing(p, patternSwing(p) + delta);
+    markChanged();
+    refresh();
+}
+
+void cGibGobHome::setTrackTypeHere(bool melodic)
+{
+    Sequencer::strPattern* p = current();
+    if (isMelodic(p, cursorTrack) == melodic)
+        return;
+    beginEdit(kEditSound);
+    stopTrack(cursorTrack);
+    setTrackType(p, cursorTrack, melodic ? TrackType::Melodic : TrackType::Drum);
+    markChanged();
+    refresh();
+}
+
 void cGibGobHome::changeParam(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
@@ -522,10 +583,16 @@ void cGibGobHome::changeParam(int delta, bool big)
         changeTempo((float)(big ? delta * 10 : delta));
         return;
     }
+    if (param == kParamSwing)
+    {
+        changeSwing(big ? delta * 5 : delta);
+        return;
+    }
     if (param == kParamLength)
     {
         beginEdit(kEditTrackLength);
-        setTrackSteps(p, cursorTrack, trackSteps(p, cursorTrack) + delta * (big ? 4 : 1));
+        int steps = trackSteps(p, cursorTrack);
+        setTrackSteps(p, cursorTrack, big ? snapLength(steps, delta) : steps + delta);
         markChanged();
         refresh();
         return;
@@ -771,12 +838,12 @@ static void functPlay(uint8_t state)
 {
     if (state != buttonPress)
         return;
-    if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
+    if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP && !sequencer.isCountingIn())
     {
         if (shiftActive())
             sequencer.playSong();
         else
-            sequencer.playPattern();
+            playFromStop();
     }
     else
     {
@@ -880,12 +947,26 @@ static void functParamButton(uint8_t button, uint8_t state)
 {
     if (state != buttonPress)
         return;
+    if (GH->cursorStep < 0)
+        return; // on the track name the coloured buttons do nothing
+    if (shiftActive())
+    {
+        if (button == physFx1Button())
+            GH->param = cGibGobHome::kParamTempo;
+        else if (button == physFx2Button())
+            GH->param = cGibGobHome::kParamSwing;
+        else
+            return;
+        g_shiftLatched = false; // so +/- now edit what was chosen
+        GH->refresh();
+        return;
+    }
     if (button == interfaceButtonNote)
         GH->param = cGibGobHome::kParamLength;
     else if (button == interfaceButtonInstr)
         GH->param = cGibGobHome::kParamVelocity;
     else if (button == physFx1Button())
-        GH->param = shiftActive() ? cGibGobHome::kParamTempo : cGibGobHome::kParamNudge;
+        GH->param = cGibGobHome::kParamNudge;
     else if (button == physFx2Button())
         GH->param = cGibGobHome::kParamPitch;
     GH->refresh();
@@ -896,6 +977,15 @@ static void functEncoder(int16_t value)
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
+    if (GH->cursorStep < 0)
+    {
+        // on the track name: +/- choose the sound, big +/- the track type
+        if (big)
+            GH->setTrackTypeHere(dir > 0);
+        else
+            GH->changeSound(dir);
+        return;
+    }
     if (shiftActive())
     {
         if (big)
@@ -904,7 +994,8 @@ static void functEncoder(int16_t value)
             GH->changeSound(dir);
         return;
     }
-    if (big && GH->param != cGibGobHome::kParamTempo && GH->param != cGibGobHome::kParamLength)
+    if (big && GH->param != cGibGobHome::kParamTempo && GH->param != cGibGobHome::kParamSwing &&
+        GH->param != cGibGobHome::kParamLength)
         GH->changeLength(dir);
     else
         GH->changeParam(dir, big);
@@ -917,8 +1008,22 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
+    if (state == buttonPress && (shiftActive() || GH->view.help.active))
+    {
+        toggleHelp(GH->view.help, GH->ip);
+        GH->refresh();
+        return;
+    }
+    if (GH->view.help.active)
+        return;
     if (state == buttonPress)
         mtMenuPopup.showModulePopup(GH);
     else if (state == buttonRelease)
         mtMenuPopup.hideModulePopup(GH);
+}
+
+static void functParams(uint8_t state)
+{
+    if (state == buttonPress)
+        openSoundParameters(GH, GH->cursorTrack);
 }

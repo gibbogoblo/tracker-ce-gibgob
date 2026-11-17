@@ -75,6 +75,13 @@ void PianoRollControl::update()
 
     draw::begin(kDrawBudget);
 
+    if (drawHelp(view->help, fRegular, fBold))
+    {
+        draw::end();
+        return;
+    }
+    draw::setLighten(view->shift);
+
     // ---- background ----
     draw::color(color::kBg);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
@@ -380,29 +387,28 @@ void PianoRollControl::update()
 
         if (m.cols == 2)
         {
+            // one side or the other: the side not chosen is dimmed and its
+            // amount is hidden, because Quantize and Humanize undo each other
             int colW = (x1 - x0 - 30) / 2;
             for (int c2 = 0; c2 < 2; c2++)
             {
                 int cx = x0 + 10 + c2 * (colW + 10);
                 bool colSel = (c2 == m.colCursor);
-                // title row
                 int ty = top + 40;
-                if (colSel && m.cursor < 0)
+                if (colSel)
                 {
-                    draw::color(m.accent);
+                    draw::color(m.cursor < 0 ? m.accent : scaleColor(m.accent, 45, 100));
                     draw::rect(cx, ty, cx + colW, ty + rowH - 4);
+                    if (m.cursor >= 0)
+                    {
+                        draw::color(m.accent);
+                        draw::rect(cx, ty + rowH, cx + colW, ty + 2 * rowH - 4);
+                    }
                 }
-                else if (colSel)
+                else
                 {
-                    draw::color(scaleColor(m.accent, 40, 100));
+                    draw::color(color::kBg);
                     draw::rect(cx, ty, cx + colW, ty + rowH - 4);
-                }
-                // value row
-                int vy = ty + rowH;
-                if (colSel && m.cursor >= 0)
-                {
-                    draw::color(m.accent);
-                    draw::rect(cx, vy, cx + colW, vy + rowH - 4);
                 }
             }
             for (int c2 = 0; c2 < 2; c2++)
@@ -410,10 +416,12 @@ void PianoRollControl::update()
                 int cx = x0 + 10 + c2 * (colW + 10);
                 bool colSel = (c2 == m.colCursor);
                 int ty = top + 40;
-                draw::color((colSel && m.cursor < 0) ? color::kTextDark : color::kText);
+                draw::color(!colSel ? color::kTextDim : (m.cursor < 0 ? color::kTextDark : color::kText));
                 draw::text(cx + 8, ty + (rowH - 4) / 2, fBold, OPT_CENTERY, m.colTitle[c2]);
+                if (!colSel)
+                    continue;
                 int vy = ty + rowH;
-                draw::color((colSel && m.cursor >= 0) ? color::kTextDark : color::kText);
+                draw::color(m.cursor >= 0 ? color::kTextDark : color::kText);
                 draw::text(cx + 8, vy + (rowH - 4) / 2, fRegular, OPT_CENTERY, m.row[c2].label);
                 draw::text(cx + colW - 8, vy + (rowH - 4) / 2, fBold, OPT_CENTERY | OPT_RIGHTX, m.row[c2].value);
             }

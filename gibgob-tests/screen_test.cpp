@@ -1,6 +1,8 @@
 #include "gibgob/LaneControl.h"
 #include "gibgob/PianoRollControl.h"
 #include "gibgob/TableControl.h"
+#include "gibgob/DrumSeqControl.h"
+#include "gibgob/gibgobHelp.h"
 #include "gibgob/MelodicTrack.h"
 #include "FT812.h"
 #include "display.h"
@@ -16,6 +18,7 @@
 using namespace gibgob;
 
 FileManagerStub newFileManager;
+ModuleBase instrumentEditor;
 Sequencer sequencer; strMtProject mtProject; playerEngine instrumentPlayer[8]; Interface mtInterface;
 strFont fonts[5] = { {26}, {27}, {28}, {29}, {30} };
 char notesTable[128][5];
@@ -45,7 +48,7 @@ void API_BLEND_FUNC(int, int) { words++; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
     words++; verts++;
-    if (lastColor == 0xB85548) borderRects++;
+    if (lastColor == 0xB85548 || lastColor == 0xC97F75) borderRects++; // plain, or lightened by Shift
     if (!inBegin) { printf("vertex outside BEGIN\n"); fails++; }
     if (x < -2 || x > 801 || y < 27 || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
 }
@@ -175,6 +178,28 @@ int main()
         prop.data = &pv2;
         TableControl tc2(&prop);
         render(tc2, "chord palette page", kLimit);
+    }
+
+    {
+        // drum sequencer, every cell busy
+        DrumSeqView dv; dv.firstRow = 2; dv.cursorStep = 23; dv.playStep = 20; dv.steps = 128; dv.shift = true;
+        for (int k = 0; k < 32; k++) { DrumCell& cl = dv.cell[k]; cl.exists = true; cl.on = true; cl.velocity = 30 + k * 3; cl.chance = 55; cl.nudge = (k % 5) - 2; snprintf(cl.pitch, 6, "G#10"); }
+        snprintf(dv.title, sizeof(dv.title), "Step 128/128   (empty)"); snprintf(dv.mode, 12, "REC");
+        memcpy(dv.params, pb, sizeof(pb)); dv.bar = bar;
+        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &dv;
+        DrumSeqControl dc(&prop);
+        render(dc, "drum sequencer", kLimit);
+        // help windows
+        dv.help.active = true; dv.help.title = "Main sequencer - shortcuts";
+        dv.help.lines = kHelpMain; dv.help.count = (int)(sizeof(kHelpMain) / sizeof(kHelpMain[0]));
+        words = 0; verts = 0; dc.update();
+        printf("%-34s %4d words\n", "help: main sequencer", words);
+        if (words > kLimit || draw::skipped()) { printf("  help too big\n"); fails++; }
+        dv.help.lines = kHelpPianoRoll; dv.help.count = (int)(sizeof(kHelpPianoRoll) / sizeof(kHelpPianoRoll[0]));
+        words = 0; dc.update();
+        printf("%-34s %4d words\n", "help: piano roll", words);
+        if (words > kLimit || draw::skipped()) { printf("  help too big\n"); fails++; }
+        if ((int)(sizeof(kHelpMain) / sizeof(kHelpMain[0])) > 32 || (int)(sizeof(kHelpPianoRoll) / sizeof(kHelpPianoRoll[0])) > 32) { printf("  help list longer than 32 lines\n"); fails++; }
     }
 
     printf(fails ? "UI TEST FAILED: %d\n" : "ALL SCREEN TESTS PASSED\n", fails);

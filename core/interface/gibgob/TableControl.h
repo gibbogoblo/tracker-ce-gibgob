@@ -27,6 +27,7 @@ struct TableView
     uint32_t modeColor = 0;
     bool shift = false;
     BottomBar bar;
+    HelpView help;
 };
 
 class TableControl : public cDisplayControl

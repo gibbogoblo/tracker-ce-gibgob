@@ -1,6 +1,7 @@
 #include "gibgob/gibgobHome.h"
 #include "gibgob/pianoRoll.h"
 #include "gibgob/gibgobPages.h"
+#include "gibgob/drumSeq.h"
 #include <string.h>
 
 #include "core/interface.h"
@@ -57,7 +58,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 16;
+const uint8_t Interface::modulesCount = 17;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -75,6 +76,7 @@ const hModule Interface::modules[modulesCount] = {
     &gibgobHome,        // 13  GibGob OS main grid
     &pianoRoll,         // 14  GibGob OS piano roll
     &gibgobPages,       // 15  GibGob OS track / chord palette pages
+    &drumSeq,           // 16  GibGob OS drum track sequencer
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;

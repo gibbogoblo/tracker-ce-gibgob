@@ -57,6 +57,7 @@ class cPianoRoll : public ModuleBase
     void releaseAllButtons();
     void auditionGhost(bool on);
     void openTrackPage();
+    void utility(int button); // Shift + top row
 
     // helpers
     void moveCursor(int dTicks, int dPitch);

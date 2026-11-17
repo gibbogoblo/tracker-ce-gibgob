@@ -473,6 +473,56 @@ int main()
         CHECK(countKind('s') == 1); // only the final release
     }
 
+    // T15: drum tracks are monophonic: a new hit cuts the ringing one
+    freshPattern();
+    setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+    addNote(&pat, 0, mk(0, 48, 60)); addNote(&pat, 0, mk(96, 48, 60));
+    runTicks(0, 200);
+    CHECK(countKind('S') == 2 && countKind('s') == 1); // first hit stopped when the second starts
+    for (auto& ev : events) if (ev.kind == 's') CHECK(ev.tick == 96);
+    stopAll();
+
+    // T16: Go Ape notes never overlap
+    for (int round = 0; round < 30; round++)
+    {
+        freshPattern();
+        setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+        TrackSettings a; a.arpMode = 1 + round % 5; a.arpRate = round % 6; a.arpOctaves = 1 + round % 4; a.arpGate = 100;
+        a.apeOn = true; a.apeSeed = 1000 + round; a.apeRhythm = 100; a.apeGate = 100; a.apeNotes = 100;
+        setSettings(&pat, 6, a);
+        addNote(&pat, 6, mk(0, 768, 60)); addNote(&pat, 6, mk(0, 768, 64)); addNote(&pat, 6, mk(0, 768, 67));
+        runTicks(0, 64 * 48, 16);
+        int open = 0, maxOpen = 0;
+        for (auto& ev : events) { if (ev.kind == 'M') open++; if (ev.kind == 'm') open--; if (open > maxOpen) maxOpen = open; }
+        // offs come before ons within a tick, so at most one note at a time
+        CHECK(maxOpen <= 1);
+        stopAll();
+    }
+
+    // T17: utilities and swing
+    freshPattern();
+    addNote(&pat, 5, mk(0, 10, 60)); addNote(&pat, 5, mk(96, 10, 64)); addNote(&pat, 5, mk(96, 10, 67));
+    transposeNotes(&pat, 5, 12);
+    CHECK(getNote(&pat, 5, 0).pitch == 72 && getNote(&pat, 5, 2).pitch == 79);
+    { Note n = getNote(&pat, 5, 1); n.flags |= kNoteFlagSelected; setNote(&pat, 5, 1, n); }
+    transposeNotes(&pat, 5, -1);
+    CHECK(getNote(&pat, 5, 0).pitch == 72 && getNote(&pat, 5, 1).pitch == 75);
+    legatoNotes(&pat, 5);
+    CHECK(getNote(&pat, 5, 0).length == 96 && getNote(&pat, 5, 1).length == 768 - 96 && getNote(&pat, 5, 2).length == 768 - 96);
+    copyTrack(&pat, 5);
+    CHECK(hasClipboard());
+    clearNotes(&pat, 2);
+    CHECK(pasteTrack(&pat, 2) && noteCount(&pat, 2) == 3 && getNote(&pat, 2, 0).pitch == 72);
+    CHECK(!(getNote(&pat, 2, 1).flags & kNoteFlagSelected));
+    CHECK(patternSwing(&pat) == 50);
+    setPatternSwing(&pat, 62);
+    CHECK(patternSwing(&pat) == 62);
+    setPatternSwing(&pat, 99);
+    CHECK(patternSwing(&pat) == 75);
+    adoptDefaults(&pat);
+    freshPattern();
+    CHECK(patternSwing(&pat) == 75); // a new pattern starts with the last swing
+
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

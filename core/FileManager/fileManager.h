@@ -369,6 +369,7 @@ class cFileManager
 
     uint8_t calcFirstSlotToMoveInMemory(uint8_t calcStartSlot);
     void resetBrowse();
+    bool presetExplorerFolder(const char* folder); // GibGob OS
 
     bool isFilePtiInstrument(char* file);
     uint32_t getSampleMemorySize(int fromSlot, int toSlot);

@@ -91,6 +91,24 @@ void Sequencer::clearAllPatternSlots()
 
 AUDIO_CORE_RAM void Sequencer::tick(float intervalSeconds)
 {
+    // GibGob OS: global swing stored with the pattern
+    {
+        static bool gibgobSwingSet = false;
+        int gs = gibgob::patternSwing(currentPattern);
+        if (gs != 50)
+        {
+            if (!player.swing.isActive || (int)(player.swing.value + 0.5f) != gs)
+                player.swing.setSwing((int16_t)gs);
+            gibgobSwingSet = true;
+        }
+        else if (gibgobSwingSet)
+        {
+            player.swing.value = 50.0f;
+            player.swing.isActive = 0;
+            gibgobSwingSet = false;
+        }
+    }
+
 
     updateExternalClockTempo((seqtimesec_t)intervalSeconds);
 
@@ -1771,6 +1789,29 @@ void Sequencer::recStart(void)
             playPattern();
         }
     }
+}
+
+// GibGob OS: one bar of metronome, then the pattern starts (live recording)
+void Sequencer::startCountIn()
+{
+    if (!isSetInternalClock() || isPlay() || player.preRecMetronomeActive)
+    {
+        if (!isPlay())
+            playPattern();
+        return;
+    }
+    stopAllOpenNotes();
+    engine.endAllFx();
+    reset_actual_pos();
+    resetChanceState();
+    player.extRecMetronomeStep = 0;
+    player.preRecMetronomeActive = 1;
+    showPreRollPopup();
+}
+
+bool Sequencer::isCountingIn()
+{
+    return player.preRecMetronomeActive != 0;
 }
 
 void Sequencer::showPreRollPopup()

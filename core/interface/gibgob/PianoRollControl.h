@@ -78,6 +78,7 @@ struct PianoRollView
     int selectedParam = 0;
 
     BottomBar bar;
+    HelpView help;
     PianoMenuView menu;
     PickerView picker;
 };

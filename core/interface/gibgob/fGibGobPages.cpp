@@ -1,16 +1,5 @@
-// GibGob OS - settings pages
-//
-// Track page (Middle on a track name in the main sequencer)
-//   Up/Down          choose a setting           small +/- = change it, big +/- = bigger steps
-//   Middle on Sound  browse and preview samples, load one straight onto this track
-//   Top row 1..8     switch to track 1..8
-//   Pattern (Fn1)    back to where you came from
-//
-// Chord palette (3rd page of the synth parameters: press button 2 to reach it)
-//   D-pad            choose a chord and a column (root / type / inversion / voicing)
-//   small +/-        change it                  big +/- = octave / bigger steps
-//   Top row 1..8     jump to that chord and hear it        Shift = second bank
-//   Button 2         back to the first synth-parameters page
+// GibGob OS - settings pages: track settings and the chord palette
+// Every shortcut is listed in gibgobHelp.h (Shift + Menu shows them).
 
 #include "gibgob/gibgobPages.h"
 
@@ -23,6 +12,7 @@
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
+#include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "instrumentEditor/instrumentEditor.h"
@@ -120,6 +110,8 @@ void cGibGobPages::initDisplayControls()
 void cGibGobPages::start(uint32_t options)
 {
     moduleRefresh = 1;
+    screenOpened();
+    view.help.active = false;
     page = ((options >> 8) & 0xF) == kPagePalette ? kPagePalette : kPageTrack;
     uint32_t o = (options >> 4) & 0xF;
     origin = o == kFromPianoRoll ? kFromPianoRoll : (o == kFromInstrumentEditor ? kFromInstrumentEditor : kFromHome);
@@ -166,8 +158,7 @@ void cGibGobPages::setDefaultScreenFunct()
 
     ip->setButtonObj(interfaceButtonPattern, functPattern);
     bindModuleSwitchButtons(ip, functSwitchModule);
-    if (page == kPagePalette && origin == kFromInstrumentEditor)
-        ip->setButtonObj(interfaceButtonParams, functParams); // button 2 cycles the synth pages
+    ip->setButtonObj(interfaceButtonParams, functParams);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -188,6 +179,18 @@ void cGibGobPages::refresh()
     const Sequencer::strPattern* p = current();
     view.shift = shiftActive();
     view.mode[0] = 0;
+    if (page == kPagePalette)
+    {
+        view.help.title = "Chord palette - shortcuts";
+        view.help.lines = kHelpPalette;
+        view.help.count = (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0]));
+    }
+    else
+    {
+        view.help.title = "Track settings - shortcuts";
+        view.help.lines = kHelpTrackPage;
+        view.help.count = (int)(sizeof(kHelpTrackPage) / sizeof(kHelpTrackPage[0]));
+    }
 
     if (page == kPageTrack)
     {
@@ -236,9 +239,7 @@ void cGibGobPages::refresh()
     }
     else
     {
-        int bank = view.shift ? 1 : 0;
-
-        view.rows = 8;
+        view.rows = 7;
         view.cols = 5;
         view.colX[0] = 24;
         view.colX[1] = 130;
@@ -250,31 +251,33 @@ void cGibGobPages::refresh()
         view.header[2] = "Type";
         view.header[3] = "Inversion";
         view.header[4] = "Voicing";
-        row = clampInt(row, 0, 7);
+        row = clampInt(row, 0, 6);
         col = clampInt(col, 1, 4);
         view.cursorRow = row;
         view.cursorCol = col;
 
         static const uint32_t kColColor[5] = { 0, color::kNoteBtn, color::kInstrBtn, color::kFx1Btn,
                                                color::kFx2Btn };
-        for (int r = 0; r < 8; r++)
+        for (int r = 0; r < 7; r++)
         {
-            PaletteChord c = getPaletteChord(p, bank * 8 + r);
-            snprintf(view.cell[r][0], 20, "%d", r + 1);
+            PaletteChord c = getPaletteChord(p, r);
+            snprintf(view.cell[r][0], 20, "%d", r + 2);
             snprintf(view.cell[r][1], 20, "%s", mtNotes[c.root]);
             snprintf(view.cell[r][2], 20, "%s", chordType(c.type).label);
             snprintf(view.cell[r][3], 20, "%d", c.inversion % chordType(c.type).count);
             snprintf(view.cell[r][4], 20, "%s", kVoicingNames[c.voicing < kVoicingCount ? c.voicing : 0]);
             view.rowColor[r] = kColColor[col];
 
-            paletteChordName(c, s_barText[r], sizeof(s_barText[r]));
-            view.bar.text[r] = s_barText[r];
-            view.bar.fill[r] = bank ? color::kFx2Btn : color::kMelodic;
-            view.bar.highlighted[r] = (r == row);
+            paletteChordName(c, s_barText[r + 1], sizeof(s_barText[r + 1]));
+            view.bar.text[r + 1] = s_barText[r + 1];
+            view.bar.fill[r + 1] = color::kMelodic;
+            view.bar.highlighted[r + 1] = (r == row);
         }
+        view.bar.text[0] = "Note";
+        view.bar.fill[0] = 0;
+        view.bar.highlighted[0] = false;
 
-        snprintf(view.title, sizeof(view.title), "Chord palette   Bank %s   (plays on track %d)", bank ? "B" : "A",
-                 track + 1);
+        snprintf(view.title, sizeof(view.title), "Chord palette   (plays on track %d)", track + 1);
     }
 
     display.refreshControl(table);
@@ -400,7 +403,7 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
     }
     else
     {
-        row = clampInt(row + dRow, 0, 7);
+        row = clampInt(row + dRow, 0, 6);
         col = clampInt(col + dCol, 1, 4);
     }
     refresh();
@@ -412,7 +415,7 @@ void cGibGobPages::changeValue(int delta, bool big)
 
     if (page == kPagePalette)
     {
-        int idx = (shiftActive() ? 8 : 0) + row;
+        int idx = row;
         PaletteChord c = getPaletteChord(p, idx);
         switch (col)
         {
@@ -483,9 +486,12 @@ void cGibGobPages::changeValue(int delta, bool big)
             break;
         }
         case kRowLength:
+        {
             beginEdit(kEditLength);
-            setTrackSteps(p, track, trackSteps(p, track) + delta * (big ? 4 : 1));
+            int steps = trackSteps(p, track);
+            setTrackSteps(p, track, big ? snapLength(steps, delta) : steps + delta);
             break;
+        }
         default: return;
     }
     markChanged();
@@ -534,8 +540,10 @@ void cGibGobPages::topButton(int button, bool pressed)
                 auditionOff(track);
             return;
         }
-        row = clampInt(button, 0, 7);
-        PaletteChord c = getPaletteChord(p, (shiftActive() ? 8 : 0) + row);
+        if (button < 1)
+            return; // button 1 is the single note in the piano roll
+        row = clampInt(button - 1, 0, 6);
+        PaletteChord c = getPaletteChord(p, row);
         uint8_t notes[kMaxChordNotes];
         int n = buildPaletteChord(c, notes, kMaxChordNotes);
         if (n > 0)
@@ -645,8 +653,12 @@ static void functPattern(uint8_t state)
 
 static void functParams(uint8_t state)
 {
-    if (state == buttonPress)
-        GP->backToInstrumentEditor();
+    if (state != buttonPress)
+        return;
+    if (GP->page == cGibGobPages::kPagePalette && GP->origin == cGibGobPages::kFromInstrumentEditor)
+        GP->backToInstrumentEditor(); // button 2 cycles the sound pages
+    else
+        openSoundParameters(GP, GP->track);
 }
 
 static void functSwitchModule(uint8_t button)
@@ -656,6 +668,14 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
+    if (state == buttonPress && (shiftActive() || GP->view.help.active))
+    {
+        toggleHelp(GP->view.help, GP->ip);
+        GP->refresh();
+        return;
+    }
+    if (GP->view.help.active)
+        return;
     if (state == buttonPress)
         mtMenuPopup.showModulePopup(GP);
     else if (state == buttonRelease)

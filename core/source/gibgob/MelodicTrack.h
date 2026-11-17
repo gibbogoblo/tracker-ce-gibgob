@@ -180,6 +180,20 @@ void generateAcid(Sequencer::strPattern* p, int track, const AcidOptions& o);
 // the arp off. Returns the number of notes written (0 = nothing to render).
 int renderArp(Sequencer::strPattern* p, int track);
 
+// ---- note utilities (piano roll Shift functions) ----
+// transposes the selected notes, or every note of the track if none is selected
+void transposeNotes(Sequencer::strPattern* p, int track, int semitones);
+// every note lasts until the next note starts (chords keep their shared start)
+void legatoNotes(Sequencer::strPattern* p, int track);
+// copies the track's notes and length; paste replaces the track with them
+void copyTrack(const Sequencer::strPattern* p, int track);
+bool pasteTrack(Sequencer::strPattern* p, int track); // false if nothing was copied
+bool hasClipboard();
+
+// ---- global swing (stored with the pattern, carried into new patterns) ----
+int patternSwing(const Sequencer::strPattern* p); // 50 = straight, 25..75
+void setPatternSwing(Sequencer::strPattern* p, int value);
+
 // ---- metronome while live recording ----
 void setLiveMetronome(bool on);
 bool liveMetronome();

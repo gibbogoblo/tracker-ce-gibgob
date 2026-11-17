@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 typedef int8_t hControl;
-enum control_id_t { controlIdGibGobPianoRoll, controlIdGibGobTrackGrid, controlIdGibGobTable };
+enum control_id_t { controlIdGibGobPianoRoll, controlIdGibGobTrackGrid, controlIdGibGobTable, controlIdGibGobDrumSeq };
 struct strControlProperties { const char* text = nullptr; int value = 0; void* data = nullptr; uint32_t style = 0; const uint32_t* colors = nullptr; uint16_t x = 0, y = 0, w = 0, h = 0; };
 class cDisplayControl
 {

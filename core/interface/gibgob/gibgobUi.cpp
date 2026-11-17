@@ -7,6 +7,7 @@
 #include "elapsedMillis.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
+#include "instrumentEditor/instrumentEditor.h"
 #include "mtStructs.h"
 
 #include <stdio.h>
@@ -54,6 +55,66 @@ bool shiftButton(uint8_t state)
         }
     }
     return false;
+}
+
+void screenOpened()
+{
+    g_shiftLatched = false;
+    s_shiftDown = false;
+}
+
+void openSoundParameters(ModuleBase* from, int track)
+{
+    uint8_t sound = getSound(current(), track);
+    mtProject.values.lastUsedInstrument = sound;
+    mtInterface.deactivateModule(from);
+    // option 1: the page that fits the instrument (sample / synth / MIDI)
+    mtInterface.activateModule(&instrumentEditor, 1);
+}
+
+void playFromStop()
+{
+    if (g_recArmed)
+        sequencer.startCountIn();
+    else
+        sequencer.playPattern();
+}
+
+int snapLength(int steps, int dir)
+{
+    static const int kStops[5] = { 16, 32, 48, 64, 128 };
+    int exact = -1;
+    for (int i = 0; i < 5; i++)
+        if (kStops[i] == steps)
+            exact = i;
+    if (exact < 0)
+    {
+        // not on a stop yet: go to the nearest one
+        int best = 0;
+        for (int i = 1; i < 5; i++)
+        {
+            int d = kStops[i] - steps, bd = kStops[best] - steps;
+            if ((d < 0 ? -d : d) < (bd < 0 ? -bd : bd))
+                best = i;
+        }
+        return kStops[best];
+    }
+    int next = exact + (dir > 0 ? 1 : -1);
+    if (next < 0)
+        next = 0;
+    if (next > 4)
+        next = 4;
+    return kStops[next];
+}
+
+void toggleHelp(HelpView& help, InputProcessor* ip)
+{
+    help.active = !help.active;
+    if (help.active)
+        ip->blockAllInputsExcept(interfaceButtonMiniMenu);
+    else
+        ip->unblockAllInputs();
+    g_shiftLatched = false;
 }
 
 void setRecArmed(bool on)
@@ -168,6 +229,7 @@ namespace
 int s_budget = 0;
 int s_used = 0;
 int s_skipped = 0;
+bool s_lighten = false;
 bool s_inRects = false;
 bool s_haveColor = false;
 uint32_t s_color = 0;
@@ -179,6 +241,7 @@ void begin(int budgetWords)
     s_budget = budgetWords;
     s_used = 2;
     s_skipped = 0;
+    s_lighten = false;
     s_inRects = false;
     s_haveColor = false;
     s_alpha = 255;
@@ -204,9 +267,24 @@ bool room(int words)
     return false;
 }
 
+void setLighten(bool on)
+{
+    s_lighten = on;
+    s_haveColor = false;
+}
+
 void color(uint32_t c)
 {
     c &= 0xFFFFFF;
+    if (s_lighten)
+    {
+        // a quarter of the way towards white
+        uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+        r += (255 - r) / 4;
+        g += (255 - g) / 4;
+        b += (255 - b) / 4;
+        c = (r << 16) | (g << 8) | b;
+    }
     if (s_haveColor && c == s_color)
         return;
     if (!room(1))
@@ -346,6 +424,34 @@ void drawBottomBar(const BottomBar& bar, int fontHandle)
         draw::text((x1 + x2) / 2, kBottomBarY + kBottomBarH / 2, fontHandle, OPT_CENTERX | OPT_CENTERY,
                    bar.text[i]);
     }
+}
+
+bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
+{
+    if (!help.active || help.lines == nullptr)
+        return false;
+    draw::color(color::kBg);
+    draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
+    draw::color(color::kPanel);
+    draw::rect(8, kScreenTop + 6, kScreenW - 9, kScreenTop + kScreenH - 7);
+    draw::color(color::kText);
+    draw::text(24, kScreenTop + 26, fontBold, OPT_CENTERY, help.title ? help.title : "Shortcuts");
+    draw::color(color::kTextDim);
+    draw::text(kScreenW - 24, kScreenTop + 26, fontRegular, OPT_CENTERY | OPT_RIGHTX, "Menu: close");
+
+    // two columns of up to 16 lines
+    const int lineH = 22;
+    const int top = kScreenTop + 56;
+    for (int i = 0; i < help.count && i < 32; i++)
+    {
+        int colX = i < 16 ? 24 : kScreenW / 2 + 8;
+        int y = top + (i % 16) * lineH;
+        const char* line = help.lines[i];
+        // "Keys: what it does" - keys in bright text
+        draw::color(color::kText);
+        draw::text(colX, y, fontRegular, OPT_CENTERY, line);
+    }
+    return true;
 }
 
 void drawShiftBorder()

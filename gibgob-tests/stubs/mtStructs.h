@@ -12,7 +12,7 @@ struct strInstrument { uint8_t isActive; struct { char file_name[32]; } sample; 
 struct strMtProject
 {
     strInstrument instrument[kSampleInstrumentsCount];
-    struct { uint8_t trackMute[8]; char TrackNames[8][21]; } values;
+    struct { uint8_t trackMute[8]; char TrackNames[8][21]; uint8_t lastUsedInstrument; } values;
 };
 extern strMtProject mtProject;
 extern const char mtNotes[128][5];

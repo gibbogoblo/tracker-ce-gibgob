@@ -39,6 +39,7 @@ struct LaneView
     ParamBox params[4];
     int selectedParam = 0;
     BottomBar bar;
+    HelpView help;
 };
 
 class LaneControl : public cDisplayControl

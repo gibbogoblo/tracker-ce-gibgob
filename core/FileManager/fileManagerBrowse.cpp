@@ -179,6 +179,22 @@ bool cFileManager::browseSdCard(uint8_t* index)
     return true;
 }
 
+// GibGob OS: open the sample loader in this folder (if it exists) instead of
+// the card root. Only when the browser is at the root.
+bool cFileManager::presetExplorerFolder(const char* folder)
+{
+    if (explorerDirLevel != 0 || folder == nullptr || !fileSystem->exists(folder))
+        return false;
+    if (strlen(folder) >= sizeof(explorerCurrentPath))
+        return false;
+    strcpy(explorerCurrentPath, folder);
+    explorerDirLevel = 1;
+    explorerPositionTable[0] = 0;
+    explorerCurrentPosition = 1;
+    explorerCurrentOffset = 0;
+    return true;
+}
+
 // wymusza przy nastepnym wywolaniu browseSdCard()
 // wyzerowanie pokazywanej lokalizaji do poczatku karty SD
 void cFileManager::resetBrowse()
