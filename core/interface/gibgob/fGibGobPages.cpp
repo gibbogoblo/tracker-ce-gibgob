@@ -1,16 +1,16 @@
 // GibGob OS - settings pages
 //
-// Track page
-//   Up/Down          choose a setting           Left/Right = previous / next track
-//   small +/-        change it                  big +/- = bigger steps
-//   Top row          1 Acid  2 Quantize  3 Clear (Shift)  4 Mute  6 Chords  7 Piano roll  8 Back
+// Track page (Middle on a track name in the main sequencer)
+//   Up/Down          choose a setting           small +/- = change it, big +/- = bigger steps
+//   Middle on Sound  browse and preview samples, load one straight onto this track
+//   Top row 1..8     switch to track 1..8
+//   Pattern (Fn1)    back to where you came from
 //
-// Chord palette page (one complete chord per top-row button, two banks)
+// Chord palette (3rd page of the synth parameters: press button 2 to reach it)
 //   D-pad            choose a chord and a column (root / type / inversion / voicing)
 //   small +/-        change it                  big +/- = octave / bigger steps
 //   Top row 1..8     jump to that chord and hear it        Shift = second bank
-//
-// Both pages: Pattern (Fn1) or button 8 "Back" returns to where you came from.
+//   Button 2         back to the first synth-parameters page
 
 #include "gibgob/gibgobPages.h"
 
@@ -18,12 +18,14 @@
 #include "core/interfaceMenuPopup.h"
 #include "core/interfacePopups.h"
 #include "core/songTimer.h"
+#include "fileBrowser/GlobalFileBrowser.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
+#include "instrumentEditor/instrumentEditor.h"
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
 
@@ -35,6 +37,12 @@ static cGibGobPages* GP = &gibgobPages;
 static elapsedMillis s_clock;
 static uint32_t s_auditionOffAt = 0;
 
+// a sample import started from the track page
+static bool s_importPending = false;
+static bool s_inputsBlocked = false;
+static int s_importTrack = 0;
+static int s_importSlot = 0;
+
 using namespace gibgob;
 
 enum TrackRow
@@ -42,24 +50,20 @@ enum TrackRow
     kRowType = 0,
     kRowSound,
     kRowBaseNote,
-    kRowPatternLength,
-    kRowArp,
-    kRowArpRate,
-    kRowArpOctaves,
-    kRowArpGate,
-    kRowApe,
-    kRowApeRhythm,
-    kRowApeGate,
-    kRowApeNotes,
+    kRowLength,
     kTrackRowCount
 };
 
-static const char* const kTrackRowNames[kTrackRowCount] = {
-    "Track type",  "Sound",    "Base note", "Pattern length", "Arp",        "Arp rate",
-    "Arp octaves", "Arp gate", "Go Ape",    "Ape: rhythm",    "Ape: gate",  "Ape: notes",
-};
+static const char* const kTrackRowNames[kTrackRowCount] = { "Track type", "Sound", "Base note", "Length" };
 
-static const char* const kTrackBar[8] = { "Acid", "Quantize", "Clear", "Mute", "", "Chords", "Piano roll", "Back" };
+enum EditKind
+{
+    kEditType = 40,
+    kEditSound,
+    kEditBase,
+    kEditLength,
+    kEditPalette,
+};
 
 static char s_barText[8][16];
 
@@ -68,10 +72,12 @@ static void functUp(uint8_t state);
 static void functDown(uint8_t state);
 static void functLeft(uint8_t state);
 static void functRight(uint8_t state);
+static void functMiddle(uint8_t state);
 static void functShift(uint8_t state);
 static void functTopRow(uint8_t button, uint8_t state);
 static void functEncoder(int16_t value);
 static void functPattern(uint8_t state);
+static void functParams(uint8_t state);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
 
@@ -115,7 +121,8 @@ void cGibGobPages::start(uint32_t options)
 {
     moduleRefresh = 1;
     page = ((options >> 8) & 0xF) == kPagePalette ? kPagePalette : kPageTrack;
-    origin = ((options >> 4) & 0xF) == kFromPianoRoll ? kFromPianoRoll : kFromHome;
+    uint32_t o = (options >> 4) & 0xF;
+    origin = o == kFromPianoRoll ? kFromPianoRoll : (o == kFromInstrumentEditor ? kFromInstrumentEditor : kFromHome);
     track = (int)(options & 7);
     row = 0;
     col = 1;
@@ -123,7 +130,7 @@ void cGibGobPages::start(uint32_t options)
     s_auditionOffAt = 0;
 
     songTimer.hide();
-    snprintf(titleText, sizeof(titleText), "GibGob OS");
+    snprintf(titleText, sizeof(titleText), page == kPagePalette ? "Chord palette" : "Track settings");
     titleBar->show();
     titleBar->setTitle(titleText);
 
@@ -150,6 +157,7 @@ void cGibGobPages::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonDown, functDown);
     ip->setButtonObj(interfaceButtonLeft, functLeft);
     ip->setButtonObj(interfaceButtonRight, functRight);
+    ip->setButtonObj(interfaceButtonMiniMiddle, functMiddle);
     ip->setButtonObj(interfaceButtonShift, functShift);
     ip->setButtonObj(interfaceButtonMiniMenu, functMenu);
 
@@ -158,6 +166,8 @@ void cGibGobPages::setDefaultScreenFunct()
 
     ip->setButtonObj(interfaceButtonPattern, functPattern);
     bindModuleSwitchButtons(ip, functSwitchModule);
+    if (page == kPagePalette && origin == kFromInstrumentEditor)
+        ip->setButtonObj(interfaceButtonParams, functParams); // button 2 cycles the synth pages
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -168,6 +178,7 @@ void cGibGobPages::switchPage(Page newPage)
     page = newPage;
     row = 0;
     col = 1;
+    setDefaultScreenFunct();
     refresh();
 }
 
@@ -196,8 +207,7 @@ void cGibGobPages::refresh()
         for (int r = 0; r < kTrackRowCount; r++)
         {
             snprintf(view.cell[r][0], sizeof(view.cell[r][0]), "%s", kTrackRowNames[r]);
-            view.rowColor[r] = r >= kRowApe ? color::kFx1Btn : (r >= kRowArp ? color::kFx2Btn
-                                                                               : (melodic ? color::kMelodic : color::kDrum));
+            view.rowColor[r] = melodic ? color::kMelodic : color::kDrum;
         }
 
         char name[20];
@@ -205,30 +215,23 @@ void cGibGobPages::refresh()
         snprintf(view.cell[kRowType][1], 20, "%s", melodic ? "Melodic" : "Drum");
         snprintf(view.cell[kRowSound][1], 20, "%.19s", name);
         snprintf(view.cell[kRowBaseNote][1], 20, "%s", mtNotes[s.baseNote]);
-        snprintf(view.cell[kRowPatternLength][1], 20, "%d steps", p->track[0].length + 1);
-        snprintf(view.cell[kRowArp][1], 20, "%s", kArpModeNames[s.arpMode]);
-        snprintf(view.cell[kRowArpRate][1], 20, "%s", kArpRateNames[s.arpRate]);
-        snprintf(view.cell[kRowArpOctaves][1], 20, "%d", s.arpOctaves);
-        snprintf(view.cell[kRowArpGate][1], 20, "%d%%", s.arpGate);
-        snprintf(view.cell[kRowApe][1], 20, "%s", s.apeOn ? "On" : "Off");
-        snprintf(view.cell[kRowApeRhythm][1], 20, "%d", s.apeRhythm);
-        snprintf(view.cell[kRowApeGate][1], 20, "%d", s.apeGate);
-        snprintf(view.cell[kRowApeNotes][1], 20, "%d", s.apeNotes);
+        snprintf(view.cell[kRowLength][1], 20, "%d steps", trackSteps(p, track));
 
-        snprintf(view.title, sizeof(view.title), "Track %d settings   (%d notes)", track + 1,
-                 noteCount(p, track));
+        if (s_importPending)
+        {
+            snprintf(view.mode, sizeof(view.mode), "LOADING");
+            view.modeColor = color::kInstrBtn;
+        }
+        snprintf(view.title, sizeof(view.title), row == kRowSound ? "Track %d   Middle: load a sample" : "Track %d",
+                 track + 1);
 
-        bool muted = mtProject.values.trackMute[track] != 0;
+        // bottom bar: the 8 tracks
         for (int i = 0; i < 8; i++)
         {
-            view.bar.text[i] = kTrackBar[i];
-            view.bar.fill[i] = 0;
-            view.bar.highlighted[i] = false;
-        }
-        if (muted)
-        {
-            view.bar.fill[3] = color::kShiftBorder;
-            view.bar.highlighted[3] = true;
+            trackDisplayName(i, s_barText[i], 11);
+            view.bar.text[i] = s_barText[i];
+            view.bar.fill[i] = isMelodic(p, i) ? color::kMelodic : color::kDrum;
+            view.bar.highlighted[i] = (i == track);
         }
     }
     else
@@ -270,8 +273,8 @@ void cGibGobPages::refresh()
             view.bar.highlighted[r] = (r == row);
         }
 
-        snprintf(view.title, sizeof(view.title), "Chord palette   Bank %s   (plays on track %d)",
-                 bank ? "B" : "A", track + 1);
+        snprintf(view.title, sizeof(view.title), "Chord palette   Bank %s   (plays on track %d)", bank ? "B" : "A",
+                 track + 1);
     }
 
     display.refreshControl(table);
@@ -285,20 +288,115 @@ void cGibGobPages::update()
         if (!auditioning)
             auditionOff(track);
     }
+
+    if (s_importPending)
+    {
+        if (!s_inputsBlocked)
+        {
+            ip->blockAllInputs(); // nothing may touch sample memory while it loads
+            s_inputsBlocked = true;
+            refresh();
+        }
+        uint8_t status = newFileManager.getStatus();
+        if (status == fmImportSamplesEnd)
+        {
+            newFileManager.clearStatus();
+            ip->unblockAllInputs();
+            s_inputsBlocked = false;
+            s_importPending = false;
+
+            strInstrument& instr = mtProject.instrument[s_importSlot];
+            instr.startPoint = 0;
+            instr.loopPoint1 = 1;
+            instr.loopPoint2 = MAX_16BIT - 1;
+            instr.endPoint = MAX_16BIT;
+
+            Sequencer::strPattern* p = current();
+            stopTrack(s_importTrack);
+            setSound(p, s_importTrack, (uint8_t)s_importSlot);
+            markChanged();
+            newFileManager.setProjectStructChanged();
+            mtPopups.show(0, "Sample loaded onto the track", 1);
+            refresh();
+        }
+        else if (status == fmImportSamplesError)
+        {
+            newFileManager.clearStatus();
+            ip->unblockAllInputs();
+            s_inputsBlocked = false;
+            s_importPending = false;
+            mtPopups.show(0, "Could not load that sample", 2);
+            refresh();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
+void cGibGobPages::loadSample()
+{
+    if (s_importPending)
+        return;
+    Sequencer::strPattern* p = current();
+
+    // the track's own sample slot; a synth track gets the slot with its number
+    uint8_t sound = getSound(p, track);
+    s_importSlot = isSampleInstrument(sound) ? sound : track;
+    s_importTrack = track;
+
+    if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
+        sequencer.stop(); // sample memory moves around while loading
+    auditionOff(track);
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
+    char title[40];
+    snprintf(title, sizeof(title), "Load sample onto track %d", track + 1);
+    cfg.title = title;
+    cfg.contextKey = "gibgob_track_wav";
+    cfg.initialDirectory = "/Samples";
+    cfg.extensionFilter = ".wav";
+    cfg.returnModule = this;
+    cfg.returnModuleOptions = makeOptions(kPageTrack, origin, track);
+    cfg.onConfirm = [](const std::string& fullPath)
+    {
+        auto slashPos = fullPath.find_last_of('/');
+        std::string dirStr =
+          (slashPos != std::string::npos && slashPos > 0) ? fullPath.substr(0, slashPos) : "";
+        std::string fileStr = (slashPos != std::string::npos) ? fullPath.substr(slashPos + 1) : fullPath;
+        auto dotPos = fileStr.find_last_of('.');
+        if (dotPos != std::string::npos)
+            fileStr = fileStr.substr(0, dotPos);
+
+        char dirBuf[kMaxFilePathLen + 1]{};
+        char nameBuf[kMaxFileNameLen + 1]{};
+        strncpy(dirBuf, dirStr.c_str(), kMaxFilePathLen);
+        strncpy(nameBuf, fileStr.c_str(), kMaxFileNameLen);
+
+        newFileManager.flushWorkspaceSave();
+        if (newFileManager.importSampleToProject(dirBuf, nameBuf, (uint8_t)s_importSlot))
+        {
+            s_importPending = true;
+        }
+        else
+        {
+            mtPopups.show(0, "Can't load: file too long or sample memory full", 2);
+        }
+    };
+
+    openGlobalFileBrowser(cfg);
+}
+
+void cGibGobPages::pressMiddle()
+{
+    if (page == kPageTrack && row == kRowSound)
+        loadSample();
+}
+
 void cGibGobPages::moveCursor(int dCol, int dRow)
 {
     if (page == kPageTrack)
     {
         row = clampInt(row + dRow, 0, kTrackRowCount - 1);
-        if (dCol != 0)
-        {
-            // left / right steps through the tracks
-            auditionOff(track);
-            track = clampInt(track + dCol, 0, kTracks - 1);
-        }
     }
     else
     {
@@ -335,6 +433,7 @@ void cGibGobPages::changeValue(int delta, bool big)
             default: break;
         }
         c.inversion = (uint8_t)(c.inversion % chordType(c.type).count);
+        beginEdit(kEditPalette);
         setPaletteChord(p, idx, c);
         markChanged();
 
@@ -346,16 +445,12 @@ void cGibGobPages::changeValue(int delta, bool big)
         return;
     }
 
-    TrackSettings s = getSettings(p, track);
-    bool settingsChanged = true;
-    int step = big ? 10 : 1;
-
     switch (row)
     {
         case kRowType:
+            beginEdit(kEditType);
             stopTrack(track);
             setTrackType(p, track, delta > 0 ? TrackType::Melodic : TrackType::Drum);
-            settingsChanged = false;
             break;
         case kRowSound:
         {
@@ -368,57 +463,62 @@ void cGibGobPages::changeValue(int delta, bool big)
             }
             if (!soundUsable(instr))
             {
-                mtPopups.show(0, "No sounds loaded yet", 1);
+                mtPopups.show(0, "No sounds loaded yet: press Middle to load one", 2);
                 return;
             }
+            beginEdit(kEditSound);
             auditionOff(track);
             stopTrack(track);
             setSound(p, track, (uint8_t)instr);
-            settingsChanged = false;
             break;
         }
         case kRowBaseNote:
         {
+            beginEdit(kEditBase);
+            TrackSettings s = getSettings(p, track);
             s.baseNote = (uint8_t)clampInt(s.baseNote + delta * (big ? 12 : 1), 0, 127);
+            setSettings(p, track, s);
+            uint8_t note = s.baseNote;
+            auditionBriefly(track, &note, 1);
             break;
         }
-        case kRowPatternLength:
-        {
-            int len = clampInt(p->track[0].length + 1 + delta * (big ? 4 : 1), 1, Sequencer::MAXSTEP + 1);
-            for (int t = 0; t < kAllTracks; t++)
-                p->track[t].length = (uint8_t)(len - 1);
-            settingsChanged = false;
+        case kRowLength:
+            beginEdit(kEditLength);
+            setTrackSteps(p, track, trackSteps(p, track) + delta * (big ? 4 : 1));
             break;
-        }
-        case kRowArp: s.arpMode = (uint8_t)clampInt(s.arpMode + delta, 0, kArpModeCount - 1); break;
-        case kRowArpRate: s.arpRate = (uint8_t)clampInt(s.arpRate + delta, 0, kArpRateCount - 1); break;
-        case kRowArpOctaves: s.arpOctaves = (uint8_t)clampInt(s.arpOctaves + delta, 1, 4); break;
-        case kRowArpGate: s.arpGate = (uint8_t)clampInt(s.arpGate + delta * (big ? 10 : 5), 10, 100); break;
-        case kRowApe: s.apeOn = delta > 0; break;
-        case kRowApeRhythm: s.apeRhythm = (uint8_t)clampInt(s.apeRhythm + delta * step * (big ? 1 : 5), 0, 100); break;
-        case kRowApeGate: s.apeGate = (uint8_t)clampInt(s.apeGate + delta * step * (big ? 1 : 5), 0, 100); break;
-        case kRowApeNotes: s.apeNotes = (uint8_t)clampInt(s.apeNotes + delta * step * (big ? 1 : 5), 0, 100); break;
         default: return;
     }
-
-    if (settingsChanged)
-        setSettings(p, track, s);
     markChanged();
-
-    if (row == kRowBaseNote)
-    {
-        uint8_t note = s.baseNote;
-        auditionBriefly(track, &note, 1);
-    }
     refresh();
 }
 
 void cGibGobPages::goBack()
 {
     int t = track;
+    if (origin == kFromInstrumentEditor)
+    {
+        backToInstrumentEditor();
+        return;
+    }
     hModule target = (origin == kFromPianoRoll) ? (hModule)&pianoRoll : (hModule)&gibgobHome;
     mtInterface.deactivateModule(this);
     mtInterface.activateModule(target, (uint32_t)t);
+}
+
+void cGibGobPages::backToInstrumentEditor()
+{
+    // the first synth-parameters page for the instrument being edited
+#if GUI_HANDLE_SYNTH
+    if (mtProject.values.lastUsedInstrument >= SYNTH_INSTRUMENTS_START_IDX)
+        instrumentEditor.mode = mtInstEditModeSynth;
+    else
+#endif
+      if (mtProject.values.lastUsedInstrument >= MIDI_INSTRUMENTS_START_IDX)
+        instrumentEditor.mode = mtInstEditModeMidi;
+    else
+        instrumentEditor.mode = mtInstEditModeParams;
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&instrumentEditor, 0);
 }
 
 void cGibGobPages::topButton(int button, bool pressed)
@@ -450,56 +550,8 @@ void cGibGobPages::topButton(int button, bool pressed)
 
     if (!pressed)
         return;
-
-    switch (button)
-    {
-        case 0: // Acid
-            if (noteCount(p, track) > 0 && !shiftActive())
-            {
-                mtPopups.show(0, "Track has notes: turn Shift on to replace them", 2);
-                return;
-            }
-            stopTrack(track);
-            generateAcid(p, track, p->track[0].length + 1);
-            markChanged();
-            mtPopups.show(0, "Acid line generated", 1);
-            break;
-        case 1: // Quantize
-            quantizeTrack(p, track);
-            markChanged();
-            mtPopups.show(0, "Notes snapped to the grid", 1);
-            break;
-        case 2: // Clear
-            if (!shiftActive())
-            {
-                mtPopups.show(0, "Turn Shift on, then Clear, to erase this track", 2);
-                return;
-            }
-            stopTrack(track);
-            clearNotes(p, track);
-            markChanged();
-            mtPopups.show(0, "Track cleared", 1);
-            break;
-        case 3: // Mute
-            mtProject.values.trackMute[track] = !mtProject.values.trackMute[track];
-            engine.muteTrack((uint8_t)track, mtProject.values.trackMute[track]);
-            if (mtProject.values.trackMute[track])
-                stopTrack(track);
-            newFileManager.setProjectStructChanged();
-            break;
-        case 5: // Chords
-            switchPage(kPagePalette);
-            return;
-        case 6: // Piano roll
-        {
-            int t = track;
-            mtInterface.deactivateModule(this);
-            mtInterface.activateModule(&pianoRoll, (uint32_t)t);
-            return;
-        }
-        case 7: goBack(); return;
-        default: return;
-    }
+    auditionOff(track);
+    track = clampInt(button, 0, kTracks - 1);
     refresh();
 }
 
@@ -547,12 +599,16 @@ static void functRight(uint8_t s)
         GP->moveCursor(1, 0);
 }
 
+static void functMiddle(uint8_t state)
+{
+    if (state == buttonPress)
+        GP->pressMiddle();
+}
+
 static void functShift(uint8_t state)
 {
-    if (state != buttonPress)
-        return;
-    g_shiftLatched = !g_shiftLatched;
-    GP->refresh();
+    if (shiftButton(state))
+        GP->refresh();
 }
 
 static void functTopRow(uint8_t button, uint8_t state)
@@ -576,10 +632,21 @@ static void functPattern(uint8_t state)
 {
     if (state != buttonPress)
         return;
-    if (GP->page == cGibGobPages::kPagePalette)
-        GP->switchPage(cGibGobPages::kPageTrack);
-    else
-        GP->goBack();
+    if (GP->origin == cGibGobPages::kFromInstrumentEditor)
+    {
+        // Pattern from the synth pages goes to the main sequencer
+        uint32_t t = (uint32_t)GP->track;
+        mtInterface.deactivateModule(GP);
+        mtInterface.activateModule(&gibgobHome, t);
+        return;
+    }
+    GP->goBack();
+}
+
+static void functParams(uint8_t state)
+{
+    if (state == buttonPress)
+        GP->backToInstrumentEditor();
 }
 
 static void functSwitchModule(uint8_t button)

@@ -304,15 +304,46 @@ int main()
     addNote(&pat, 5, mk(47, 10, 60)); addNote(&pat, 5, mk(25, 10, 60)); addNote(&pat, 5, mk(760, 10, 60));
     quantizeTrack(&pat, 5);
     CHECK(getNote(&pat, 5, 0).start == 48 && getNote(&pat, 5, 1).start == 48 && getNote(&pat, 5, 2).start == 0);
-    for (int i = 0; i < 50; i++)
     {
-        generateAcid(&pat, 6, 16);
-        int c = noteCount(&pat, 6);
-        CHECK(c > 0 && c <= 16);
-        for (int k = 0; k < c; k++) { Note n = getNote(&pat, 6, k); CHECK(n.start < 768 && n.start % 48 == 0 && n.pitch <= 127 && n.length > 0); }
+        AcidOptions o;
+        for (int i = 0; i < 50; i++)
+        {
+            o.density = 1 + i % 10; o.slide = i % 11; o.accent = (i * 3) % 11; o.envelope = (i * 7) % 11;
+            generateAcid(&pat, 6, o);
+            int c = noteCount(&pat, 6);
+            CHECK(c <= 16);
+            for (int k = 0; k < c; k++)
+            {
+                Note n = getNote(&pat, 6, k);
+                CHECK(n.start < 768 && n.start % 48 == 0 && n.pitch <= 127 && n.length > 0);
+                if (k > 0) CHECK(n.start > getNote(&pat, 6, k - 1).start);
+                if (n.flags & kNoteFlagSlide) CHECK(k > 0 && getNote(&pat, 6, k - 1).start + getNote(&pat, 6, k - 1).length > n.start);
+                if (o.accent == 0) CHECK(!(n.flags & kNoteFlagAccent));
+                if (o.envelope == 0) CHECK(noteEnv(n) == 0);
+            }
+        }
+        o.density = 10; o.slide = 0;
+        generateAcid(&pat, 6, o);
+        CHECK(noteCount(&pat, 6) == 16);
+        // "in use": follows the chord another melodic track holds at each step
+        clearNotes(&pat, 5); setTrackType(&pat, 5, TrackType::Melodic); setTrackType(&pat, 6, TrackType::Melodic);
+        addNote(&pat, 5, mk(0, 384, 60)); addNote(&pat, 5, mk(0, 384, 64)); addNote(&pat, 5, mk(0, 384, 67));   // C major, steps 1-8
+        addNote(&pat, 5, mk(384, 384, 62)); addNote(&pat, 5, mk(384, 384, 65)); addNote(&pat, 5, mk(384, 384, 69)); // D minor, steps 9-16
+        o.notes = AcidNotes::InUse;
+        for (int r = 0; r < 20; r++)
+        {
+            generateAcid(&pat, 6, o);
+            for (int k = 0; k < noteCount(&pat, 6); k++)
+            {
+                Note n = getNote(&pat, 6, k); int pc = n.pitch % 12;
+                if (n.start < 384) CHECK(pc == 0 || pc == 4 || pc == 7);
+                else CHECK(pc == 2 || pc == 5 || pc == 9);
+            }
+        }
+        o.notes = AcidNotes::Pick; o.pickedCount = 2; o.picked[0] = 41; o.picked[1] = 48;
+        generateAcid(&pat, 6, o);
+        for (int k = 0; k < noteCount(&pat, 6); k++) CHECK(getNote(&pat, 6, k).pitch == 41 || getNote(&pat, 6, k).pitch == 48);
     }
-    generateAcid(&pat, 6, 128);
-    CHECK(noteCount(&pat, 6) <= kMaxNotes);
 
     // T10: switching to a pattern where the track is now empty still releases held notes
     freshPattern();
@@ -322,6 +353,125 @@ int main()
     clearNotes(&pat, 5);
     runTicks(100, 600);
     CHECK(stuckSynth() == 0);
+
+    // T11: track lengths and duplicate
+    freshPattern();
+    CHECK(patternSteps(&pat) == 16 && trackSteps(&pat, 2) == 16);
+    setTrackSteps(&pat, 2, 12);
+    CHECK(trackSteps(&pat, 2) == 12 && patternSteps(&pat) == 16 && trackSteps(&pat, 0) == 16);
+    setTrackSteps(&pat, 3, 32);
+    CHECK(patternSteps(&pat) == 32 && trackSteps(&pat, 0) == 16 && trackSteps(&pat, 2) == 12 && trackSteps(&pat, 3) == 32);
+    for (int t = 0; t < 16; t++) CHECK(pat.track[t].length == 31);
+    setTrackSteps(&pat, 3, 8);
+    CHECK(patternSteps(&pat) == 16);
+    // a 12-step track loops inside the 16-step pattern
+    setTrackType(&pat, 2, TrackType::Melodic); setSound(&pat, 2, 64);
+    addNote(&pat, 2, mk(0, 24, 60));
+    runTicks(0, 48 * 48, 16); // 3 pattern loops
+    // tracks restart with the pattern: plays at step 1 and step 13 of every loop
+    { int n = 0; for (auto& e : events) if (e.kind == 'M') { int t = e.tick % 768; CHECK(t == 0 || t == 576); n++; } CHECK(n == 6); }
+    stopAll();
+    // duplicate
+    freshPattern();
+    addNote(&pat, 1, mk(0, 24, 60)); addNote(&pat, 1, mk(100, 30, 62));
+    CHECK(duplicateTrack(&pat, 1));
+    CHECK(trackSteps(&pat, 1) == 32 && noteCount(&pat, 1) == 4 && patternSteps(&pat) == 32);
+    CHECK(getNote(&pat, 1, 2).start == 768 && getNote(&pat, 1, 3).start == 868 && getNote(&pat, 1, 3).pitch == 62);
+    CHECK(trackSteps(&pat, 0) == 16);
+    CHECK(duplicateTrack(&pat, 1) && duplicateTrack(&pat, 1) && trackSteps(&pat, 1) == 128);
+    CHECK(!duplicateTrack(&pat, 1));
+    freshPattern();
+    for (int i = 0; i < 70; i++) addNote(&pat, 1, mk(i, 5, 60));
+    CHECK(!duplicateTrack(&pat, 1) && trackSteps(&pat, 1) == 16 && noteCount(&pat, 1) == 70);
+
+    // T12: quantize strength and humanize range
+    freshPattern();
+    addNote(&pat, 1, mk(48 + 10, 10, 60)); addNote(&pat, 1, mk(96 - 2, 10, 60)); addNote(&pat, 1, mk(0, 10, 60)); addNote(&pat, 1, mk(767, 10, 60));
+    quantizeTrack(&pat, 1, 1);
+    CHECK(getNote(&pat, 1, 0).start == 51 && getNote(&pat, 1, 1).start == 94 && getNote(&pat, 1, 2).start == 0);
+    quantizeTrack(&pat, 1, 10);
+    CHECK(getNote(&pat, 1, 0).start == 48 && getNote(&pat, 1, 1).start == 96 && getNote(&pat, 1, 3).start == 0);
+    for (int r = 0; r < 200; r++)
+    {
+        freshPattern();
+        addNote(&pat, 1, mk(0, 10, 60)); addNote(&pat, 1, mk(400, 10, 60)); addNote(&pat, 1, mk(767, 10, 60));
+        humanizeTrack(&pat, 1, 10);
+        CHECK(getNote(&pat, 1, 0).start <= 20);
+        CHECK(getNote(&pat, 1, 1).start >= 380 && getNote(&pat, 1, 1).start <= 420);
+        CHECK(getNote(&pat, 1, 2).start >= 747 && getNote(&pat, 1, 2).start <= 767);
+        humanizeTrack(&pat, 1, 1);
+    }
+
+    // T13: Go Ape is repeatable, and Apply writes exactly what was heard
+    for (int round = 0; round < 12; round++)
+    {
+        freshPattern();
+        setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+        TrackSettings a; a.arpMode = 1 + round % 5; a.arpRate = round % 6; a.arpOctaves = 1 + round % 3; a.arpGate = 30 + round * 5;
+        a.apeOn = true; a.apeSeed = 0x1234567u * (round + 1); a.apeRhythm = 60; a.apeGate = 50; a.apeNotes = 30 + round * 6;
+        setSettings(&pat, 6, a);
+        CHECK(getSettings(&pat, 6).apeSeed == a.apeSeed);
+        addNote(&pat, 6, mk(0, 384, 60)); addNote(&pat, 6, mk(0, 384, 64)); addNote(&pat, 6, mk(0, 384, 67));
+        addNote(&pat, 6, mk(384, 384, 62)); addNote(&pat, 6, mk(384, 384, 65)); addNote(&pat, 6, mk(384, 384, 69));
+        runTicks(0, 64 * 48, 16);
+        std::vector<std::pair<int,int>> heard;
+        for (auto& e : events) if (e.kind == 'M') heard.push_back({ e.tick, e.b });
+        // second playback: identical
+        stopAll(); events.clear();
+        runTicks(0, 64 * 48, 16);
+        std::vector<std::pair<int,int>> again;
+        for (auto& e : events) if (e.kind == 'M') again.push_back({ e.tick, e.b });
+        CHECK(heard == again);
+        stopAll();
+        CHECK(stuckSynth() == 0);
+        int written = renderArp(&pat, 6);
+        CHECK(written == (int)heard.size() || (written == kMaxNotes && (int)heard.size() > kMaxNotes));
+        CHECK(getSettings(&pat, 6).arpMode == kArpOff && trackSteps(&pat, 6) == 64);
+        for (int k = 0; k < written && k < (int)heard.size(); k++)
+        {
+            Note n = getNote(&pat, 6, k);
+            CHECK(n.start == heard[k].first && n.pitch == heard[k].second);
+        }
+    }
+    // Apply also matches when the track is shorter than the pattern (12 of 16 steps)
+    {
+        freshPattern();
+        setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+        TrackSettings a; a.arpMode = kArpUpDown; a.arpRate = 4; a.apeOn = true; a.apeSeed = 777; a.apeRhythm = 50; a.apeNotes = 70;
+        setSettings(&pat, 6, a);
+        setTrackSteps(&pat, 6, 12);
+        addNote(&pat, 6, mk(0, 200, 60)); addNote(&pat, 6, mk(48 * 5, 300, 63)); addNote(&pat, 6, mk(48 * 5, 300, 67));
+        runTicks(0, 64 * 48, 16);
+        std::vector<std::pair<int,int>> heard;
+        for (auto& e : events) if (e.kind == 'M') heard.push_back({ e.tick, e.b });
+        stopAll();
+        int written = renderArp(&pat, 6);
+        CHECK(written == (int)heard.size());
+        for (int k = 0; k < written && k < (int)heard.size(); k++)
+            CHECK(getNote(&pat, 6, k).start == heard[k].first && getNote(&pat, 6, k).pitch == heard[k].second);
+    }
+    // apeNotes up to 50: only fifths, sevenths and octaves away from the held notes
+    {
+        freshPattern();
+        setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+        TrackSettings a; a.arpMode = kArpUp; a.arpRate = 3; a.apeOn = true; a.apeSeed = 99; a.apeRhythm = 0; a.apeGate = 0; a.apeNotes = 50;
+        setSettings(&pat, 6, a);
+        addNote(&pat, 6, mk(0, 768, 60));
+        runTicks(0, 64 * 48, 16);
+        for (auto& e : events) if (e.kind == 'M') { int d = e.b - 60; CHECK(d == 0 || d == 7 || d == -5 || d == 10 || d == -2 || d == 12 || d == -12); }
+        stopAll();
+    }
+
+    // T14: slide hands the voice over with a glide, accent raises velocity
+    freshPattern();
+    setTrackType(&pat, 4, TrackType::Melodic); setSound(&pat, 4, 4);
+    { Note a = mk(0, 60, 48); addNote(&pat, 4, a); Note b = mk(48, 24, 55); b.flags = kNoteFlagSlide | kNoteFlagAccent; addNote(&pat, 4, b); }
+    runTicks(0, 200);
+    {
+        std::vector<int> voices; for (auto& e : events) if (e.kind == 'S') voices.push_back(e.a);
+        CHECK(voices.size() == 2 && voices[0] == voices[1]);
+        CHECK(countKind('s') == 1); // only the final release
+    }
 
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;

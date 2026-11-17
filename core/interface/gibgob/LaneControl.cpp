@@ -22,7 +22,7 @@ constexpr int kHeadW = 92;
 constexpr int kGridX1 = kHeadW + 4;
 constexpr int kGridX2 = kScreenW - 6;
 constexpr int kMaxNotesPerLane = 48;
-constexpr int kReserve = 60; // words kept for cursor, playhead and border
+constexpr int kReserve = 120; // words kept for cursor, lights, playheads and border
 } // namespace
 
 LaneControl::LaneControl(strControlProperties* properties)
@@ -79,16 +79,20 @@ void LaneControl::update()
         draw::rect(kGridX1, y1, kGridX2, y2);
     }
 
-    // ---- past the pattern end ----
-    if (view->patternTicks < lastTick)
+    // ---- past each track's end ----
+    draw::color(kOutside);
+    for (int t = 0; t < 8; t++)
     {
-        int x = tickToX(view->patternTicks > firstTick ? view->patternTicks : firstTick);
-        draw::color(kOutside);
-        draw::rect(x, kLanesTop, kGridX2, kLanesTop + 8 * laneH - 2);
+        int endTick = view->lanes[t].steps * kTicksPerStep;
+        if (endTick >= lastTick)
+            continue;
+        int x = tickToX(endTick > firstTick ? endTick : firstTick);
+        int y1 = kLanesTop + t * laneH;
+        draw::rect(x, y1, kGridX2, y1 + laneH - 2);
     }
 
     // ---- cursor column ----
-    if (view->cursorTick >= firstTick && view->cursorTick < lastTick)
+    if (!view->nameCursor && view->cursorTick >= firstTick && view->cursorTick < lastTick)
     {
         draw::color(kColumn);
         draw::rect(tickToX(view->cursorTick), kLanesTop, tickToX(view->cursorTick + kTicksPerStep) - 1,
@@ -169,12 +173,17 @@ void LaneControl::update()
             }
 
             int drawn = 0;
+            int laneEnd = lane.steps * kTicksPerStep;
             for (int i = 0; i < count && drawn < kMaxNotesPerLane; i++)
             {
                 if (!draw::room(3 + kReserve))
                     break;
                 Note n = getNote(view->pattern, t, i);
                 int s = n.start, e = n.start + n.length;
+                if (s >= laneEnd)
+                    continue;
+                if (e > laneEnd)
+                    e = laneEnd;
                 if (e <= firstTick || s >= lastTick)
                     continue;
                 int x1 = tickToX(s < firstTick ? firstTick : s) + 1;
@@ -206,7 +215,13 @@ void LaneControl::update()
     }
 
     // ---- cursor ----
-    if (view->cursorTick >= firstTick && view->cursorTick < lastTick)
+    if (view->nameCursor)
+    {
+        int y1 = kLanesTop + view->cursorTrack * laneH;
+        draw::color(color::kSelect);
+        draw::frame(1, y1 - 1, kHeadW + 1, y1 + laneH - 1, 2);
+    }
+    else if (view->cursorTick >= firstTick && view->cursorTick < lastTick)
     {
         int x1 = tickToX(view->cursorTick);
         int x2 = tickToX(view->cursorTick + kTicksPerStep) - 1;
@@ -227,12 +242,16 @@ void LaneControl::update()
         draw::rect(kHeadW - 10, y1 + 4, kHeadW - 4, y1 + 10);
     }
 
-    // ---- playhead ----
-    if (view->playheadTick >= firstTick && view->playheadTick < lastTick)
+    // ---- playheads: one per track, each loops at its own length ----
+    draw::color(color::kPlayhead);
+    for (int t = 0; t < 8; t++)
     {
-        int x = tickToX(view->playheadTick);
-        draw::color(color::kPlayhead);
-        draw::rect(x, kLanesTop, x + 1, kLanesTop + 8 * laneH - 2);
+        int ph = view->lanes[t].playhead;
+        if (ph < firstTick || ph >= lastTick)
+            continue;
+        int x = tickToX(ph);
+        int y1 = kLanesTop + t * laneH;
+        draw::rect(x, y1, x + 1, y1 + laneH - 2);
     }
 
     if (view->shift)

@@ -1,16 +1,21 @@
 // GibGob OS - main sequencer: 8 track lanes
 //
-//   D-pad            move cursor (Shift: Left/Right = 4 steps, Up/Down = previous/next pattern)
-//   Middle           Drum lane: toggle a step.  Melodic lane: open the piano roll
-//   Insert           open the track in the piano roll (Shift+Insert = track page)
-//   Delete           delete the step under the cursor (Shift+Delete = clear the track)
+//   D-pad            move cursor; Left from step 1 reaches the track name column
+//                    (Shift: Left/Right = 4 steps, Up/Down = previous/next pattern)
+//   Middle           on a track name: track page (sound, sample loading, length)
+//                    Drum lane: toggle a step.   Melodic lane: open the piano roll
+//   Insert           open the track in the piano roll.  Shift+Insert = duplicate track
+//   Delete           delete the step under the cursor.  Shift+Delete = clear the track
 //   Top row 1..8     play track 1..8 (finger drumming); recorded while Rec is on and playing
 //                    Shift + top row = mute / unmute that track
-//   Note/Instr/FX1/FX2  choose what small +/- edits: Probability / Velocity / Nudge / Pitch
-//   small +/-        edit that value (Shift + small +/- = change the track's sound)
-//   big +/-          step length          (Shift + big +/- = zoom)
-//   Rec              toggle live recording        Play = play / stop (Shift = song)
-//   Shift            toggles (red border while on)
+//   Note / Instr / FX1 / FX2   small +/- edits: Length / Velocity / Nudge / Pitch
+//   Shift + FX1      BPM
+//   big +/-          step length (Length: 4 steps, BPM: 10)   Shift + big +/- = zoom
+//   Shift + small +/-  change the track's sound
+//   Rec              live recording on/off (metronome on while armed)
+//   Shift + Rec      undo
+//   Play             play / stop (Shift = song)
+//   Shift            toggles (red border while on); hold Shift + +/- = master volume
 
 #include "gibgob/gibgobHome.h"
 
@@ -34,6 +39,18 @@ static cGibGobHome* GH = &gibgobHome;
 static elapsedMillis s_clock;
 
 using namespace gibgob;
+
+enum EditKind
+{
+    kEditStep = 1,
+    kEditParam,
+    kEditLength,
+    kEditTrackLength,
+    kEditSound,
+    kEditClear,
+    kEditDuplicate,
+    kEditRecord,
+};
 
 static void functPlay(uint8_t state);
 static void functRec(uint8_t state);
@@ -124,6 +141,7 @@ void cGibGobHome::start(uint32_t options)
     }
     lastPattern = -1; // forces the defaults to be read again
     lastPlayPos = -2;
+    auditionOffAt = 0;
 
     songTimer.show();
     snprintf(titleText, sizeof(titleText), "GibGob OS");
@@ -176,6 +194,8 @@ void cGibGobHome::setDefaultScreenFunct()
 // notes that belong to the step under the cursor (within half a step of it)
 int cGibGobHome::cellNotes(int* out, int maxOut)
 {
+    if (cursorStep < 0)
+        return 0;
     const Sequencer::strPattern* p = current();
     int tick = cursorStep * kTicksPerStep;
     int count = noteCount(p, cursorTrack);
@@ -199,58 +219,65 @@ void cGibGobHome::refresh()
         adoptDefaults(p);
     }
 
-    int patternSteps = p->track[0].length + 1;
-    cursorStep = clampInt(cursorStep, 0, patternSteps - 1);
+    int master = patternSteps(p);
     cursorTrack = clampInt(cursorTrack, 0, kTracks - 1);
+    int laneSteps = trackSteps(p, cursorTrack);
+    cursorStep = clampInt(cursorStep, -1, laneSteps - 1);
     stepsVisible = clampInt(stepsVisible, 4, 32);
 
     view.pattern = p;
-    view.patternTicks = patternSteps * kTicksPerStep;
+    view.patternTicks = master * kTicksPerStep;
     view.stepsVisible = stepsVisible;
     view.cursorTrack = cursorTrack;
-    view.cursorTick = cursorStep * kTicksPerStep;
+    view.nameCursor = cursorStep < 0;
+    view.cursorTick = (cursorStep < 0 ? 0 : cursorStep) * kTicksPerStep;
     view.shift = shiftActive();
-    view.playheadTick = playheadTick(cursorTrack);
 
     // scroll just enough to keep the cursor visible
     int firstStep = view.firstTick / kTicksPerStep;
-    if (cursorStep < firstStep)
-        firstStep = cursorStep;
-    if (cursorStep >= firstStep + stepsVisible)
-        firstStep = cursorStep - stepsVisible + 1;
-    if (firstStep + stepsVisible > patternSteps)
-        firstStep = patternSteps - stepsVisible;
+    int curStep = cursorStep < 0 ? 0 : cursorStep;
+    if (curStep < firstStep)
+        firstStep = curStep;
+    if (curStep >= firstStep + stepsVisible)
+        firstStep = curStep - stepsVisible + 1;
+    if (firstStep + stepsVisible > master)
+        firstStep = master - stepsVisible;
     if (firstStep < 0)
         firstStep = 0;
     view.firstTick = firstStep * kTicksPerStep;
 
+    char names[kTracks][12];
     for (int t = 0; t < kTracks; t++)
     {
         LaneInfo& lane = view.lanes[t];
-        char name[12];
-        gibgobSoundName(getSound(p, t), name, sizeof(name));
-        snprintf(lane.name, sizeof(lane.name), "%d %.9s", t + 1, name);
+        trackDisplayName(t, names[t], sizeof(names[t]));
+        snprintf(lane.name, sizeof(lane.name), "%d %.9s", t + 1, names[t]);
         lane.melodic = isMelodic(p, t);
         lane.muted = mtProject.values.trackMute[t] != 0;
         lane.sounding = isSounding(t);
+        lane.steps = trackSteps(p, t);
+        lane.playhead = playheadTick(t);
     }
 
     // values of the step under the cursor, or the defaults for new steps
     int targets[kMaxNotes];
     int n = cellNotes(targets, kMaxNotes);
     TrackSettings settings = getSettings(p, cursorTrack);
-    int vel = velocity, chn = chance, nud = nudge, pitch = settings.baseNote;
+    int vel = velocity, nud = nudge, pitch = settings.baseNote;
     if (n > 0)
     {
         Note note = getNote(p, cursorTrack, targets[0]);
         vel = note.velocity;
-        chn = note.chance();
         nud = note.start - view.cursorTick;
         pitch = note.pitch;
     }
 
-    snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Step %d/%d", mtProject.values.actualPattern,
-             cursorTrack + 1, cursorStep + 1, patternSteps);
+    if (cursorStep < 0)
+        snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Middle: track settings",
+                 mtProject.values.actualPattern, cursorTrack + 1);
+    else
+        snprintf(view.title, sizeof(view.title), "Pat %d   Track %d   Step %d/%d", mtProject.values.actualPattern,
+                 cursorTrack + 1, cursorStep + 1, laneSteps);
 
     if (g_recArmed)
     {
@@ -262,33 +289,41 @@ void cGibGobHome::refresh()
         view.mode[0] = 0;
     }
 
-    snprintf(view.params[0].label, sizeof(view.params[0].label), "Prob");
-    snprintf(view.params[0].value, sizeof(view.params[0].value), "%d%%", chn);
+    snprintf(view.params[0].label, sizeof(view.params[0].label), "Len");
+    snprintf(view.params[0].value, sizeof(view.params[0].value), "%d", laneSteps);
     view.params[0].color = color::kNoteBtn;
     snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
     snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
     view.params[1].color = color::kInstrBtn;
-    snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
-    snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
+    if (param == kParamTempo)
+    {
+        snprintf(view.params[2].label, sizeof(view.params[2].label), "BPM");
+        snprintf(view.params[2].value, sizeof(view.params[2].value), "%d", (int)(mtProject.values.globalTempo + 0.5f));
+    }
+    else
+    {
+        snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
+        snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
+    }
     view.params[2].color = color::kFx1Btn;
     snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
     snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
     view.params[3].color = color::kFx2Btn;
-    view.selectedParam = param;
+    view.selectedParam = (param == kParamTempo) ? 2 : param;
 
-    // bottom bar: the 8 track buttons
+    // bottom bar: the 8 track buttons, named after their tracks
     for (int i = 0; i < 8; i++)
     {
         bool muted = view.lanes[i].muted;
         if (view.shift)
         {
-            snprintf(barText[i], sizeof(barText[i]), muted ? "Muted %d" : "Mute %d", i + 1);
+            snprintf(barText[i], sizeof(barText[i]), muted ? "Muted" : "Mute");
             view.bar.fill[i] = muted ? color::kShiftBorder : 0;
             view.bar.highlighted[i] = muted;
         }
         else
         {
-            snprintf(barText[i], sizeof(barText[i]), muted ? "%d  M" : "%d", i + 1);
+            snprintf(barText[i], sizeof(barText[i]), "%.10s", names[i]);
             view.bar.fill[i] = view.lanes[i].melodic ? color::kMelodic : color::kDrum;
             view.bar.highlighted[i] = view.lanes[i].sounding && !muted;
         }
@@ -318,8 +353,10 @@ void cGibGobHome::update()
     if (lastPattern != mtProject.values.actualPattern)
         changed = true;
 
-    int ph = playheadTick(cursorTrack);
-    int pos = ph < 0 ? -1 : ph / (kTicksPerStep / 2);
+    int pos = sequencer.isPlay() ? (int)(sequencer.getActualPos()) * 2 : -1;
+    int ph = playheadTick(0);
+    if (ph >= 0)
+        pos = ph / (kTicksPerStep / 2);
     if (pos != lastPlayPos)
     {
         lastPlayPos = pos;
@@ -342,7 +379,15 @@ void cGibGobHome::update()
 
 void cGibGobHome::moveCursor(int dStep, int dTrack)
 {
-    cursorStep += dStep;
+    if (dStep != 0)
+    {
+        if (cursorStep < 0 && dStep > 0)
+            cursorStep = 0; // from the name column back onto the steps
+        else
+            cursorStep += dStep;
+        if (cursorStep < -1)
+            cursorStep = -1;
+    }
     cursorTrack += dTrack;
     refresh();
 }
@@ -350,7 +395,7 @@ void cGibGobHome::moveCursor(int dStep, int dTrack)
 void cGibGobHome::openPianoRoll()
 {
     int t = cursorTrack;
-    pianoRoll.view.cursorTick = cursorStep * kTicksPerStep;
+    pianoRoll.view.cursorTick = (cursorStep < 0 ? 0 : cursorStep) * kTicksPerStep;
     mtInterface.deactivateModule(this);
     mtInterface.activateModule(&pianoRoll, (uint32_t)t);
 }
@@ -364,6 +409,12 @@ void cGibGobHome::openTrackPage()
 
 void cGibGobHome::pressMiddle()
 {
+    if (cursorStep < 0)
+    {
+        openTrackPage();
+        return;
+    }
+
     Sequencer::strPattern* p = current();
     if (isMelodic(p, cursorTrack))
     {
@@ -371,6 +422,7 @@ void cGibGobHome::pressMiddle()
         return;
     }
 
+    beginEdit(kEditStep);
     int targets[kMaxNotes];
     int n = cellNotes(targets, kMaxNotes);
     if (n > 0)
@@ -382,19 +434,41 @@ void cGibGobHome::pressMiddle()
     else
     {
         TrackSettings settings = getSettings(p, cursorTrack);
-        int patternTicks = (p->track[cursorTrack].length + 1) * kTicksPerStep;
+        int trackTicks = trackSteps(p, cursorTrack) * kTicksPerStep;
         Note note{};
-        note.start = (uint16_t)clampInt(cursorStep * kTicksPerStep + nudge, 0, patternTicks - 1);
+        note.start = (uint16_t)clampInt(cursorStep * kTicksPerStep + nudge, 0, trackTicks - 1);
         note.length = (uint16_t)lengthTicks;
         note.pitch = settings.baseNote;
         note.velocity = (uint8_t)velocity;
-        note.setChance(chance);
         if (addNote(p, cursorTrack, note) < 0)
-            mtPopups.show(0, "Track is full (125 notes)", 1);
+            mtPopups.show(0, "Track is full (124 notes)", 1);
         else
             auditionOn(cursorTrack, note.pitch, note.velocity);
     }
     markChanged();
+    refresh();
+}
+
+void cGibGobHome::pressInsert()
+{
+    if (!shiftActive())
+    {
+        openPianoRoll();
+        return;
+    }
+    Sequencer::strPattern* p = current();
+    beginEdit(kEditDuplicate);
+    if (duplicateTrack(p, cursorTrack))
+    {
+        markChanged();
+        char msg[40];
+        snprintf(msg, sizeof(msg), "Track %d duplicated: %d steps", cursorTrack + 1, trackSteps(p, cursorTrack));
+        mtPopups.show(0, msg, 1);
+    }
+    else
+    {
+        mtPopups.show(0, "Can't duplicate: max 128 steps / 124 notes", 2);
+    }
     refresh();
 }
 
@@ -403,6 +477,7 @@ void cGibGobHome::pressDelete()
     Sequencer::strPattern* p = current();
     if (shiftActive())
     {
+        beginEdit(kEditClear);
         stopTrack(cursorTrack);
         clearNotes(p, cursorTrack);
         mtPopups.show(0, "Track cleared", 1);
@@ -413,6 +488,7 @@ void cGibGobHome::pressDelete()
         int n = cellNotes(targets, kMaxNotes);
         if (n == 0)
             return;
+        beginEdit(kEditStep);
         for (int i = n - 1; i >= 0; i--)
             removeNote(p, cursorTrack, targets[i]);
     }
@@ -420,26 +496,58 @@ void cGibGobHome::pressDelete()
     refresh();
 }
 
-void cGibGobHome::changeParam(int delta)
+void cGibGobHome::changeTempo(float delta)
+{
+    if (!sequencer.isSetInternalClock())
+    {
+        mtPopups.show(0, "Tempo follows the external clock", 1);
+        return;
+    }
+    float t = (float)(int)(mtProject.values.globalTempo + 0.5f) + delta;
+    if (t < Sequencer::MIN_TEMPO)
+        t = Sequencer::MIN_TEMPO;
+    if (t > Sequencer::MAX_TEMPO)
+        t = Sequencer::MAX_TEMPO;
+    mtProject.values.globalTempo = t;
+    newFileManager.setProjectStructChanged();
+    refresh();
+}
+
+void cGibGobHome::changeParam(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
+
+    if (param == kParamTempo)
+    {
+        changeTempo((float)(big ? delta * 10 : delta));
+        return;
+    }
+    if (param == kParamLength)
+    {
+        beginEdit(kEditTrackLength);
+        setTrackSteps(p, cursorTrack, trackSteps(p, cursorTrack) + delta * (big ? 4 : 1));
+        markChanged();
+        refresh();
+        return;
+    }
+
     int targets[kMaxNotes];
     int n = cellNotes(targets, kMaxNotes);
-    int patternTicks = (p->track[cursorTrack].length + 1) * kTicksPerStep;
-    int cellTick = cursorStep * kTicksPerStep;
+    int trackTicks = trackSteps(p, cursorTrack) * kTicksPerStep;
+    int cellTick = (cursorStep < 0 ? 0 : cursorStep) * kTicksPerStep;
 
     if (n == 0)
     {
         // no step here: change the defaults used for new steps
         switch (param)
         {
-            case kParamProb: chance = clampInt(chance + delta * 5, 0, 100); break;
             case kParamVelocity: velocity = clampInt(velocity + delta, 1, 127); break;
             case kParamNudge:
                 nudge = clampInt(nudge + delta, -(kTicksPerStep / 2), kTicksPerStep / 2 - 1);
                 break;
             case kParamPitch:
             {
+                beginEdit(kEditParam);
                 TrackSettings s = getSettings(p, cursorTrack);
                 s.baseNote = (uint8_t)clampInt(s.baseNote + delta, 0, 127);
                 setSettings(p, cursorTrack, s);
@@ -454,18 +562,18 @@ void cGibGobHome::changeParam(int delta)
         return;
     }
 
+    beginEdit(kEditParam);
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, cursorTrack, targets[i]);
         switch (param)
         {
-            case kParamProb: note.setChance(note.chance() + delta * 5); break;
             case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
             case kParamNudge:
             {
                 // keep the note inside this step's half-step window
-                int lo = clampInt(cellTick - kTicksPerStep / 2, 0, patternTicks - 1);
-                int hi = clampInt(cellTick + kTicksPerStep / 2 - 1, 0, patternTicks - 1);
+                int lo = clampInt(cellTick - kTicksPerStep / 2, 0, trackTicks - 1);
+                int hi = clampInt(cellTick + kTicksPerStep / 2 - 1, 0, trackTicks - 1);
                 note.start = (uint16_t)clampInt(note.start + delta, lo, hi);
                 break;
             }
@@ -486,25 +594,29 @@ void cGibGobHome::changeLength(int delta)
     int maxLen = Sequencer::MAXSTEP * kTicksPerStep;
     int minLen = kTicksPerStep / 2;
 
+    auto stepLen = [&](int len) {
+        // half a step is the shortest; from there lengths move in whole steps
+        if (len <= minLen && delta > 0)
+            return (int)kTicksPerStep;
+        if (len == kTicksPerStep && delta < 0)
+            return minLen;
+        return clampInt(len + delta * kTicksPerStep, minLen, maxLen);
+    };
+
     if (n == 0)
     {
-        lengthTicks = clampInt(lengthTicks + delta * kTicksPerStep, minLen, maxLen);
+        lengthTicks = stepLen(lengthTicks);
         char msg[32];
         snprintf(msg, sizeof(msg), "New step length: %d.%d", lengthTicks / kTicksPerStep,
                  (lengthTicks % kTicksPerStep) * 10 / kTicksPerStep);
         mtPopups.show(0, msg, 1);
         return;
     }
+    beginEdit(kEditLength);
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, cursorTrack, targets[i]);
-        int len = note.length + delta * kTicksPerStep;
-        // going down from one step lands on half a step
-        if (note.length == kTicksPerStep && delta < 0)
-            len = minLen;
-        if (note.length == minLen && delta > 0)
-            len = kTicksPerStep;
-        note.length = (uint16_t)clampInt(len, minLen, maxLen);
+        note.length = (uint16_t)stepLen(note.length);
         setNote(p, cursorTrack, targets[i], note);
         lengthTicks = note.length;
     }
@@ -540,6 +652,7 @@ void cGibGobHome::changeSound(int dir)
         mtPopups.show(0, "No sounds loaded yet", 1);
         return;
     }
+    beginEdit(kEditSound);
     auditionOff(cursorTrack);
     stopTrack(cursorTrack);
     setSound(p, cursorTrack, (uint8_t)instr);
@@ -615,6 +728,7 @@ void cGibGobHome::trackButton(int track, bool pressed)
     {
         // melodic tracks record how long the button is held, drum hits are one step
         bool hold = isMelodic(p, track);
+        beginEdit(kEditRecord);
         if (liveRecordOn(track, &pitch, 1, (uint8_t)velocity, hold))
         {
             heldRecording[track] = hold;
@@ -622,7 +736,7 @@ void cGibGobHome::trackButton(int track, bool pressed)
         }
         else
         {
-            mtPopups.show(0, "Track is full (125 notes)", 1);
+            mtPopups.show(0, "Track is full (124 notes)", 1);
         }
     }
     refresh();
@@ -676,7 +790,14 @@ static void functRec(uint8_t state)
 {
     if (state != buttonPress)
         return;
-    g_recArmed = !g_recArmed;
+    if (shiftActive())
+    {
+        GH->releaseAllButtons();
+        undoEdit();
+        GH->refresh();
+        return;
+    }
+    setRecArmed(!g_recArmed);
     GH->refresh();
 }
 
@@ -722,18 +843,14 @@ static void functMiddle(uint8_t state)
 {
     if (state == buttonPress)
         GH->pressMiddle();
-    else if (state == buttonRelease)
+    else if (state == buttonRelease && GH->auditionOffAt == 0 && !GH->held[GH->cursorTrack])
         auditionOff(GH->cursorTrack);
 }
 
 static void functInsert(uint8_t state)
 {
-    if (state != buttonPress)
-        return;
-    if (shiftActive())
-        GH->openTrackPage();
-    else
-        GH->openPianoRoll();
+    if (state == buttonPress)
+        GH->pressInsert();
 }
 
 static void functDelete(uint8_t state)
@@ -744,10 +861,8 @@ static void functDelete(uint8_t state)
 
 static void functShift(uint8_t state)
 {
-    if (state != buttonPress)
-        return;
-    g_shiftLatched = !g_shiftLatched;
-    GH->refresh();
+    if (shiftButton(state))
+        GH->refresh();
 }
 
 static void functTopRow(uint8_t button, uint8_t state)
@@ -766,12 +881,12 @@ static void functParamButton(uint8_t button, uint8_t state)
     if (state != buttonPress)
         return;
     if (button == interfaceButtonNote)
-        GH->param = cGibGobHome::kParamProb;
+        GH->param = cGibGobHome::kParamLength;
     else if (button == interfaceButtonInstr)
         GH->param = cGibGobHome::kParamVelocity;
-    else if (button == interfaceButtonFx1)
-        GH->param = cGibGobHome::kParamNudge;
-    else if (button == interfaceButtonFx2)
+    else if (button == physFx1Button())
+        GH->param = shiftActive() ? cGibGobHome::kParamTempo : cGibGobHome::kParamNudge;
+    else if (button == physFx2Button())
         GH->param = cGibGobHome::kParamPitch;
     GH->refresh();
 }
@@ -789,10 +904,10 @@ static void functEncoder(int16_t value)
             GH->changeSound(dir);
         return;
     }
-    if (big)
+    if (big && GH->param != cGibGobHome::kParamTempo && GH->param != cGibGobHome::kParamLength)
         GH->changeLength(dir);
     else
-        GH->changeParam(value);
+        GH->changeParam(dir, big);
 }
 
 static void functSwitchModule(uint8_t button)

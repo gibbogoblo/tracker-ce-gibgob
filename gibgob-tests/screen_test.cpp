@@ -8,12 +8,14 @@
 #include "mtAudioEngine.h"
 #include "mtMidi.h"
 #include "interruptsControl.h"
+#include "fileManager.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <initializer_list>
 using namespace gibgob;
 
+FileManagerStub newFileManager;
 Sequencer sequencer; strMtProject mtProject; playerEngine instrumentPlayer[8]; Interface mtInterface;
 strFont fonts[5] = { {26}, {27}, {28}, {29}, {30} };
 char notesTable[128][5];
@@ -33,7 +35,8 @@ void sendMidiNoteOff(uint8_t, uint8_t, uint8_t, bool) {}
 // ---- exact word counting, like the firmware's display list capture ----
 static int words = 0, fails = 0, verts = 0;
 static bool inBegin = false;
-void API_COLOR(uint32_t) { words++; }
+static uint32_t lastColor = 0; static int borderRects = 0;
+void API_COLOR(uint32_t col) { words++; lastColor = col; }
 void API_COLOR_A(uint8_t) { words++; }
 void API_BEGIN(int) { words++; inBegin = true; }
 void API_END() { words++; inBegin = false; }
@@ -42,6 +45,7 @@ void API_BLEND_FUNC(int, int) { words++; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
     words++; verts++;
+    if (lastColor == 0xB85548) borderRects++;
     if (!inBegin) { printf("vertex outside BEGIN\n"); fails++; }
     if (x < -2 || x > 801 || y < 27 || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
 }
@@ -66,14 +70,19 @@ void API_CMD_TEXT(int16_t x, int16_t y, int16_t, uint16_t options, const char* s
 static Sequencer::strPattern pat;
 static int render(cDisplayControl& c, const char* name, int limit)
 {
+    borderRects = 0;
     words = 0; verts = 0; inBegin = false;
     c.update();
     if (inBegin) { printf("%s: BEGIN left open\n", name); fails++; }
+    // the Shift border (4 rectangles, drawn last) must always survive
+    if (borderRects < 8) { printf("%s: shift border missing (%d)\n", name, borderRects); fails++; }
     if (verts % 2) { printf("%s: odd vertex count\n", name); fails++; }
     int est = draw::used();
     printf("%-34s %4d words (helper counted %4d)\n", name, words, est);
     if (words > limit) { printf("  OVER LIMIT %d\n", limit); fails++; }
     if (est < words) { printf("  helper under-counts\n"); fails++; }
+    if (draw::skipped() > 0 && strstr(name, "full") == nullptr) { printf("  %d drawing calls dropped\n", draw::skipped()); fails++; }
+    if (draw::skipped() > 0) printf("  (%d note details dropped to stay inside the limit)\n", draw::skipped());
     return words;
 }
 
@@ -106,8 +115,9 @@ int main()
     for (int zoomSteps : { 4, 16, 32 })
     {
         LaneView lv; lv.pattern = &pat; lv.stepsVisible = zoomSteps; lv.patternTicks = 64 * 48; lv.firstTick = 48 * 8;
-        lv.cursorTrack = 7; lv.cursorTick = 48 * 9; lv.playheadTick = 48 * 10 + 7; lv.shift = true;
-        for (int t = 0; t < 8; t++) { snprintf(lv.lanes[t].name, 16, "%d WWWWWWWWW", t + 1); lv.lanes[t].melodic = t % 2; lv.lanes[t].muted = false; lv.lanes[t].sounding = true; }
+        lv.cursorTrack = 7; lv.cursorTick = 48 * 9; lv.shift = true; lv.nameCursor = zoomSteps == 16;
+        for (int t = 0; t < 8; t++) { snprintf(lv.lanes[t].name, 16, "%d WWWWWWWWW", t + 1); lv.lanes[t].melodic = t % 2; lv.lanes[t].muted = false; lv.lanes[t].sounding = true;
+            lv.lanes[t].steps = 12 + t * 7; lv.lanes[t].playhead = 48 * 9 + t * 11; }
         snprintf(lv.title, sizeof(lv.title), "Pat 255   Track 8   Step 128/128"); snprintf(lv.mode, 12, "REC"); lv.modeColor = 0xFF0000;
         memcpy(lv.params, pb, sizeof(pb)); lv.bar = bar;
         strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &lv;
@@ -131,6 +141,21 @@ int main()
         PianoRollControl pc(&prop);
         char nm[40]; snprintf(nm, 40, "piano roll, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
         render(pc, nm, kLimit);
+        if (zoom == 48)
+        {
+            // menus and the note picker over the fullest piano roll
+            pv.menu.active = true; pv.menu.cols = 1; pv.menu.rows = 8; pv.menu.cursor = 3;
+            snprintf(pv.menu.title, 48, "Arp  -  track 8");
+            snprintf(pv.menu.hint, 64, "Plays live. 7: Apply as notes  6: Keep arp  8: Back");
+            for (int r = 0; r < 8; r++) { snprintf(pv.menu.row[r].label, 20, "Ape: rhythmWW"); snprintf(pv.menu.row[r].value, 20, "On  (Middle: new)"); pv.menu.row[r].isAction = r == 4; }
+            render(pc, "arp menu over full roll", kLimit);
+            pv.menu.cols = 2; pv.menu.rows = 1; pv.menu.cursor = -1; pv.menu.colCursor = 1;
+            snprintf(pv.menu.colTitle[0], 14, "Quantize"); snprintf(pv.menu.colTitle[1], 14, "Humanize");
+            render(pc, "quantize menu over full roll", kLimit);
+            pv.menu.active = false; pv.picker.active = true; pv.picker.firstPitch = 92; pv.picker.cursor = 127;
+            for (int b = 0; b < 16; b++) pv.picker.mask[b] = 0xAA;
+            render(pc, "note picker", kLimit);
+        }
     }
 
     {

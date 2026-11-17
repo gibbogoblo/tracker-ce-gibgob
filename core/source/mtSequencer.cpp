@@ -243,6 +243,21 @@ AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
         if (timerTicks % 12 == 1)
         {
             inc_uStepGlobal();
+
+            // GibGob OS: metronome while live recording on the GibGob screens
+            if (gibgob::liveMetronome() && player.uStep == 1 && !isRec())
+            {
+                int barSteps = getMetronomeDenominator() * getMetronomeNumerator();
+                if (barSteps > 0 && player.globalPos % barSteps == 0)
+                {
+                    engine.makeMetronomeTick(1);
+                }
+                else if (getMetronomeDenominator() > 0 &&
+                         player.globalPos % getMetronomeDenominator() == 0)
+                {
+                    engine.makeMetronomeTick(0);
+                }
+            }
             for (int trackIdx = 0; trackIdx < kAllTracks; trackIdx++)
             {
                 // GibGob OS: tracks 8..15 are hidden storage for melodic notes

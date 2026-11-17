@@ -14,7 +14,8 @@
 //
 // Layout of the 1024 bytes of track[8 + t].step[0..127] (8 bytes per slot):
 //   slot 0        : header (magic, version, note count, sound, flags)
-//   slots 1..125  : up to 125 notes, 8 bytes each
+//   slots 1..124  : up to 124 notes, 8 bytes each
+//   slot 125      : extras (Go Ape seed, track length)
 //   slot 126      : track settings (base note, arp, Go Ape)
 //   slot 127      : two chords of the pattern's chord palette
 
@@ -26,7 +27,8 @@ namespace gibgob
 
 static constexpr int kTracks = kSampleTracks; // 8 visible tracks
 static constexpr int kTicksPerStep = 48;      // sequencer micro steps per step
-static constexpr int kMaxNotes = 125;         // notes per track per pattern
+static constexpr int kMaxNotes = 124;         // notes per track per pattern
+static constexpr int kMaxTrackSteps = 128;    // longest track
 static constexpr int kMaxActiveNotes = 16;    // sounding notes per track
 static constexpr int kMaxChordNotes = 6;
 static constexpr int kPaletteSize = 16;       // 2 banks of 8 chords
@@ -56,6 +58,17 @@ static_assert(sizeof(Note) == 8, "Note must fit exactly in one step slot");
 
 static constexpr uint8_t kNoteFlagSelected = 0x01;  // UI selection
 static constexpr uint8_t kNoteFlagRecording = 0x02; // being live-recorded (key still held)
+static constexpr uint8_t kNoteFlagSlide = 0x04;     // glide into this note from the one before
+static constexpr uint8_t kNoteFlagAccent = 0x08;    // louder, filter opened
+// bits 4..7: filter envelope variant (0 = instrument's own envelope)
+inline int noteEnv(const Note& n)
+{
+    return (n.flags >> 4) & 0x0F;
+}
+inline void setNoteEnv(Note& n, int env)
+{
+    n.flags = (uint8_t)((n.flags & 0x0F) | ((env & 0x0F) << 4));
+}
 
 // ---- per-track settings ----
 enum ArpMode : uint8_t
@@ -85,6 +98,7 @@ struct TrackSettings
     uint8_t apeRhythm = 40; // 0..100
     uint8_t apeGate = 40;   // 0..100
     uint8_t apeNotes = 40;  // 0..100
+    uint32_t apeSeed = 0;   // the random sequence Go Ape made (0 = none yet)
 };
 
 // ---- chord palette (one complete chord per top-row button) ----
@@ -125,21 +139,62 @@ int findNoteAt(const Sequencer::strPattern* p, int track, int tick, int pitch);
 // patterns that have no GibGob data yet (so a new pattern starts the same way).
 void adoptDefaults(const Sequencer::strPattern* p);
 
+// ---- track length ----
+// steps of the pattern (the longest track); every track loops inside it
+int patternSteps(const Sequencer::strPattern* p);
+// steps of one track (1..128)
+int trackSteps(const Sequencer::strPattern* p, int track);
+// sets one track's length; the pattern grows or shrinks to the longest track
+void setTrackSteps(Sequencer::strPattern* p, int track, int steps);
+// doubles the track and copies its notes into the new half.
+// Returns false (and changes nothing) if it would be longer than 128 steps
+// or need more than kMaxNotes notes.
+bool duplicateTrack(Sequencer::strPattern* p, int track);
+
 // ---- tools ----
-void quantizeTrack(Sequencer::strPattern* p, int track);
-// fills the track with a random acid-style line (notes, rests, accents, slides)
-void generateAcid(Sequencer::strPattern* p, int track, int lengthSteps);
+// strength 1..10: 1 leaves notes within +-3 of the grid, 10 snaps them onto it
+void quantizeTrack(Sequencer::strPattern* p, int track, int strength = 10);
+// amount 1..10: nudges every note randomly by up to +-3 (1) .. +-20 (10)
+void humanizeTrack(Sequencer::strPattern* p, int track, int amount);
+
+enum class AcidNotes : uint8_t
+{
+    InUse = 0, // follow the notes / chords other melodic tracks play at that moment
+    Pick = 1,  // only the notes picked by hand
+};
+struct AcidOptions
+{
+    uint8_t density = 7;  // 1..10: chance of a note on each step, x10 %
+    uint8_t slide = 3;    // 0..10: chance of a slide, x10 %
+    AcidNotes notes = AcidNotes::InUse;
+    uint8_t picked[24];   // picked pitches (Pick mode)
+    uint8_t pickedCount = 0;
+    uint8_t accent = 3;   // 0..10: chance of an accent, x10 %
+    uint8_t envelope = 0; // 0..10: chance of a random filter envelope, x10 %
+};
+// replaces the track's notes with a random acid line over the track's length
+void generateAcid(Sequencer::strPattern* p, int track, const AcidOptions& o);
+
+// Turns what the arpeggiator (with Go Ape) plays into real notes: renders
+// max(track length, 4 bars) steps, sets the track to that length and turns
+// the arp off. Returns the number of notes written (0 = nothing to render).
+int renderArp(Sequencer::strPattern* p, int track);
+
+// ---- metronome while live recording ----
+void setLiveMetronome(bool on);
+bool liveMetronome();
 
 // ---- helpers on the sequencer's current pattern ----
 Sequencer::strPattern* current();
 bool isMelodic(int track);
 
 // ---- playback (called from the sequencer, audio context) ----
+// tickInPattern counts from the pattern start; each track loops at its own length
 void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
 void stopTrack(int track);
 void markLegacyPlayed(int track); // an old tracker step sounded on this track
-int playheadTick(int track);      // micro steps, -1 when stopped
+int playheadTick(int track);      // micro steps inside the track, -1 when stopped
 bool isSounding(int track);       // for activity lights
 
 // ---- live playing (UI context) ----

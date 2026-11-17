@@ -9,6 +9,13 @@ class Sequencer
 {
   public:
     enum { MAXSTEP = 127 };
+    struct strFxConsts
+    {
+        enum { FX_TYPE_NONE = 0, FX_TYPE_GLIDE = 20, FX_TYPE_FILTER_LOWPASS = 28, FX_TYPE_FILTER_BANDPASS = 30,
+               FX_TYPE_R31 = 50, FX_TYPE_FILTER_ENV = FX_TYPE_R31 };
+    };
+    int16_t getFxMax(uint8_t, bool = false) { return 127; }
+    int16_t getFxMin(uint8_t, bool = false) { return 0; }
     struct strPattern
     {
         struct strTrack

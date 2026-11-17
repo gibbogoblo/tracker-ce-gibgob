@@ -1,19 +1,21 @@
 // GibGob OS - piano roll editor (any track)
 //
 //   D-pad            move cursor (Shift: Up/Down = octave, Left/Right = 4 steps)
-//                    while notes are selected: moves the selected notes
-//   Middle           empty square: place ghost note/chord. On a note: grab it (select).
+//                    while notes are grabbed / selected: moves them
+//   Middle           empty square: place ghost note/chord. On a note: grab it.
 //                    While notes are grabbed: let go. Shift+Middle = auto-audition on/off
 //   Insert           1st: start selection box, 2nd: lock (select notes inside), 3rd: let go
-//                    Shift+Insert = track page (sound, arp, Go Ape, chord palette)
-//   Delete           delete selection, or the note(s) under the cursor; cancels a box
-//   Top row 1..8     chord palette slot for the ghost (Shift = second bank); press again
-//                    for a single note. Sliced samples: the 8 buttons play slices.
+//   Delete           delete the note(s) under the cursor or the selection; on an empty
+//                    square: back to a single-note ghost. Shift+Delete = clear the track
+//   Top row 1..8     play that chord of the palette and move the ghost onto it (Shift =
+//                    second bank). Sliced samples: the 8 buttons play slices.
 //                    While Rec is on and playing, what you play is recorded.
-//   Note/Instr/FX1/FX2  choose what small +/- edits: Probability / Velocity / Nudge / Inversion
-//   small +/-        edit chosen value
+//   Note/Instr/FX1/FX2  small +/- edits: Probability / Velocity / Nudge / Inversion
+//                    Shift+Note = Quantize menu, Shift+Instr = Acid menu, Shift+FX1 = Arp menu
+//   small +/-        edit the note under the cursor (no selection needed)
 //   big +/-          note length      Shift + big +/- = zoom (one square per press)
-//   Rec              toggle live recording        Play = play / stop (Shift = song)
+//   Rec              live recording on/off     Shift+Rec = undo
+//   Play             play / stop (Shift = song)
 //   Shift            toggles (red border while on)   Pattern (Fn1) = main sequencer
 
 #include "gibgob/pianoRoll.h"
@@ -61,6 +63,18 @@ static void markChanged()
     newFileManager.setActualPatternStructChanged();
 }
 
+enum EditKind
+{
+    kEditPlace = 20,
+    kEditMove,
+    kEditDelete,
+    kEditParam,
+    kEditLength,
+    kEditRecord,
+    kEditTool,
+    kEditClear,
+};
+
 static int clampInt(int v, int lo, int hi)
 {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -92,6 +106,9 @@ void cPianoRoll::start(uint32_t options)
     }
     clearSelection();
     mode = Mode::Idle;
+    menu = Menu::None;
+    view.menu.active = false;
+    view.picker.active = false;
     view.boxActive = false;
     auditionOffAt = 0;
     lastPlayheadDrawn = -2;
@@ -117,6 +134,8 @@ void cPianoRoll::start(uint32_t options)
 
 void cPianoRoll::stop()
 {
+    if (menu != Menu::None)
+        closeMenu(false);
     releaseAllButtons();
     auditionOff(track);
     clearSelection();
@@ -178,7 +197,7 @@ void cPianoRoll::refreshView()
     view.pattern = p;
     view.track = track;
     view.shift = shiftActive();
-    view.patternTicks = (p->track[track].length + 1) * kTicksPerStep;
+    view.patternTicks = trackSteps(p, track) * kTicksPerStep;
     view.gridTicks = kTicksPerStep;
     view.stepsVisible = clampInt(16 + zoom, 4, 64);
     view.rowsVisible = clampInt(12 + zoom, 4, 36);
@@ -259,7 +278,7 @@ void cPianoRoll::refreshView()
         }
     }
     if (idx < 0)
-        idx = findNoteAt(p, track, view.cursorTick, view.cursorPitch);
+        idx = findEditNote(view.cursorTick, view.cursorPitch);
 
     int pitch = view.cursorPitch, vel = velocity, nud = nudge, len = lengthTicks, chn = chance;
     if (idx >= 0)
@@ -269,9 +288,7 @@ void cPianoRoll::refreshView()
         vel = n.velocity;
         chn = n.chance();
         len = n.length;
-        nud = n.start % kTicksPerStep;
-        if (nud >= kTicksPerStep / 2)
-            nud -= kTicksPerStep;
+        nud = n.start - ((n.start + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
     }
 
     snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", mtNotes[pitch],
@@ -328,6 +345,14 @@ void cPianoRoll::refreshView()
         view.bar.text[i] = barText[i];
     }
 
+    if (menu != Menu::None)
+        refreshMenu();
+    else
+    {
+        view.menu.active = false;
+        view.picker.active = false;
+    }
+
     display.refreshControl(grid);
 }
 
@@ -381,10 +406,36 @@ void cPianoRoll::clearSelection()
     }
 }
 
+// the note the cursor is on: one starting within +-10 of the cursor square
+// (closest first), otherwise one that covers it
+int cPianoRoll::findEditNote(int tick, int pitch)
+{
+    const Sequencer::strPattern* p = current();
+    int count = noteCount(p, track);
+    int best = -1, bestDist = 11;
+    for (int i = count - 1; i >= 0; i--)
+    {
+        Note n = getNote(p, track, i);
+        if (n.pitch != pitch)
+            continue;
+        int d = (int)n.start - tick;
+        if (d < 0)
+            d = -d;
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = i;
+        }
+    }
+    if (best >= 0)
+        return best;
+    return findNoteAt(p, track, tick, pitch);
+}
+
 int cPianoRoll::selectUnderCursor()
 {
     Sequencer::strPattern* p = current();
-    int idx = findNoteAt(p, track, view.cursorTick, view.cursorPitch);
+    int idx = findEditNote(view.cursorTick, view.cursorPitch);
     if (idx < 0)
         return 0;
     Note n = getNote(p, track, idx);
@@ -429,7 +480,8 @@ static int collectTargets(int* out, int maxOut)
         return n;
     for (int g = 0; g < PR->view.ghostCount && n < maxOut; g++)
     {
-        int idx = findNoteAt(p, PR->track, PR->view.cursorTick, PR->view.ghostPitches[g]);
+        (void)p;
+        int idx = PR->findEditNote(PR->view.cursorTick, PR->view.ghostPitches[g]);
         if (idx < 0)
             continue;
         bool dup = false;
@@ -488,6 +540,7 @@ void cPianoRoll::moveSelection(int dTicks, int dPitch)
     if (dTicks == 0 && dPitch == 0)
         return;
 
+    beginEdit(kEditMove);
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, track, targets[i]);
@@ -550,10 +603,11 @@ void cPianoRoll::placeGhost()
     Sequencer::strPattern* p = current();
     int start = clampInt(view.cursorTick + nudge, 0, view.patternTicks - 1);
     bool any = false;
+    beginEdit(kEditPlace);
     for (int g = 0; g < view.ghostCount; g++)
     {
         uint8_t pitch = view.ghostPitches[g];
-        if (findNoteAt(p, track, view.cursorTick, pitch) >= 0)
+        if (findEditNote(view.cursorTick, pitch) >= 0)
             continue;
         Note n{};
         n.start = (uint16_t)start;
@@ -563,7 +617,7 @@ void cPianoRoll::placeGhost()
         n.setChance(chance);
         if (addNote(p, track, n) < 0)
         {
-            mtPopups.show(0, "Track is full (125 notes)", 1);
+            mtPopups.show(0, "Track is full (124 notes)", 1);
             break;
         }
         any = true;
@@ -578,7 +632,7 @@ void cPianoRoll::pressMiddle()
     {
         case Mode::Idle:
         {
-            int idx = findNoteAt(current(), track, view.cursorTick, view.cursorPitch);
+            int idx = findEditNote(view.cursorTick, view.cursorPitch);
             if (idx >= 0 && selectUnderCursor())
             {
                 mode = Mode::Move; // grabbed a note
@@ -635,8 +689,30 @@ void cPianoRoll::pressDelete()
         return;
     }
     Sequencer::strPattern* p = current();
+    if (shiftActive())
+    {
+        beginEdit(kEditClear);
+        stopTrack(track);
+        clearNotes(p, track);
+        markChanged();
+        mode = Mode::Idle;
+        mtPopups.show(0, "Track cleared", 1);
+        refreshView();
+        return;
+    }
     int targets[kMaxNotes];
     int n = collectTargets(targets, kMaxNotes);
+    if (n == 0)
+    {
+        if (chordSlot >= 0)
+        {
+            chordSlot = -1; // nothing to delete: the ghost goes back to a single note
+            inversion = 0;
+            refreshView();
+        }
+        return;
+    }
+    beginEdit(kEditDelete);
     // remove highest indices first so the others stay valid
     for (int a = 0; a < n; a++)
         for (int b = a + 1; b < n; b++)
@@ -656,7 +732,6 @@ void cPianoRoll::pressDelete()
 
 void cPianoRoll::toggleShift()
 {
-    g_shiftLatched = !g_shiftLatched;
     refreshView();
 }
 
@@ -693,6 +768,7 @@ void cPianoRoll::changeParam(int delta)
         return;
     }
 
+    beginEdit(kEditParam);
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, track, targets[i]);
@@ -735,6 +811,7 @@ void cPianoRoll::changeLength(int deltaGrid)
         refreshView();
         return;
     }
+    beginEdit(kEditLength);
     for (int i = 0; i < n; i++)
     {
         Note note = getNote(p, track, targets[i]);
@@ -794,14 +871,6 @@ void cPianoRoll::topButton(int button, bool pressed)
     }
     else
     {
-        if (chordSlot == slot && !recording)
-        {
-            // pressing the selected chord again goes back to a single note
-            chordSlot = -1;
-            inversion = 0;
-            refreshView();
-            return;
-        }
         PaletteChord c = getPaletteChord(p, slot);
         chordSlot = slot;
         inversion = c.inversion;
@@ -826,6 +895,7 @@ void cPianoRoll::topButton(int button, bool pressed)
     {
         // slices on a drum track are single hits; everything else records its held length
         bool hold = !(pads && !isMelodic(p, track));
+        beginEdit(kEditRecord);
         if (liveRecordOn(track, notes, n, (uint8_t)velocity, hold))
         {
             heldRecording[button] = hold;
@@ -833,7 +903,7 @@ void cPianoRoll::topButton(int button, bool pressed)
         }
         else
         {
-            mtPopups.show(0, "Track is full (125 notes)", 1);
+            mtPopups.show(0, "Track is full (124 notes)", 1);
         }
     }
     refreshView();
@@ -864,11 +934,456 @@ void cPianoRoll::openTrackPage()
 }
 
 // ---------------------------------------------------------------------------
+// menus: Quantize (Shift+Note), Acid (Shift+Instr), Arp (Shift+FX1)
+
+enum AcidRow
+{
+    kAcidDensity = 0,
+    kAcidSlide,
+    kAcidNotes,
+    kAcidAccent,
+    kAcidEnvelope,
+    kAcidApply,
+    kAcidRowCount
+};
+
+enum ArpRow
+{
+    kArpRowMode = 0,
+    kArpRowRate,
+    kArpRowOctaves,
+    kArpRowGate,
+    kArpRowGoApe,
+    kArpRowRhythm,
+    kArpRowApeGate,
+    kArpRowApeNotes,
+    kArpRowCount
+};
+
+static int s_menuRow = 0;
+
+void cPianoRoll::openMenu(Menu m)
+{
+    if (mode != Mode::Idle)
+    {
+        clearSelection();
+        mode = Mode::Idle;
+    }
+    releaseAllButtons();
+    g_shiftLatched = false; // Shift did its job: opening the menu
+    menu = m;
+    s_menuRow = 0;
+    if (m == Menu::Quantize)
+    {
+        s_menuRow = -1; // on the column titles
+    }
+    else if (m == Menu::Arp)
+    {
+        arpBackup = getSettings(current(), track);
+        if (arpBackup.arpMode == kArpOff)
+        {
+            // start from something you can hear
+            TrackSettings s = arpBackup;
+            s.arpMode = kArpUp;
+            setSettings(current(), track, s);
+        }
+    }
+    refreshView();
+}
+
+void cPianoRoll::closeMenu(bool apply)
+{
+    Sequencer::strPattern* p = current();
+    Menu m = menu;
+    menu = Menu::None;
+    view.menu.active = false;
+    view.picker.active = false;
+
+    if (m == Menu::Arp)
+    {
+        if (apply)
+        {
+            TrackSettings chosen = getSettings(p, track);
+            setSettings(p, track, arpBackup); // undo goes back to before the menu
+            beginEdit(kEditTool);
+            setSettings(p, track, chosen);
+            stopTrack(track);
+            int written = renderArp(p, track);
+            if (written > 0)
+            {
+                markChanged();
+                char msg[40];
+                snprintf(msg, sizeof(msg), "Arp applied: %d notes", written);
+                mtPopups.show(0, msg, 1);
+            }
+            else
+            {
+                setSettings(p, track, arpBackup);
+                mtPopups.show(0, "Nothing to apply: place notes for the arp first", 2);
+            }
+        }
+        else
+        {
+            setSettings(p, track, arpBackup); // back: as it was before the menu
+        }
+    }
+    refreshView();
+}
+
+void cPianoRoll::refreshMenu()
+{
+    PianoMenuView& m = view.menu;
+    PickerView& pk = view.picker;
+    m.active = false;
+    pk.active = false;
+
+    for (int i = 0; i < 8; i++)
+    {
+        view.bar.text[i] = "";
+        view.bar.fill[i] = 0;
+        view.bar.highlighted[i] = false;
+    }
+    view.bar.text[7] = "Back";
+
+    if (menu == Menu::Picker)
+    {
+        pk.active = true;
+        memcpy(pk.mask, pickerMask, sizeof(pk.mask));
+        pk.cursor = clampInt(pk.cursor, 0, 127);
+        if (pk.cursor < pk.firstPitch)
+            pk.firstPitch = pk.cursor - pk.cursor % 12;
+        if (pk.cursor >= pk.firstPitch + pk.keys)
+            pk.firstPitch = (pk.cursor - pk.keys + 12) - (pk.cursor - pk.keys + 12) % 12;
+        pk.firstPitch = clampInt(pk.firstPitch, 0, 128 - pk.keys);
+        view.bar.text[6] = "Apply";
+        view.bar.fill[6] = color::kNoteBtn;
+        view.bar.highlighted[6] = true;
+        return;
+    }
+
+    m.active = true;
+    if (menu == Menu::Quantize)
+    {
+        m.cols = 2;
+        m.rows = 1;
+        snprintf(m.title, sizeof(m.title), "Quantize / Humanize  -  track %d", track + 1);
+        snprintf(m.colTitle[0], sizeof(m.colTitle[0]), "Quantize");
+        snprintf(m.colTitle[1], sizeof(m.colTitle[1]), "Humanize");
+        for (int i = 0; i < 2; i++)
+        {
+            snprintf(m.row[i].label, sizeof(m.row[i].label), "Amount");
+            snprintf(m.row[i].value, sizeof(m.row[i].value), "%d", quantAmount[i]);
+            m.row[i].isAction = false;
+        }
+        m.colCursor = quantCol;
+        m.cursor = s_menuRow < 0 ? -1 : 0;
+        m.accent = color::kNoteBtn;
+        snprintf(m.hint, sizeof(m.hint), "Left/Right: column  Down: amount  +/-: change  7: Apply");
+        view.bar.text[6] = "Apply";
+        view.bar.fill[6] = color::kNoteBtn;
+        view.bar.highlighted[6] = true;
+    }
+    else if (menu == Menu::Acid)
+    {
+        m.cols = 1;
+        m.rows = kAcidRowCount;
+        snprintf(m.title, sizeof(m.title), "Acid generator  -  track %d", track + 1);
+        static const char* const kLabels[kAcidRowCount] = { "Density", "Slide", "Notes", "Accent", "Envelope",
+                                                            "Apply" };
+        for (int r = 0; r < kAcidRowCount; r++)
+        {
+            snprintf(m.row[r].label, sizeof(m.row[r].label), "%s", kLabels[r]);
+            m.row[r].isAction = (r == kAcidApply);
+            m.row[r].value[0] = 0;
+        }
+        snprintf(m.row[kAcidDensity].value, 20, "%d", acid.density);
+        snprintf(m.row[kAcidSlide].value, 20, "%d", acid.slide);
+        if (acid.notes == AcidNotes::Pick)
+            snprintf(m.row[kAcidNotes].value, 20, "Pick (%d)", acid.pickedCount);
+        else
+            snprintf(m.row[kAcidNotes].value, 20, "In use");
+        snprintf(m.row[kAcidAccent].value, 20, "%d", acid.accent);
+        snprintf(m.row[kAcidEnvelope].value, 20, "%d", acid.envelope);
+        snprintf(m.row[kAcidApply].value, 20, "Middle");
+        m.cursor = clampInt(s_menuRow, 0, kAcidRowCount - 1);
+        m.accent = color::kInstrBtn;
+        if (m.cursor == kAcidNotes)
+            snprintf(m.hint, sizeof(m.hint), "+/-: In use / Pick   Middle: pick notes");
+        else if (m.cursor == kAcidApply)
+            snprintf(m.hint, sizeof(m.hint), "Middle: generate (replaces this track's notes)");
+        else
+            snprintf(m.hint, sizeof(m.hint), "Up/Down: setting   +/-: change");
+    }
+    else if (menu == Menu::Arp)
+    {
+        TrackSettings s = getSettings(current(), track);
+        m.cols = 1;
+        m.rows = kArpRowCount;
+        snprintf(m.title, sizeof(m.title), "Arp  -  track %d", track + 1);
+        static const char* const kLabels[kArpRowCount] = { "Arp",    "Rate",        "Octaves",     "Gate",
+                                                           "Go Ape", "Ape: rhythm", "Ape: gate", "Ape: notes" };
+        for (int r = 0; r < kArpRowCount; r++)
+        {
+            snprintf(m.row[r].label, sizeof(m.row[r].label), "%s", kLabels[r]);
+            m.row[r].isAction = (r == kArpRowGoApe);
+        }
+        snprintf(m.row[kArpRowMode].value, 20, "%s", kArpModeNames[s.arpMode]);
+        snprintf(m.row[kArpRowRate].value, 20, "%s", kArpRateNames[s.arpRate]);
+        snprintf(m.row[kArpRowOctaves].value, 20, "%d", s.arpOctaves);
+        snprintf(m.row[kArpRowGate].value, 20, "%d%%", s.arpGate);
+        snprintf(m.row[kArpRowGoApe].value, 20, "%s", (s.apeOn && s.apeSeed) ? "On  (Middle: new)" : "Middle: go");
+        snprintf(m.row[kArpRowRhythm].value, 20, "%d", s.apeRhythm);
+        snprintf(m.row[kArpRowApeGate].value, 20, "%d", s.apeGate);
+        snprintf(m.row[kArpRowApeNotes].value, 20, "%d", s.apeNotes);
+        m.cursor = clampInt(s_menuRow, 0, kArpRowCount - 1);
+        m.accent = color::kFx1Btn;
+        snprintf(m.hint, sizeof(m.hint), "Plays live. 7: Apply as notes  6: Keep arp  8: Back");
+        view.bar.text[0] = "Go Ape";
+        view.bar.fill[0] = color::kFx1Btn;
+        view.bar.highlighted[0] = s.apeOn && s.apeSeed;
+        view.bar.text[4] = (s.apeOn && s.apeSeed) ? "Ape off" : "";
+        view.bar.text[5] = "Keep";
+        view.bar.text[6] = "Apply";
+        view.bar.fill[6] = color::kNoteBtn;
+        view.bar.highlighted[6] = true;
+    }
+}
+
+void cPianoRoll::menuMove(int dCol, int dRow)
+{
+    switch (menu)
+    {
+        case Menu::Quantize:
+            if (dCol != 0)
+                quantCol = clampInt(quantCol + dCol, 0, 1);
+            if (dRow > 0)
+                s_menuRow = 0;
+            if (dRow < 0)
+                s_menuRow = -1;
+            break;
+        case Menu::Acid: s_menuRow = clampInt(s_menuRow + dRow, 0, kAcidRowCount - 1); break;
+        case Menu::Arp: s_menuRow = clampInt(s_menuRow + dRow, 0, kArpRowCount - 1); break;
+        case Menu::Picker:
+        {
+            PickerView& pk = view.picker;
+            pk.cursor = clampInt(pk.cursor + dCol + dRow * 12, 0, 127);
+            auditionOn(track, (uint8_t)pk.cursor, (uint8_t)velocity);
+            auditionOffAt = (uint32_t)s_clock + 200;
+            break;
+        }
+        default: break;
+    }
+    refreshView();
+}
+
+void cPianoRoll::menuChange(int delta, bool big)
+{
+    if (menu == Menu::Quantize)
+    {
+        if (s_menuRow >= 0)
+            quantAmount[quantCol] = clampInt(quantAmount[quantCol] + delta * (big ? 5 : 1), 1, 10);
+    }
+    else if (menu == Menu::Acid)
+    {
+        int step = big ? 5 : 1;
+        switch (s_menuRow)
+        {
+            case kAcidDensity: acid.density = (uint8_t)clampInt(acid.density + delta * step, 1, 10); break;
+            case kAcidSlide: acid.slide = (uint8_t)clampInt(acid.slide + delta * step, 0, 10); break;
+            case kAcidNotes: acid.notes = delta > 0 ? AcidNotes::Pick : AcidNotes::InUse; break;
+            case kAcidAccent: acid.accent = (uint8_t)clampInt(acid.accent + delta * step, 0, 10); break;
+            case kAcidEnvelope: acid.envelope = (uint8_t)clampInt(acid.envelope + delta * step, 0, 10); break;
+            default: break;
+        }
+    }
+    else if (menu == Menu::Arp)
+    {
+        Sequencer::strPattern* p = current();
+        TrackSettings s = getSettings(p, track);
+        int step = big ? 10 : 5;
+        switch (s_menuRow)
+        {
+            case kArpRowMode: s.arpMode = (uint8_t)clampInt(s.arpMode + delta, 1, kArpModeCount - 1); break;
+            case kArpRowRate: s.arpRate = (uint8_t)clampInt(s.arpRate + delta, 0, kArpRateCount - 1); break;
+            case kArpRowOctaves: s.arpOctaves = (uint8_t)clampInt(s.arpOctaves + delta, 1, 4); break;
+            case kArpRowGate: s.arpGate = (uint8_t)clampInt(s.arpGate + delta * step, 10, 100); break;
+            case kArpRowRhythm: s.apeRhythm = (uint8_t)clampInt(s.apeRhythm + delta * step, 0, 100); break;
+            case kArpRowApeGate: s.apeGate = (uint8_t)clampInt(s.apeGate + delta * step, 0, 100); break;
+            case kArpRowApeNotes: s.apeNotes = (uint8_t)clampInt(s.apeNotes + delta * step, 0, 100); break;
+            default: return;
+        }
+        setSettings(p, track, s); // heard right away; Back restores the old settings
+    }
+    refreshView();
+}
+
+static uint32_t newSeed()
+{
+    uint32_t s = random32() ^ ((uint32_t)s_clock * 2654435761u);
+    return s == 0 ? 1 : s;
+}
+
+void cPianoRoll::menuMiddle()
+{
+    if (menu == Menu::Acid)
+    {
+        if (s_menuRow == kAcidNotes)
+        {
+            // open the note picker on the notes picked so far
+            memset(pickerMask, 0, sizeof(pickerMask));
+            for (int i = 0; i < acid.pickedCount; i++)
+                pickerMask[acid.picked[i] >> 3] |= (uint8_t)(1u << (acid.picked[i] & 7));
+            view.picker.cursor = acid.pickedCount ? acid.picked[0] : getSettings(current(), track).baseNote - 24;
+            view.picker.firstPitch = view.picker.cursor - view.picker.cursor % 12;
+            menu = Menu::Picker;
+            refreshView();
+            return;
+        }
+        if (s_menuRow == kAcidApply)
+        {
+            if (acid.notes == AcidNotes::Pick && acid.pickedCount == 0)
+            {
+                mtPopups.show(0, "Pick some notes first (Notes row, Middle)", 2);
+                return;
+            }
+            beginEdit(kEditTool);
+            stopTrack(track);
+            generateAcid(current(), track, acid);
+            markChanged();
+            menu = Menu::None;
+            mtPopups.show(0, "Acid line generated", 1);
+            refreshView();
+        }
+        return;
+    }
+    if (menu == Menu::Arp && s_menuRow == kArpRowGoApe)
+    {
+        Sequencer::strPattern* p = current();
+        TrackSettings s = getSettings(p, track);
+        s.apeOn = true;
+        s.apeSeed = newSeed(); // a new random sequence every press
+        setSettings(p, track, s);
+        refreshView();
+        return;
+    }
+    if (menu == Menu::Picker)
+    {
+        pickerToggle();
+    }
+}
+
+void cPianoRoll::pickerToggle()
+{
+    int pitch = view.picker.cursor;
+    uint8_t bit = (uint8_t)(1u << (pitch & 7));
+    int count = 0;
+    for (int b = 0; b < 16; b++)
+        for (int k = 0; k < 8; k++)
+            count += (pickerMask[b] >> k) & 1;
+    if (pickerMask[pitch >> 3] & bit)
+    {
+        pickerMask[pitch >> 3] &= (uint8_t)~bit;
+    }
+    else if (count < (int)sizeof(acid.picked))
+    {
+        pickerMask[pitch >> 3] |= bit;
+        auditionOn(track, (uint8_t)pitch, (uint8_t)velocity);
+        auditionOffAt = (uint32_t)s_clock + 300;
+    }
+    else
+    {
+        mtPopups.show(0, "24 notes at most", 1);
+    }
+    refreshView();
+}
+
+void cPianoRoll::menuTopButton(int button)
+{
+    if (button == 7)
+    {
+        // Back: leave without applying
+        if (menu == Menu::Picker)
+        {
+            menu = Menu::Acid;
+            refreshView();
+            return;
+        }
+        closeMenu(false);
+        return;
+    }
+
+    switch (menu)
+    {
+        case Menu::Picker:
+            if (button == 6)
+            {
+                acid.pickedCount = 0;
+                for (int pitch = 0; pitch < 128 && acid.pickedCount < sizeof(acid.picked); pitch++)
+                    if (pickerMask[pitch >> 3] & (1u << (pitch & 7)))
+                        acid.picked[acid.pickedCount++] = (uint8_t)pitch;
+                acid.notes = AcidNotes::Pick;
+                menu = Menu::Acid;
+                refreshView();
+            }
+            break;
+        case Menu::Quantize:
+            if (button == 6)
+            {
+                beginEdit(kEditTool);
+                if (quantCol == 0)
+                    quantizeTrack(current(), track, quantAmount[0]);
+                else
+                    humanizeTrack(current(), track, quantAmount[1]);
+                markChanged();
+                mtPopups.show(0, quantCol == 0 ? "Quantized" : "Humanized", 1);
+                closeMenu(false);
+            }
+            break;
+        case Menu::Arp:
+            if (button == 0)
+            {
+                s_menuRow = kArpRowGoApe;
+                menuMiddle();
+            }
+            else if (button == 4)
+            {
+                Sequencer::strPattern* p = current();
+                TrackSettings s = getSettings(p, track);
+                s.apeOn = false;
+                setSettings(p, track, s);
+                refreshView();
+            }
+            else if (button == 5)
+            {
+                // keep the live arp as it is, without turning it into notes
+                TrackSettings chosen = getSettings(current(), track);
+                setSettings(current(), track, arpBackup);
+                beginEdit(kEditTool);
+                setSettings(current(), track, chosen);
+                markChanged();
+                menu = Menu::None;
+                refreshView();
+            }
+            else if (button == 6)
+            {
+                closeMenu(true);
+            }
+            break;
+        default: break; // Acid applies from its own row, never from a top button
+    }
+}
+
+// ---------------------------------------------------------------------------
 // button handlers
 
 static bool pressOrRepeat(uint8_t s)
 {
     return s == buttonPress || s == buttonHold;
+}
+
+static bool inMenu()
+{
+    return PR->menu != cPianoRoll::Menu::None;
 }
 
 static void functPlay(uint8_t state)
@@ -877,7 +1392,7 @@ static void functPlay(uint8_t state)
         return;
     if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
     {
-        if (shiftActive())
+        if (shiftActive() && !inMenu())
             sequencer.playSong();
         else
             sequencer.playPattern();
@@ -892,35 +1407,65 @@ static void functPlay(uint8_t state)
 
 static void functRec(uint8_t state)
 {
-    if (state != buttonPress)
+    if (state != buttonPress || inMenu())
         return;
-    g_recArmed = !g_recArmed;
+    if (shiftActive())
+    {
+        PR->releaseAllButtons();
+        PR->mode = cPianoRoll::Mode::Idle;
+        undoEdit();
+        PR->refreshView();
+        return;
+    }
+    setRecArmed(!g_recArmed);
     PR->refreshView();
 }
 
 static void functUp(uint8_t s)
 {
-    if (pressOrRepeat(s))
+    if (!pressOrRepeat(s))
+        return;
+    if (inMenu())
+        PR->menuMove(0, PR->menu == cPianoRoll::Menu::Picker ? 1 : -1);
+    else
         PR->pressUp();
 }
 static void functDown(uint8_t s)
 {
-    if (pressOrRepeat(s))
+    if (!pressOrRepeat(s))
+        return;
+    if (inMenu())
+        PR->menuMove(0, PR->menu == cPianoRoll::Menu::Picker ? -1 : 1);
+    else
         PR->pressDown();
 }
 static void functLeft(uint8_t s)
 {
-    if (pressOrRepeat(s))
+    if (!pressOrRepeat(s))
+        return;
+    if (inMenu())
+        PR->menuMove(-1, 0);
+    else
         PR->pressLeft();
 }
 static void functRight(uint8_t s)
 {
-    if (pressOrRepeat(s))
+    if (!pressOrRepeat(s))
+        return;
+    if (inMenu())
+        PR->menuMove(1, 0);
+    else
         PR->pressRight();
 }
 
 static void functMiddle(uint8_t state)
 {
+    if (inMenu())
+    {
+        if (state == buttonPress)
+            PR->menuMiddle();
+        return;
+    }
     if (state == buttonPress)
     {
         if (shiftActive())
@@ -945,23 +1490,20 @@ static void functMiddle(uint8_t state)
 
 static void functDelete(uint8_t state)
 {
-    if (state == buttonPress)
+    if (state == buttonPress && !inMenu())
         PR->pressDelete();
 }
 
 static void functInsert(uint8_t state)
 {
-    if (state != buttonPress)
+    if (state != buttonPress || inMenu() || shiftActive())
         return;
-    if (shiftActive())
-        PR->openTrackPage();
-    else
-        PR->pressInsert();
+    PR->pressInsert();
 }
 
 static void functShift(uint8_t state)
 {
-    if (state == buttonPress)
+    if (shiftButton(state))
         PR->toggleShift();
 }
 
@@ -970,6 +1512,11 @@ static void functEncoder(int16_t value)
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
+    if (inMenu())
+    {
+        PR->menuChange(dir, big);
+        return;
+    }
     if (big && shiftActive())
         PR->changeZoom(-dir); // big + = zoom in (fewer squares), big - = zoom out
     else if (big)
@@ -981,6 +1528,12 @@ static void functEncoder(int16_t value)
 static void functTopRow(uint8_t button, uint8_t state)
 {
     int idx = button - interfaceButton0;
+    if (inMenu())
+    {
+        if (state == buttonPress)
+            PR->menuTopButton(idx);
+        return;
+    }
     if (state == buttonPress)
         PR->topButton(idx, true);
     else if (state == buttonRelease)
@@ -989,15 +1542,25 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functParamButton(uint8_t button, uint8_t state)
 {
-    if (state != buttonPress)
+    if (state != buttonPress || inMenu())
         return;
+    if (shiftActive())
+    {
+        if (button == interfaceButtonNote)
+            PR->openMenu(cPianoRoll::Menu::Quantize);
+        else if (button == interfaceButtonInstr)
+            PR->openMenu(cPianoRoll::Menu::Acid);
+        else if (button == physFx1Button())
+            PR->openMenu(cPianoRoll::Menu::Arp);
+        return;
+    }
     if (button == interfaceButtonNote)
         PR->param = cPianoRoll::kParamProb;
     else if (button == interfaceButtonInstr)
         PR->param = cPianoRoll::kParamVelocity;
-    else if (button == interfaceButtonFx1)
+    else if (button == physFx1Button())
         PR->param = cPianoRoll::kParamNudge;
-    else if (button == interfaceButtonFx2)
+    else if (button == physFx2Button())
         PR->param = cPianoRoll::kParamInversion;
     PR->refreshView();
 }

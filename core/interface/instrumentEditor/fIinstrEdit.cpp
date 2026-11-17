@@ -1,4 +1,7 @@
 #include "instrumentEditor/instrumentEditor.h"
+#include "core/interface.h"
+#include "gibgob/gibgobPages.h"
+#include "gibgob/pianoRoll.h"
 #include "mtWavetableEnvelopes.h"
 
 #include "core/interfaceMenuPopup.h"
@@ -995,6 +998,15 @@ static void functSwitchModule(uint8_t button)
     IE->eventFunct(eventSwitchModule, IE, &button, 0);
 }
 
+// GibGob OS: leave the synth parameters for the chord palette page
+static void openGibGobChordPalette()
+{
+    uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPagePalette, cGibGobPages::kFromInstrumentEditor,
+                                                 pianoRoll.track);
+    mtInterface.deactivateModule(IE);
+    mtInterface.activateModule(&gibgobPages, options);
+}
+
 static void functSwitchMode()
 {
     mtPopups.hideInfoPopup();
@@ -1011,7 +1023,9 @@ static void functSwitchMode()
     }
     else if (IE->mode == mtInstEditModeEnv || IE->mode == mtInstEditModeInstrSynth)
     {
-        IE->mode = mtInstEditModeParams;
+        // GibGob OS: the chord palette is the 3rd page
+        openGibGobChordPalette();
+        return;
     }
 #if GUI_HANDLE_SYNTH
     else if (IE->mode == mtInstEditModeSynth)
@@ -1021,7 +1035,9 @@ static void functSwitchMode()
     }
     else if (IE->mode == mtInstEditModeSynthMacros)
     {
-        IE->mode = mtInstEditModeSynth;
+        // GibGob OS: the chord palette is the 3rd page
+        openGibGobChordPalette();
+        return;
     }
     else if (IE->mode == mtInstEditModeSynthPatchEdit)
     {

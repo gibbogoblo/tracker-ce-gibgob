@@ -28,10 +28,12 @@ constexpr uint8_t kArpFlagApe = 0x01;
 
 constexpr int kSlotBytes = 8;
 constexpr int kSlotNotes = 1;
+constexpr int kSlotExtras = 125;
 constexpr int kSlotSettings = 126;
 constexpr int kSlotPalette = 127;
 constexpr int kTrackBytes = 128 * kSlotBytes;
-
+constexpr uint8_t kExtrasMagic = 'X';
+constexpr int kApeCycleTicks = 64 * 48; // Go Ape sequences repeat every 4 bars
 
 struct Header
 {
@@ -192,6 +194,65 @@ TrackSettings decodeSettings(const uint8_t* s, const Header& h)
     return t;
 }
 
+// ---------------- extras slot (seed, track length) ----------------
+struct Extras
+{
+    uint32_t seed = 0;
+    uint8_t steps = 0; // 0 = follow the pattern length
+};
+
+Extras readExtras(const uint8_t* raw)
+{
+    Extras e;
+    const uint8_t* x = raw + kSlotExtras * kSlotBytes;
+    if (x[7] != kExtrasMagic)
+        return e;
+    e.seed = (uint32_t)x[0] | ((uint32_t)x[1] << 8) | ((uint32_t)x[2] << 16) | ((uint32_t)x[3] << 24);
+    e.steps = x[4] <= kMaxTrackSteps ? x[4] : 0;
+    return e;
+}
+
+// caller holds the AudioLock and the track has a header
+void writeExtrasLocked(uint8_t* raw, const Extras& e)
+{
+    uint8_t* x = raw + kSlotExtras * kSlotBytes;
+    x[0] = (uint8_t)(e.seed & 0xFF);
+    x[1] = (uint8_t)((e.seed >> 8) & 0xFF);
+    x[2] = (uint8_t)((e.seed >> 16) & 0xFF);
+    x[3] = (uint8_t)((e.seed >> 24) & 0xFF);
+    x[4] = e.steps;
+    x[5] = 0;
+    x[6] = 0;
+    x[7] = kExtrasMagic;
+}
+
+inline int masterSteps(const Sequencer::strPattern* p)
+{
+    return clampInt(p->track[0].length + 1, 1, kMaxTrackSteps);
+}
+
+// effective length of a track inside the pattern, in steps
+int effectiveSteps(const Sequencer::strPattern* p, int track, const Header* hOrNull)
+{
+    int master = masterSteps(p);
+    if (hOrNull == nullptr)
+        return master;
+    Extras e = readExtras(rawBytes(p, track));
+    if (e.steps == 0)
+        return master;
+    return e.steps < master ? e.steps : master;
+}
+
+// deterministic random number for (seed, index): the same Go Ape sequence
+// every time it is played, and when it is applied as notes
+inline uint32_t hashRandom(uint32_t seed, uint32_t index)
+{
+    uint32_t z = seed + 0x9E3779B9u * (index + 1);
+    z = (z ^ (z >> 16)) * 0x85EBCA6Bu;
+    z = (z ^ (z >> 13)) * 0xC2B2AE35u;
+    return z ^ (z >> 16);
+}
+
 // ---------------- random ----------------
 uint32_t s_rng = 0x6B8B4567;
 inline uint32_t nextRandom()
@@ -227,9 +288,10 @@ struct HeldNote
 
 constexpr int kMaxHeld = 8;
 
-struct TrackPlayState
+// The arpeggiator's state. Shared by live playback and by renderArp(), so the
+// notes written by "Apply" are exactly what was heard.
+struct ArpState
 {
-    ActiveNote notes[kMaxActiveNotes];
     HeldNote held[kMaxHeld]; // notes feeding the arpeggiator
     uint8_t heldCount;
     uint16_t arpIdx;
@@ -238,12 +300,26 @@ struct TrackPlayState
     uint8_t ratchetPitch;
     uint8_t ratchetVel;
     int16_t ratchetGate;
-    uint8_t ratchetInstrument;
+};
+
+struct ArpOut
+{
+    uint8_t pitch;
+    uint8_t velocity;
+    int16_t gate;
+};
+
+struct TrackPlayState
+{
+    ActiveNote notes[kMaxActiveNotes];
+    ArpState arp;
+    uint32_t runTicks; // micro steps since playback started
     uint8_t serialCounter;
 };
 
 TrackPlayState playState[kTracks];
 volatile int s_playTick[kTracks];
+volatile bool s_liveMetronome = false;
 
 // Which sequencer note owns each of the 8 sample voices. A track normally
 // plays on its own voice; extra notes of a chord borrow the voices of tracks
@@ -279,9 +355,10 @@ void ensureInit()
     {
         for (auto& a : playState[t].notes)
             a.remaining = -1;
-        playState[t].heldCount = 0;
-        playState[t].ratchetIn = 0;
-        playState[t].arpIdx = 0;
+        playState[t].arp.heldCount = 0;
+        playState[t].arp.ratchetIn = 0;
+        playState[t].arp.arpIdx = 0;
+        playState[t].runTicks = 0;
         playState[t].serialCounter = 0;
         audition[t].on = false;
         voiceUse[t].on = false;
@@ -297,10 +374,14 @@ inline uint8_t instrumentOrDefault(uint8_t sound, int track)
 }
 
 // audio interrupt must be blocked (or we are inside it)
-int allocVoice(int track, uint8_t serial)
+int allocVoice(int track, uint8_t serial, int forceVoice = -1)
 {
     int v = track;
-    if (voiceUse[track].on)
+    if (forceVoice >= 0)
+    {
+        v = forceVoice;
+    }
+    else if (voiceUse[track].on)
     {
         const Sequencer::strPattern* p = current();
         for (int c = 0; c < kTracks; c++)
@@ -359,6 +440,50 @@ void releaseActive(int track, ActiveNote& a)
     a.remaining = -1;
 }
 
+// per-note sound changes (slide, accent, filter envelope) as the engine's
+// existing step effects; sample instruments only
+void noteEffects(uint8_t instrument, uint8_t flags, uint8_t* fxType, uint8_t* fxValue)
+{
+    fxType[0] = fxType[1] = 0;
+    fxValue[0] = fxValue[1] = 0;
+    int slot = 0;
+
+    if (flags & kNoteFlagSlide)
+    {
+        int lo = sequencer.getFxMin(Sequencer::strFxConsts::FX_TYPE_GLIDE);
+        int hi = sequencer.getFxMax(Sequencer::strFxConsts::FX_TYPE_GLIDE);
+        // the lower half of the range maps to 0..1000 ms: about 80 ms here
+        fxType[slot] = Sequencer::strFxConsts::FX_TYPE_GLIDE;
+        fxValue[slot] = (uint8_t)clampInt(lo + ((hi / 2 - lo) * 8) / 100, lo, hi);
+        slot++;
+    }
+
+    const strInstrument& in = mtProject.instrument[instrument];
+    if ((flags & kNoteFlagAccent) && slot < 2 && in.filterEnable && in.filterType == lowPass)
+    {
+        // open the instrument's own low-pass filter a quarter of the way further
+        int lo = sequencer.getFxMin(Sequencer::strFxConsts::FX_TYPE_FILTER_BANDPASS);
+        int hi = sequencer.getFxMax(Sequencer::strFxConsts::FX_TYPE_FILTER_BANDPASS);
+        float cut = in.cutOff + 0.25f;
+        if (cut > 1.0f)
+            cut = 1.0f;
+        fxType[slot] = Sequencer::strFxConsts::FX_TYPE_FILTER_LOWPASS;
+        fxValue[slot] = (uint8_t)clampInt(lo + (int)(cut * (float)(hi - lo) + 0.5f), lo, hi);
+        slot++;
+    }
+
+    int env = (flags >> 4) & 0x0F;
+    if (env > 0 && slot < 2)
+    {
+        // attack and release from the variant, spread over the whole range
+        uint8_t attack = (uint8_t)((env * 7) & 0x0F);
+        uint8_t release = (uint8_t)((env * 11 + 3) & 0x0F);
+        fxType[slot] = Sequencer::strFxConsts::FX_TYPE_FILTER_ENV;
+        fxValue[slot] = (uint8_t)((attack << 4) | release);
+        slot++;
+    }
+}
+
 // audio context
 void startNote(int track,
                TrackPlayState& st,
@@ -366,9 +491,32 @@ void startNote(int track,
                uint8_t pitch,
                uint8_t velocity,
                int lengthTicks,
-               bool oneShot)
+               bool oneShot,
+               uint8_t noteFlags = 0)
 {
     bool sample = isSampleInstrument(instrument);
+
+    if (noteFlags & kNoteFlagAccent)
+        velocity = (uint8_t)clampInt(velocity + 27, 1, 127);
+
+    // a slide continues on the voice of the note still sounding before it
+    int legatoVoice = -1;
+    if (sample && (noteFlags & kNoteFlagSlide))
+    {
+        ActiveNote* prev = nullptr;
+        for (auto& a : st.notes)
+            if (a.remaining >= 0 && a.voice >= 0 && (prev == nullptr || (uint8_t)(a.serial - prev->serial) < 128))
+                prev = &a;
+        if (prev != nullptr)
+        {
+            VoiceUse& u = voiceUse[prev->voice];
+            if (u.on && u.track == track && u.serial == prev->serial)
+            {
+                legatoVoice = prev->voice;
+                prev->remaining = -1; // handed over without a note-off
+            }
+        }
+    }
 
     // a retriggered pitch on a synth: end the old note first
     if (!sample)
@@ -406,9 +554,13 @@ void startNote(int track,
 
     if (sample)
     {
-        int v = allocVoice(track, slot->serial);
+        int v = allocVoice(track, slot->serial, legatoVoice);
         slot->voice = (int8_t)v;
-        instrumentPlayer[v].noteOn(instrument, (int8_t)pitch, velocityToVolume(velocity), 0, 0, 0, 0);
+        uint8_t fxType[2], fxValue[2];
+        noteEffects(instrument, legatoVoice >= 0 ? noteFlags : (uint8_t)(noteFlags & ~kNoteFlagSlide), fxType,
+                    fxValue);
+        instrumentPlayer[v].noteOn(instrument, (int8_t)pitch, velocityToVolume(velocity), fxType[0], fxValue[0],
+                                   fxType[1], fxValue[1]);
     }
     else
     {
@@ -416,45 +568,86 @@ void startNote(int track,
     }
 }
 
-void removeHeldAt(TrackPlayState& st, int i)
+void removeHeldAt(ArpState& a, int i)
 {
-    for (int k = i; k + 1 < st.heldCount; k++)
-        st.held[k] = st.held[k + 1];
-    st.heldCount--;
+    for (int k = i; k + 1 < a.heldCount; k++)
+        a.held[k] = a.held[k + 1];
+    a.heldCount--;
 }
 
-// One step of the arpeggiator. Go Ape randomises rhythm, gate and notes.
-void arpStep(int track, TrackPlayState& st, const TrackSettings& s, uint8_t instrument)
+void addHeld(ArpState& a, uint8_t pitch, uint8_t velocity, int length)
 {
-    int n = st.heldCount;
-    if (n <= 0)
+    if (a.heldCount >= kMaxHeld)
         return;
+    if (a.heldCount == 0)
+        a.arpIdx = 0;
+    HeldNote& hn = a.held[a.heldCount++];
+    hn.pitch = pitch;
+    hn.velocity = velocity;
+    hn.remaining = (int16_t)clampInt(length, 1, 0x7FFF);
+}
+
+// one micro step of held-note and ratchet countdown. Returns true if the
+// ratchet (second hit of a Go Ape double) fires now; out is filled then.
+bool arpCountdown(ArpState& a, ArpOut& out)
+{
+    for (int i = a.heldCount - 1; i >= 0; i--)
+    {
+        if (--a.held[i].remaining <= 0)
+            removeHeldAt(a, i);
+    }
+    if (a.ratchetIn > 0 && --a.ratchetIn == 0)
+    {
+        out.pitch = a.ratchetPitch;
+        out.velocity = a.ratchetVel;
+        out.gate = a.ratchetGate;
+        return true;
+    }
+    return false;
+}
+
+// One step of the arpeggiator at run time `runTick`. Go Ape randomises
+// rhythm, gate and notes, always the same way for the same seed and position
+// in its 4-bar cycle. Returns true if a note should play.
+bool arpStep(ArpState& a, const TrackSettings& s, uint32_t runTick, ArpOut& out)
+{
+    int n = a.heldCount;
+    if (n <= 0)
+        return false;
+
+    int rate = kArpRateTicks[s.arpRate];
+    bool ape = s.apeOn && s.apeSeed != 0;
+    uint32_t cycleStep = (runTick % kApeCycleTicks) / (uint32_t)rate;
+    uint32_t r1 = ape ? hashRandom(s.apeSeed, cycleStep * 4 + 0) : 0;
+    uint32_t r2 = ape ? hashRandom(s.apeSeed, cycleStep * 4 + 1) : 0;
+    uint32_t r3 = ape ? hashRandom(s.apeSeed, cycleStep * 4 + 2) : 0;
+    uint32_t r4 = ape ? hashRandom(s.apeSeed, cycleStep * 4 + 3) : 0;
 
     // pitches in playing order
     uint8_t pitch[kMaxHeld];
     uint8_t vel[kMaxHeld];
     for (int i = 0; i < n; i++)
     {
-        pitch[i] = st.held[i].pitch;
-        vel[i] = st.held[i].velocity;
+        pitch[i] = a.held[i].pitch;
+        vel[i] = a.held[i].velocity;
     }
     if (s.arpMode != kArpAsPlaced)
     {
-        for (int a = 0; a < n; a++)
-            for (int b = a + 1; b < n; b++)
-                if (pitch[b] < pitch[a])
+        for (int x = 0; x < n; x++)
+            for (int y = x + 1; y < n; y++)
+                if (pitch[y] < pitch[x])
                 {
-                    uint8_t t = pitch[a];
-                    pitch[a] = pitch[b];
-                    pitch[b] = t;
-                    t = vel[a];
-                    vel[a] = vel[b];
-                    vel[b] = t;
+                    uint8_t t = pitch[x];
+                    pitch[x] = pitch[y];
+                    pitch[y] = t;
+                    t = vel[x];
+                    vel[x] = vel[y];
+                    vel[y] = t;
                 }
     }
 
     int total = n * s.arpOctaves;
-    int idx = st.arpIdx++;
+    int idx = a.arpIdx++;
     int k = 0;
     switch (s.arpMode)
     {
@@ -466,52 +659,54 @@ void arpStep(int track, TrackPlayState& st, const TrackSettings& s, uint8_t inst
             k = m < total ? m : period - m;
             break;
         }
-        case kArpRandom: k = (int)(nextRandom() % (uint32_t)total); break;
+        case kArpRandom: k = (int)((ape ? (r4 >> 8) : nextRandom()) % (uint32_t)total); break;
         default: k = idx % total; break; // up, as placed
     }
 
-    int rate = kArpRateTicks[s.arpRate];
     int gate = rate * s.arpGate / 100;
     int outPitch = pitch[k % n] + 12 * (k / n);
     int outVel = vel[k % n];
 
-    if (s.apeOn)
+    if (ape)
     {
         // rhythm: rests and doubles
-        if (percent(s.apeRhythm * 45 / 100))
-            return; // rest
-        bool ratchet = percent(s.apeRhythm * 25 / 100);
+        if ((int)(r1 % 100) < s.apeRhythm * 45 / 100)
+            return false; // rest
+        bool ratchet = (int)((r1 >> 8) % 100) < s.apeRhythm * 25 / 100;
 
         // gate length
         if (s.apeGate > 0)
         {
-            int delta = (int)(nextRandom() % (uint32_t)(2 * s.apeGate + 1)) - s.apeGate;
+            int delta = (int)(r2 % (uint32_t)(2 * s.apeGate + 1)) - s.apeGate;
             gate = gate * (100 + delta) / 100;
         }
 
-        // notes: add fifths, sevenths and octaves, up and down
-        if (percent(s.apeNotes * 60 / 100))
+        // notes: up to half way only fifths, sevenths and octaves (keeps chords
+        // intact); above half, other chord colours join in
+        if ((int)(r3 % 100) < s.apeNotes * 60 / 100)
         {
-            static const int8_t kOffsets[6] = { 7, 12, -12, 10, -5, 19 };
-            int shifted = outPitch + kOffsets[nextRandom() % 6];
+            static const int8_t kSafe[6] = { 7, -5, 10, -2, 12, -12 };
+            static const int8_t kWide[6] = { 3, 4, 5, 9, -3, 2 };
+            bool wide = s.apeNotes > 50 && (int)((r3 >> 8) % 100) < (s.apeNotes - 50) * 2;
+            int shifted = outPitch + (wide ? kWide[(r3 >> 16) % 6] : kSafe[(r3 >> 16) % 6]);
             if (shifted >= 0 && shifted <= 127)
                 outPitch = shifted;
         }
 
         if (ratchet && rate >= 12)
         {
-            st.ratchetIn = (int16_t)(rate / 2);
-            st.ratchetPitch = (uint8_t)clampInt(outPitch, 0, 127);
-            st.ratchetVel = (uint8_t)clampInt(outVel * 3 / 4, 1, 127);
-            st.ratchetGate = (int16_t)clampInt(gate / 2, 2, rate / 2);
-            st.ratchetInstrument = instrument;
+            a.ratchetIn = (int16_t)(rate / 2);
+            a.ratchetPitch = (uint8_t)clampInt(outPitch, 0, 127);
+            a.ratchetVel = (uint8_t)clampInt(outVel * 3 / 4, 1, 127);
+            a.ratchetGate = (int16_t)clampInt(gate / 2, 2, rate / 2);
             gate = clampInt(gate, 2, rate / 2);
         }
     }
 
-    gate = clampInt(gate, 2, rate * 2);
-    startNote(track, st, instrument, (uint8_t)clampInt(outPitch, 0, 127), (uint8_t)clampInt(outVel, 1, 127),
-              gate, false);
+    out.pitch = (uint8_t)clampInt(outPitch, 0, 127);
+    out.velocity = (uint8_t)clampInt(outVel, 1, 127);
+    out.gate = (int16_t)clampInt(gate, 2, rate * 2);
+    return true;
 }
 
 } // namespace
@@ -581,7 +776,9 @@ TrackSettings getSettings(const Sequencer::strPattern* p, int track)
     Header h;
     if (!readHeader(p, track, h))
         return t;
-    return decodeSettings(rawBytes(p, track) + kSlotSettings * kSlotBytes, h);
+    t = decodeSettings(rawBytes(p, track) + kSlotSettings * kSlotBytes, h);
+    t.apeSeed = readExtras(rawBytes(p, track)).seed;
+    return t;
 }
 
 void setSettings(Sequencer::strPattern* p, int track, const TrackSettings& s)
@@ -606,6 +803,9 @@ void setSettings(Sequencer::strPattern* p, int track, const TrackSettings& s)
         h.arpFlags &= (uint8_t)~kArpFlagApe;
     writeHeaderLocked(p, track, h);
     memcpy(rawBytes(p, track) + kSlotSettings * kSlotBytes, enc, kSlotBytes);
+    Extras e = readExtras(rawBytes(p, track));
+    e.seed = s.apeSeed;
+    writeExtrasLocked(rawBytes(p, track), e);
 }
 
 static bool readStoredChord(const Sequencer::strPattern* p, int idx, PaletteChord& c)
@@ -762,52 +962,309 @@ void adoptDefaults(const Sequencer::strPattern* p)
 }
 
 // =====================================================================
-// tools
+// track length
 // =====================================================================
 
-void quantizeTrack(Sequencer::strPattern* p, int track)
+int patternSteps(const Sequencer::strPattern* p)
+{
+    return p == nullptr ? 16 : masterSteps(p);
+}
+
+int trackSteps(const Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr)
+        return 16;
+    Header h;
+    bool has = readHeader(p, track, h);
+    return effectiveSteps(p, track, has ? &h : nullptr);
+}
+
+void setTrackSteps(Sequencer::strPattern* p, int track, int steps)
 {
     if (!validTrack(track) || p == nullptr)
         return;
-    int patternTicks = (p->track[track].length + 1) * kTicksPerStep;
+    steps = clampInt(steps, 1, kMaxTrackSteps);
+
+    // every track keeps the length it has now; the pattern becomes as long as
+    // the longest track. Tracks still holding old tracker steps (old projects)
+    // keep following the pattern length.
+    int master = masterSteps(p);
+    int len[kTracks];
+    bool legacy[kTracks];
+    for (int t = 0; t < kTracks; t++)
+    {
+        Header h;
+        bool has = readHeader(p, t, h);
+        len[t] = effectiveSteps(p, t, has ? &h : nullptr);
+        legacy[t] = false;
+        if (!has && t != track)
+        {
+            for (int s = 0; s <= Sequencer::MAXSTEP && !legacy[t]; s++)
+                legacy[t] = p->track[t].step[s].note >= 0;
+        }
+    }
+    len[track] = steps;
+
+    int newMaster = 1;
+    for (int t = 0; t < kTracks; t++)
+    {
+        int l = legacy[t] ? master : len[t];
+        if (l > newMaster)
+            newMaster = l;
+    }
+
+    AudioLock lock;
+    for (int t = 0; t < kTracks; t++)
+    {
+        if (legacy[t])
+            continue;
+        ensureHeaderLocked(p, t);
+        Extras e = readExtras(rawBytes(p, t));
+        e.steps = (uint8_t)len[t];
+        writeExtrasLocked(rawBytes(p, t), e);
+    }
+    for (int t = 0; t < kAllTracks; t++)
+        p->track[t].length = (uint8_t)(newMaster - 1);
+}
+
+bool duplicateTrack(Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr)
+        return false;
+    int steps = trackSteps(p, track);
+    int count = noteCount(p, track);
+    if (steps * 2 > kMaxTrackSteps || count * 2 > kMaxNotes)
+        return false;
+    int offset = steps * kTicksPerStep;
+    for (int i = 0; i < count; i++)
+    {
+        Note n = getNote(p, track, i);
+        n.flags &= (uint8_t)~(kNoteFlagSelected | kNoteFlagRecording);
+        n.start = (uint16_t)(n.start + offset);
+        addNote(p, track, n);
+    }
+    setTrackSteps(p, track, steps * 2);
+    return true;
+}
+
+// =====================================================================
+// tools
+// =====================================================================
+
+void quantizeTrack(Sequencer::strPattern* p, int track, int strength)
+{
+    if (!validTrack(track) || p == nullptr)
+        return;
+    strength = clampInt(strength, 1, 10);
+    int maxOff = (3 * (10 - strength) + 4) / 9; // 1 -> 3, 10 -> 0
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
     int count = noteCount(p, track);
     for (int i = 0; i < count; i++)
     {
         Note n = getNote(p, track, i);
-        int start = ((n.start + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
-        if (start >= patternTicks)
-            start = 0;
-        n.start = (uint16_t)start;
+        int grid = ((n.start + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
+        int off = clampInt((int)n.start - grid, -maxOff, maxOff);
+        if (grid >= trackTicks)
+            grid = 0; // rounded past the end: wraps to the start
+        n.start = (uint16_t)clampInt(grid + off, 0, trackTicks - 1);
         setNote(p, track, i, n);
     }
 }
 
-void generateAcid(Sequencer::strPattern* p, int track, int lengthSteps)
+void humanizeTrack(Sequencer::strPattern* p, int track, int amount)
 {
     if (!validTrack(track) || p == nullptr)
         return;
-    clearNotes(p, track);
+    amount = clampInt(amount, 1, 10);
+    int range = 3 + ((amount - 1) * 17 + 4) / 9; // 1 -> 3, 10 -> 20
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
+    int count = noteCount(p, track);
+    for (int i = 0; i < count; i++)
+    {
+        Note n = getNote(p, track, i);
+        int delta = (int)(nextRandom() % (uint32_t)(2 * range + 1)) - range;
+        n.start = (uint16_t)clampInt((int)n.start + delta, 0, trackTicks - 1);
+        setNote(p, track, i, n);
+    }
+}
+
+// pitch classes (bit mask of 12) that other melodic tracks play at `tick`
+static uint16_t pitchClassesAt(const Sequencer::strPattern* p, int track, int tick, bool anyTime)
+{
+    uint16_t mask = 0;
+    for (int u = 0; u < kTracks; u++)
+    {
+        if (u == track || !isMelodic(p, u))
+            continue;
+        int uTicks = trackSteps(p, u) * kTicksPerStep;
+        int t = tick % uTicks;
+        int count = noteCount(p, u);
+        for (int i = 0; i < count; i++)
+        {
+            Note n = getNote(p, u, i);
+            bool on = anyTime || (t >= n.start && t < n.start + n.length) ||
+                      (n.start + n.length > uTicks && t < n.start + n.length - uTicks);
+            if (on)
+                mask |= (uint16_t)(1u << (n.pitch % 12));
+        }
+    }
+    return mask;
+}
+
+void generateAcid(Sequencer::strPattern* p, int track, const AcidOptions& o)
+{
+    if (!validTrack(track) || p == nullptr)
+        return;
 
     TrackSettings s = getSettings(p, track);
-    int root = s.baseNote >= 24 ? s.baseNote - 24 : s.baseNote; // bass register
+    int center = s.baseNote >= 24 ? s.baseNote - 24 : s.baseNote; // bass register
+    int steps = trackSteps(p, track);
+    uint16_t anyMask = pitchClassesAt(p, track, 0, true);
 
-    // minor pentatonic with the root and octave weighted up
-    static const int8_t kScale[10] = { 0, 0, 0, 12, 12, 3, 5, 7, 10, -2 };
+    clearNotes(p, track);
 
-    lengthSteps = clampInt(lengthSteps, 1, Sequencer::MAXSTEP + 1);
-    for (int step = 0; step < lengthSteps; step++)
+    int prevIdx = -1;
+    int density = clampInt(o.density, 1, 10) * 10;
+    for (int step = 0; step < steps; step++)
     {
-        if (!percent(72))
-            continue; // rest
+        if (!percent(density))
+            continue;
+
+        int pitch = center;
+        if (o.notes == AcidNotes::Pick && o.pickedCount > 0)
+        {
+            pitch = o.picked[nextRandom() % o.pickedCount];
+        }
+        else
+        {
+            uint16_t mask = pitchClassesAt(p, track, step * kTicksPerStep, false);
+            if (mask == 0)
+                mask = anyMask;
+            if (mask == 0)
+            {
+                // nothing to follow: minor pentatonic on the base note
+                int root = center % 12;
+                static const int kPenta[5] = { 0, 3, 5, 7, 10 };
+                for (int k = 0; k < 5; k++)
+                    mask |= (uint16_t)(1u << ((root + kPenta[k]) % 12));
+            }
+            int classes[12], nc = 0;
+            for (int pc = 0; pc < 12; pc++)
+                if (mask & (1u << pc))
+                    classes[nc++] = pc;
+            int pc = classes[nextRandom() % (uint32_t)nc];
+            // the octave that lands closest to the bass register
+            pitch = center - ((center - pc) % 12 + 12) % 12;
+            if (center - pitch > 6)
+                pitch += 12;
+            if (percent(15))
+                pitch += 12;
+        }
+
         Note n{};
         n.start = (uint16_t)(step * kTicksPerStep);
-        n.pitch = (uint8_t)clampInt(root + kScale[nextRandom() % 10], 0, 127);
-        n.velocity = percent(30) ? 127 : 84;                     // accent
-        n.length = percent(28) ? (uint16_t)(kTicksPerStep + 12)  // slide: overlaps the next step
-                               : (uint16_t)(kTicksPerStep / 2);
-        if (addNote(p, track, n) < 0)
+        n.length = (uint16_t)(kTicksPerStep / 2);
+        n.pitch = (uint8_t)clampInt(pitch, 0, 127);
+        bool accent = percent(clampInt(o.accent, 0, 10) * 10);
+        n.velocity = accent ? 118 : 88;
+        if (accent)
+            n.flags |= kNoteFlagAccent;
+        if (percent(clampInt(o.envelope, 0, 10) * 10))
+            setNoteEnv(n, 1 + (int)(nextRandom() % 15));
+
+        if (prevIdx >= 0 && percent(clampInt(o.slide, 0, 10) * 10))
+        {
+            // slide: the note before is held into this one and this one glides
+            Note prev = getNote(p, track, prevIdx);
+            prev.length = (uint16_t)(n.start - prev.start + kTicksPerStep / 8);
+            setNote(p, track, prevIdx, prev);
+            n.flags |= kNoteFlagSlide;
+        }
+
+        int idx = addNote(p, track, n);
+        if (idx < 0)
             break;
+        prevIdx = idx;
     }
+}
+
+int renderArp(Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr)
+        return 0;
+    TrackSettings s = getSettings(p, track);
+    if (s.arpMode == kArpOff)
+        return 0;
+
+    int srcSteps = trackSteps(p, track);
+    int outSteps = srcSteps < 64 ? 64 : srcSteps;
+    int srcTicks = srcSteps * kTicksPerStep;
+    int masterTicks = masterSteps(p) * kTicksPerStep; // the track restarts with the pattern
+    int outTicks = outSteps * kTicksPerStep;
+    int rate = kArpRateTicks[s.arpRate];
+
+    // copy of the source notes (they are replaced below)
+    int count = noteCount(p, track);
+    Note src[kMaxNotes];
+    for (int i = 0; i < count; i++)
+        src[i] = getNote(p, track, i);
+
+    Note out[kMaxNotes];
+    int outCount = 0;
+    ArpState a{};
+    for (int tick = 0; tick < outTicks && outCount < kMaxNotes; tick++)
+    {
+        ArpOut o;
+        if (arpCountdown(a, o) && outCount < kMaxNotes)
+        {
+            Note n{};
+            n.start = (uint16_t)tick;
+            n.length = (uint16_t)clampInt(o.gate, 1, 0x7FFF);
+            n.pitch = o.pitch;
+            n.velocity = o.velocity;
+            out[outCount++] = n;
+        }
+        int t = (tick % masterTicks) % srcTicks;
+        for (int i = 0; i < count; i++)
+        {
+            if (src[i].start != t || src[i].length == 0)
+                continue;
+            int chance = src[i].chance();
+            if (chance < 100 && !percent(chance))
+                continue;
+            addHeld(a, src[i].pitch, src[i].velocity ? src[i].velocity : 100, src[i].length);
+        }
+        if (a.heldCount > 0 && tick % rate == 0 && arpStep(a, s, (uint32_t)tick, o) && outCount < kMaxNotes)
+        {
+            Note n{};
+            n.start = (uint16_t)tick;
+            n.length = (uint16_t)o.gate;
+            n.pitch = o.pitch;
+            n.velocity = o.velocity;
+            out[outCount++] = n;
+        }
+    }
+    if (outCount == 0)
+        return 0;
+
+    clearNotes(p, track);
+    for (int i = 0; i < outCount; i++)
+        addNote(p, track, out[i]);
+    s.arpMode = kArpOff;
+    s.apeOn = false;
+    setSettings(p, track, s);
+    setTrackSteps(p, track, outSteps);
+    return outCount;
+}
+
+void setLiveMetronome(bool on)
+{
+    s_liveMetronome = on;
+}
+
+bool liveMetronome()
+{
+    return s_liveMetronome;
 }
 
 Sequencer::strPattern* current()
@@ -834,9 +1291,17 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     ensureInit();
     if (!validTrack(track))
         return;
+    (void)patternTicks;
 
     TrackPlayState& st = playState[track];
-    s_playTick[track] = tickInPattern;
+    uint32_t runTick = st.runTicks++;
+
+    const Sequencer::strPattern* p = current();
+    Header h;
+    bool has = readHeader(p, track, h);
+    int trackTicks = effectiveSteps(p, track, has ? &h : nullptr) * kTicksPerStep;
+    int tick = tickInPattern % trackTicks;
+    s_playTick[track] = tick;
 
     // 1. count down / release sounding notes and held arp notes
     for (auto& a : st.notes)
@@ -847,33 +1312,24 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         if (a.remaining <= 0)
             releaseActive(track, a);
     }
-    for (int i = st.heldCount - 1; i >= 0; i--)
-    {
-        if (--st.held[i].remaining <= 0)
-            removeHeldAt(st, i);
-    }
-
     bool muted = mtProject.values.trackMute[track] != 0;
 
-    // 2. second hit of a Go Ape double
-    if (st.ratchetIn > 0 && --st.ratchetIn == 0 && !muted)
-    {
-        startNote(track, st, st.ratchetInstrument, st.ratchetPitch, st.ratchetVel, st.ratchetGate, false);
-    }
+    ArpOut ratchet;
+    bool ratchetNow = arpCountdown(st.arp, ratchet);
 
-    if (muted)
-        return;
-
-    const Sequencer::strPattern* p = current();
-    Header h;
-    if (!readHeader(p, track, h))
+    if (muted || !has)
         return;
 
     const uint8_t* raw = rawBytes(p, track);
     TrackSettings settings = decodeSettings(raw + kSlotSettings * kSlotBytes, h);
+    settings.apeSeed = readExtras(raw).seed;
     uint8_t instrument = instrumentOrDefault(h.sound, track);
     bool drum = !(h.flags & kHeaderFlagMelodic);
     bool arp = settings.arpMode != kArpOff;
+
+    // 2. second hit of a Go Ape double
+    if (ratchetNow && arp)
+        startNote(track, st, instrument, ratchet.pitch, ratchet.velocity, ratchet.gate, false);
 
     // 3. notes that begin on this micro step
     const uint8_t* base = raw + kSlotNotes * kSlotBytes;
@@ -881,7 +1337,7 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     {
         Note n;
         memcpy(&n, base + i * sizeof(Note), sizeof(Note));
-        if (n.start != tickInPattern || n.start >= patternTicks || n.length == 0)
+        if (n.start != tick || n.length == 0)
             continue;
 
         int chance = n.chance();
@@ -891,28 +1347,23 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         uint8_t velocity = n.velocity ? n.velocity : 100;
         if (arp)
         {
-            if (st.heldCount < kMaxHeld)
-            {
-                if (st.heldCount == 0)
-                    st.arpIdx = 0;
-                HeldNote& hn = st.held[st.heldCount++];
-                hn.pitch = n.pitch;
-                hn.velocity = velocity;
-                hn.remaining = (int16_t)clampInt(n.length, 1, 0x7FFF);
-            }
+            addHeld(st.arp, n.pitch, velocity, n.length);
         }
         else
         {
             // drum hits of up to one step ring out; longer notes are gated
             bool oneShot = drum && n.length <= kTicksPerStep;
-            startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot);
+            startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
         }
     }
 
-    // 4. arpeggiator clock, locked to the pattern grid
-    if (arp && st.heldCount > 0 && (tickInPattern % kArpRateTicks[settings.arpRate]) == 0)
+    // 4. arpeggiator clock: from the start of playback, so Go Ape sequences
+    //    line up with the bars
+    ArpOut o;
+    if (arp && st.arp.heldCount > 0 && (runTick % kArpRateTicks[settings.arpRate]) == 0 &&
+        arpStep(st.arp, settings, runTick, o))
     {
-        arpStep(track, st, settings, instrument);
+        startNote(track, st, instrument, o.pitch, o.velocity, o.gate, false);
     }
 }
 
@@ -925,15 +1376,18 @@ void stopTrack(int track)
     for (auto& a : st.notes)
         if (a.remaining >= 0)
             releaseActive(track, a);
-    st.heldCount = 0;
-    st.ratchetIn = 0;
+    st.arp.heldCount = 0;
+    st.arp.ratchetIn = 0;
 }
 
 void stopAll()
 {
     ensureInit();
     for (int t = 0; t < kTracks; t++)
+    {
         stopTrack(t);
+        playState[t].runTicks = 0; // the next playback starts its arp cycle fresh
+    }
 
     // silence every sample voice we started (ringing one-shots, loops)
     for (int v = 0; v < kTracks; v++)
@@ -1063,7 +1517,7 @@ bool liveRecordOn(int track, const uint8_t* pitches, int count, uint8_t velocity
     if (!validTrack(track) || pitches == nullptr || count <= 0 || !sequencer.isPlay())
         return false;
     Sequencer::strPattern* p = current();
-    int patternTicks = (p->track[track].length + 1) * kTicksPerStep;
+    int patternTicks = trackSteps(p, track) * kTicksPerStep;
     int tick = clampInt(s_playTick[track], 0, patternTicks - 1);
 
     bool any = false;
@@ -1087,7 +1541,7 @@ void liveRecordOff(int track, const uint8_t* pitches, int pitchCount)
     if (!validTrack(track))
         return;
     Sequencer::strPattern* p = current();
-    int patternTicks = (p->track[track].length + 1) * kTicksPerStep;
+    int patternTicks = trackSteps(p, track) * kTicksPerStep;
     int now = clampInt(s_playTick[track], 0, patternTicks - 1);
     int count = noteCount(p, track);
     for (int i = 0; i < count; i++)

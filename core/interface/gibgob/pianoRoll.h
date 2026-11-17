@@ -23,6 +23,15 @@ class cPianoRoll : public ModuleBase
         Move,    // notes selected: d-pad moves them
     };
 
+    enum class Menu : uint8_t
+    {
+        None,
+        Quantize, // Shift + Note
+        Acid,     // Shift + Instr
+        Picker,   // note picker, opened from the Acid menu
+        Arp,      // Shift + FX1
+    };
+
     virtual void update();
     virtual void start(uint32_t options); // options = track index
     virtual void stop();
@@ -59,6 +68,24 @@ class cPianoRoll : public ModuleBase
     int selectionCount();
     bool padsMode(); // sliced sample: the top row plays slices instead of chords
     int chordNoteCount();
+    int findEditNote(int tick, int pitch); // note under the cursor (start within +-10, or covering)
+
+    // menus
+    void openMenu(Menu m);
+    void closeMenu(bool apply);
+    void refreshMenu();
+    void menuMove(int dCol, int dRow);
+    void menuChange(int delta, bool big);
+    void menuMiddle();
+    void menuTopButton(int button);
+    void pickerToggle();
+
+    Menu menu = Menu::None;
+    int quantCol = 0;            // 0 = Quantize, 1 = Humanize
+    int quantAmount[2] = { 10, 4 };
+    gibgob::AcidOptions acid;
+    gibgob::TrackSettings arpBackup;
+    uint8_t pickerMask[16] = { 0 };
 
     int track = 0;
     int chordSlot = -1; // palette slot of the ghost chord, -1 = single note

@@ -5,8 +5,9 @@
 #include "gibgob/TableControl.h"
 
 // GibGob OS settings pages: one module, two pages.
-//   Track page   : type, sound, base note, pattern length, arp, Go Ape + tools
-//   Chord palette: the 16 chords on the top-row buttons (2 banks of 8)
+//   Track page   : type, sound (load samples), base note, length
+//   Chord palette: the 16 chords on the top-row buttons (2 banks of 8);
+//                  shown as the 3rd page of the synth parameters
 class cGibGobPages : public ModuleBase
 {
   public:
@@ -19,6 +20,7 @@ class cGibGobPages : public ModuleBase
     {
         kFromHome = 0,
         kFromPianoRoll = 1,
+        kFromInstrumentEditor = 2, // chord palette as the 3rd synth-parameters page
     };
     static uint32_t makeOptions(Page page, Origin origin, int track)
     {
@@ -39,6 +41,9 @@ class cGibGobPages : public ModuleBase
     void topButton(int button, bool pressed);
     void goBack();
     void switchPage(Page newPage);
+    void pressMiddle();
+    void loadSample();
+    void backToInstrumentEditor();
 
     Page page = kPageTrack;
     Origin origin = kFromHome;

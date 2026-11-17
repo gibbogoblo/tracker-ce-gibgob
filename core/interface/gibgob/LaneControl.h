@@ -14,6 +14,8 @@ struct LaneInfo
     bool melodic;
     bool muted;
     bool sounding;
+    int steps = 16;    // this track's length
+    int playhead = -1; // micro steps inside the track, -1 = stopped
 };
 
 // Everything the main sequencer screen needs to draw one frame.
@@ -28,7 +30,7 @@ struct LaneView
 
     int cursorTrack = 0;
     int cursorTick = 0;
-    int playheadTick = -1; // -1 = stopped
+    bool nameCursor = false; // cursor is on the track name column
     bool shift = false;
 
     char title[56] = { 0 };

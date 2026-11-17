@@ -25,7 +25,7 @@ constexpr int kGridTop = kInfoY + kInfoH + 3;
 constexpr int kGridBottom = kBottomBarY - 5;
 constexpr int kGridX1 = kKeyW;
 constexpr int kGridX2 = kScreenW - 6;
-constexpr int kReserve = 70; // words kept for ghost, box, cursor, playhead, border
+constexpr int kReserve = 120; // words kept for ghost, box, cursor, playhead, border
 
 inline bool isBlackKey(int pitch)
 {
@@ -115,8 +115,10 @@ void PianoRollControl::update()
         draw::rect(x, gy1, kGridX2, gy2);
     }
 
+    const bool overlayOpen = view->menu.active || view->picker.active;
+
     // ---- grid lines ----
-    if (cellW >= 8)
+    if (cellW >= 8 && !overlayOpen)
     {
         draw::color(kGridStep);
         for (int s = firstTick / kTicksPerStep; s * kTicksPerStep <= lastTick; s++)
@@ -128,7 +130,7 @@ void PianoRollControl::update()
                 draw::rect(x, gy1, x, gy2);
         }
     }
-    if (rh >= 8)
+    if (rh >= 8 && !overlayOpen)
     {
         draw::color(kGridStep);
         for (int r = 1; r < rows; r++)
@@ -159,17 +161,18 @@ void PianoRollControl::update()
     }
 
     // key labels: when rows get small only the C notes are named
+    const bool fewLabels = rh < 14 || overlayOpen;
     draw::color(color::kTextDark);
     for (int r = 0; r < rows; r++)
     {
         int pitch = view->topPitch - r;
         if (pitch < 0 || pitch > 127 || isBlackKey(pitch))
             continue;
-        if (rh < 14 && pitch % 12 != 0)
+        if (fewLabels && pitch % 12 != 0)
             continue;
         draw::text(6, gy1 + r * rh + rh / 2, fRegular, OPT_CENTERY, mtNotes[pitch]);
     }
-    if (rh >= 14)
+    if (!fewLabels)
     {
         draw::color(color::kText);
         for (int r = 0; r < rows; r++)
@@ -185,8 +188,10 @@ void PianoRollControl::update()
     drawInfoStrip(view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
     drawBottomBar(view->bar, fBold);
 
+    const bool overlay = view->menu.active || view->picker.active;
+
     // ---- notes: selected rims first, then bodies in three brightness passes ----
-    if (view->pattern)
+    if (view->pattern && !overlay)
     {
         int count = noteCount(view->pattern, view->track);
 
@@ -245,7 +250,7 @@ void PianoRollControl::update()
     // ---- ghost notes ----
     int gs = view->cursorTick + view->ghostNudge;
     int ge = gs + view->ghostLength;
-    if (view->showGhost)
+    if (view->showGhost && !overlay)
     {
         draw::color(color::kSelect);
         draw::alpha(80);
@@ -316,6 +321,126 @@ void PianoRollControl::update()
             y2 = y1 + 6;
         draw::color(color::kSelect);
         draw::frame(x1, y1, x2, y2, 2);
+    }
+
+    // ---- menu / note picker on top ----
+    if (view->picker.active)
+    {
+        const PickerView& pk = view->picker;
+        const int x0 = 20, x1 = kScreenW - 20, y0 = 120, y1 = 330;
+        draw::color(color::kPanel);
+        draw::rect(x0 - 10, y0 - 50, x1 + 10, y1 + 40);
+        int keyW = (x1 - x0) / pk.keys;
+        for (int k = 0; k < pk.keys; k++)
+        {
+            int pitch = pk.firstPitch + k;
+            if (pitch > 127)
+                break;
+            bool black = isBlackKey(pitch);
+            bool picked = (pk.mask[pitch >> 3] >> (pitch & 7)) & 1;
+            int kx = x0 + k * keyW;
+            uint32_t col = picked ? color::kInstrBtn : (black ? kKeyBlack : kKeyWhite);
+            draw::color(col);
+            draw::rect(kx + 1, black ? y0 : y0 + 30, kx + keyW - 2, y1);
+        }
+        int ck = pk.cursor - pk.firstPitch;
+        if (ck >= 0 && ck < pk.keys)
+        {
+            int kx = x0 + ck * keyW;
+            draw::color(color::kRec);
+            draw::frame(kx - 1, y0 - 4, kx + keyW, y1 + 4, 3);
+        }
+        draw::color(color::kText);
+        draw::text(x0, y0 - 30, fBold, OPT_CENTERY, "Pick notes for the acid line");
+        draw::text(x1, y0 - 30, fBold, OPT_CENTERY | OPT_RIGHTX, mtNotes[pk.cursor < 0 ? 0 : (pk.cursor > 127 ? 127 : pk.cursor)]);
+        draw::color(color::kTextDark);
+        for (int k = 0; k < pk.keys; k++)
+        {
+            int pitch = pk.firstPitch + k;
+            if (pitch > 127 || pitch % 12 != 0)
+                continue;
+            draw::text(x0 + k * keyW + 2, y1 - 12, fRegular, OPT_CENTERY, mtNotes[pitch]);
+        }
+        draw::color(color::kTextDim);
+        draw::text(x0, y1 + 22, fRegular, OPT_CENTERY,
+                   "Left/Right: move   Up/Down: octave   Middle: pick / unpick   7: Apply   8: Back");
+    }
+    else if (view->menu.active)
+    {
+        const PianoMenuView& m = view->menu;
+        const int x0 = 140, x1 = kScreenW - 140;
+        const int rowH = 30;
+        const int top = 96;
+        int bodyRows = m.cols == 2 ? 2 : m.rows;
+        int y1 = top + 40 + bodyRows * rowH + 34;
+        draw::color(color::kPanel);
+        draw::rect(x0, top, x1, y1);
+        draw::color(m.accent);
+        draw::rect(x0, top, x1, top + 3);
+
+        if (m.cols == 2)
+        {
+            int colW = (x1 - x0 - 30) / 2;
+            for (int c2 = 0; c2 < 2; c2++)
+            {
+                int cx = x0 + 10 + c2 * (colW + 10);
+                bool colSel = (c2 == m.colCursor);
+                // title row
+                int ty = top + 40;
+                if (colSel && m.cursor < 0)
+                {
+                    draw::color(m.accent);
+                    draw::rect(cx, ty, cx + colW, ty + rowH - 4);
+                }
+                else if (colSel)
+                {
+                    draw::color(scaleColor(m.accent, 40, 100));
+                    draw::rect(cx, ty, cx + colW, ty + rowH - 4);
+                }
+                // value row
+                int vy = ty + rowH;
+                if (colSel && m.cursor >= 0)
+                {
+                    draw::color(m.accent);
+                    draw::rect(cx, vy, cx + colW, vy + rowH - 4);
+                }
+            }
+            for (int c2 = 0; c2 < 2; c2++)
+            {
+                int cx = x0 + 10 + c2 * (colW + 10);
+                bool colSel = (c2 == m.colCursor);
+                int ty = top + 40;
+                draw::color((colSel && m.cursor < 0) ? color::kTextDark : color::kText);
+                draw::text(cx + 8, ty + (rowH - 4) / 2, fBold, OPT_CENTERY, m.colTitle[c2]);
+                int vy = ty + rowH;
+                draw::color((colSel && m.cursor >= 0) ? color::kTextDark : color::kText);
+                draw::text(cx + 8, vy + (rowH - 4) / 2, fRegular, OPT_CENTERY, m.row[c2].label);
+                draw::text(cx + colW - 8, vy + (rowH - 4) / 2, fBold, OPT_CENTERY | OPT_RIGHTX, m.row[c2].value);
+            }
+        }
+        else
+        {
+            for (int r = 0; r < m.rows; r++)
+            {
+                if (r != m.cursor)
+                    continue;
+                int ry = top + 40 + r * rowH;
+                draw::color(m.accent);
+                draw::rect(x0 + 10, ry, x1 - 10, ry + rowH - 4);
+            }
+            for (int r = 0; r < m.rows; r++)
+            {
+                int ry = top + 40 + r * rowH + (rowH - 4) / 2;
+                bool cur = (r == m.cursor);
+                draw::color(cur ? color::kTextDark : (m.row[r].isAction ? m.accent : color::kText));
+                draw::text(x0 + 20, ry, m.row[r].isAction || cur ? fBold : fRegular, OPT_CENTERY, m.row[r].label);
+                draw::text(x1 - 20, ry, fBold, OPT_CENTERY | OPT_RIGHTX, m.row[r].value);
+            }
+        }
+        draw::color(color::kText);
+        draw::text(x0 + 12, top + 20, fBold, OPT_CENTERY, m.title);
+        draw::color(color::kTextDim);
+        draw::text(x0 + 12, y1 - 16, fRegular, OPT_CENTERY, m.hint);
     }
 
     if (view->shift)

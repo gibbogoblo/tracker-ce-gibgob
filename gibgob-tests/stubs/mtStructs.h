@@ -7,11 +7,12 @@ static constexpr uint8_t kSampleInstrumentsCount = 48;
 static constexpr uint8_t kMidiInstrumentsCount = 16;
 static constexpr uint8_t kSynthInstrumentsCount = 3;
 static constexpr uint8_t kTotalInstrumentsCount = 67;
-struct strInstrument { uint8_t isActive; };
+enum filterType { lowPass, highPass, bandPass };
+struct strInstrument { uint8_t isActive; struct { char file_name[32]; } sample; float cutOff = 1.0f; uint8_t filterType = 0; uint8_t filterEnable = 0; uint8_t playMode = 0; };
 struct strMtProject
 {
     strInstrument instrument[kSampleInstrumentsCount];
-    struct { uint8_t trackMute[8]; } values;
+    struct { uint8_t trackMute[8]; char TrackNames[8][21]; } values;
 };
 extern strMtProject mtProject;
 extern const char mtNotes[128][5];

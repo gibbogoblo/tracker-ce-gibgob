@@ -4,6 +4,12 @@
 #include "core/interface.h"
 #include "core/interfaceDefs.h"
 #include "core/modulesBase.h"
+#include "elapsedMillis.h"
+#include "fileManager.h"
+#include "gibgob/MelodicTrack.h"
+#include "mtStructs.h"
+
+#include <stdio.h>
 
 #include <string.h>
 
@@ -13,10 +19,119 @@ namespace gibgob
 bool g_shiftLatched = false;
 bool g_recArmed = false;
 
+static elapsedMillis s_uiClock;
+static uint32_t s_shiftPressedAt = 0;
+static uint32_t s_lastToggleAt = 0;
+static bool s_shiftDown = false;
+
 bool shiftActive()
 {
-    return g_shiftLatched ||
-           mtInterface.getPlatform()->getButtons()->isButtonPressed(interfaceButtonShift);
+    return g_shiftLatched;
+}
+
+bool shiftButton(uint8_t state)
+{
+    constexpr uint32_t kTapMs = 400;      // longer = held for something else
+    constexpr uint32_t kDebounceMs = 250; // ignore the button's double click
+    uint32_t now = (uint32_t)s_uiClock;
+
+    if (state == buttonPress)
+    {
+        if (now - s_lastToggleAt < kDebounceMs)
+            return false; // bounce of the last press
+        s_shiftDown = true;
+        s_shiftPressedAt = now;
+        return false;
+    }
+    if (state == buttonRelease && s_shiftDown)
+    {
+        s_shiftDown = false;
+        if (now - s_shiftPressedAt < kTapMs)
+        {
+            g_shiftLatched = !g_shiftLatched;
+            s_lastToggleAt = now;
+            return true;
+        }
+    }
+    return false;
+}
+
+void setRecArmed(bool on)
+{
+    g_recArmed = on;
+    setLiveMetronome(on);
+}
+
+uint8_t physFx1Button()
+{
+    return interfaceButtonFx2;
+}
+
+uint8_t physFx2Button()
+{
+    return interfaceButtonFx1;
+}
+
+static int s_lastEditKind = -1;
+static uint32_t s_lastEditAt = 0;
+
+void beginEdit(int kind)
+{
+    uint32_t now = (uint32_t)s_uiClock;
+    if (kind == s_lastEditKind && now - s_lastEditAt < 1500)
+    {
+        s_lastEditAt = now;
+        return;
+    }
+    s_lastEditKind = kind;
+    s_lastEditAt = now;
+    newFileManager.storePatternUndoRevision();
+}
+
+void undoEdit()
+{
+    stopAll();
+    s_lastEditKind = -1;
+    newFileManager.undoPattern();
+}
+
+void trackDisplayName(int track, char* out, int outLen)
+{
+    if (outLen <= 0)
+        return;
+    out[0] = 0;
+    if (track < 0 || track >= kTracks)
+        return;
+    const char* name = mtProject.values.TrackNames[track];
+    char def[12];
+    snprintf(def, sizeof(def), "Track %d", track + 1);
+    if (name[0] != 0 && strcmp(name, def) != 0)
+    {
+        snprintf(out, (size_t)outLen, "%s", name);
+        return;
+    }
+    uint8_t sound = getSound(current(), track);
+    if (isSampleInstrument(sound))
+    {
+        const strInstrument& in = mtProject.instrument[sound];
+        if (in.isActive && in.sample.file_name[0])
+        {
+            int n = 0;
+            while (n < outLen - 1 && n < 31 && in.sample.file_name[n] && in.sample.file_name[n] != '.')
+            {
+                out[n] = in.sample.file_name[n];
+                n++;
+            }
+            out[n] = 0;
+            return;
+        }
+        snprintf(out, (size_t)outLen, "Track %d", track + 1);
+        return;
+    }
+    if (isSynthInstrument(sound))
+        snprintf(out, (size_t)outLen, "Synth %d", instrumentIdxToMidiChannel(sound));
+    else
+        snprintf(out, (size_t)outLen, "MIDI %d", instrumentIdxToMidiChannel(sound));
 }
 
 void bindModuleSwitchButtons(InputProcessor* ip, void (*switchFunct)(uint8_t))
@@ -52,6 +167,7 @@ namespace
 {
 int s_budget = 0;
 int s_used = 0;
+int s_skipped = 0;
 bool s_inRects = false;
 bool s_haveColor = false;
 uint32_t s_color = 0;
@@ -62,6 +178,7 @@ void begin(int budgetWords)
 {
     s_budget = budgetWords;
     s_used = 2;
+    s_skipped = 0;
     s_inRects = false;
     s_haveColor = false;
     s_alpha = 255;
@@ -74,9 +191,17 @@ int used()
     return s_used;
 }
 
+int skipped()
+{
+    return s_skipped;
+}
+
 bool room(int words)
 {
-    return s_used + words <= s_budget;
+    if (s_used + words <= s_budget)
+        return true;
+    s_skipped++;
+    return false;
 }
 
 void color(uint32_t c)

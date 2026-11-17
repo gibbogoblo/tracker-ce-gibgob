@@ -10,10 +10,11 @@ class cGibGobHome : public ModuleBase
   public:
     enum Param : uint8_t
     {
-        kParamProb = 0, // Note button  (green)
-        kParamVelocity, // Instr button (yellow)
-        kParamNudge,    // FX1 button   (purple)
-        kParamPitch,    // FX2 button   (light blue)
+        kParamLength = 0, // Note button  (green): track length
+        kParamVelocity,   // Instr button (yellow)
+        kParamNudge,      // FX1 button   (purple)
+        kParamPitch,      // FX2 button   (light blue)
+        kParamTempo,      // Shift + FX1: BPM
         kParamCount
     };
 
@@ -30,10 +31,12 @@ class cGibGobHome : public ModuleBase
     void moveCursor(int dStep, int dTrack);
     void pressMiddle();
     void pressDelete();
-    void changeParam(int delta);
+    void pressInsert();
+    void changeParam(int delta, bool big);
     void changeLength(int delta);
     void changeZoom(int delta);
     void changeSound(int dir);
+    void changeTempo(float delta);
     void changePattern(int delta);
     void toggleMute(int track);
     void trackButton(int track, bool pressed);
@@ -44,13 +47,12 @@ class cGibGobHome : public ModuleBase
     int cellNotes(int* out, int maxOut);
 
     int cursorTrack = 0;
-    int cursorStep = 0;
+    int cursorStep = 0; // -1 = on the track name column
     int stepsVisible = 16;
-    uint8_t param = kParamProb;
+    uint8_t param = kParamVelocity;
 
     // defaults for new steps
     int velocity = 100;
-    int chance = 100;
     int nudge = 0;
     int lengthTicks = 48;
 
@@ -65,7 +67,7 @@ class cGibGobHome : public ModuleBase
     gibgob::LaneView view;
     hControl grid = -1;
     char titleText[40];
-    char barText[8][10];
+    char barText[8][14];
 };
 
 extern cGibGobHome gibgobHome;
