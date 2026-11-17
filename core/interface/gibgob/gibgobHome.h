@@ -14,9 +14,16 @@ class cGibGobHome : public ModuleBase
         kParamVelocity,   // Instr button (yellow)
         kParamNudge,      // FX1 button   (purple)
         kParamPitch,      // FX2 button   (light blue)
-        kParamTempo,      // Shift + FX1: BPM
-        kParamSwing,      // Shift + FX2: swing
         kParamCount
+    };
+
+    // what +/- edit while Shift is on (until Shift is turned off)
+    enum class ShiftParam : uint8_t
+    {
+        None,       // small +/- = sound, big +/- = zoom
+        GlobalLen,  // Shift + Note: length of every track
+        Tempo,      // Shift + FX1
+        Swing,      // Shift + FX2
     };
 
     virtual void update();
@@ -40,6 +47,8 @@ class cGibGobHome : public ModuleBase
     void changeTempo(float delta);
     void changeSwing(int delta);
     void setTrackTypeHere(bool melodic);
+    void changeGlobalLength(int delta, bool big);
+    void insertNote();
     void changePattern(int delta);
     void toggleMute(int track);
     void trackButton(int track, bool pressed);
@@ -53,6 +62,10 @@ class cGibGobHome : public ModuleBase
     int cursorStep = 0; // -1 = on the track name column
     int stepsVisible = 16;
     uint8_t param = kParamVelocity;
+    ShiftParam shiftParam = ShiftParam::None;
+    bool lastShift = false;
+    uint32_t blinkAt = 0;
+    bool blinkOn = false;
 
     // defaults for new steps
     int velocity = 100;

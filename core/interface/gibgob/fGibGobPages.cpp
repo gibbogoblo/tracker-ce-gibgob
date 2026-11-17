@@ -37,14 +37,22 @@ using namespace gibgob;
 
 enum TrackRow
 {
-    kRowType = 0,
+    kRowName = 0,
+    kRowType,
     kRowSound,
     kRowBaseNote,
     kRowLength,
     kTrackRowCount
 };
 
-static const char* const kTrackRowNames[kTrackRowCount] = { "Track type", "Sound", "Base note", "Length" };
+static const char* const kTrackRowNames[kTrackRowCount] = { "Name", "Track type", "Sound", "Base note", "Length" };
+static constexpr int kTrackNameMax = 12;
+
+// renaming with the on-screen keyboard
+static bool s_naming = false;
+static void startNaming();
+static void finishNaming(bool save);
+static void setNamingFunct();
 
 enum EditKind
 {
@@ -133,6 +141,11 @@ void cGibGobPages::start(uint32_t options)
 
 void cGibGobPages::stop()
 {
+    if (s_naming)
+    {
+        keyboardManager.deactivateKeyboard();
+        s_naming = false;
+    }
     auditionOff(track);
     auditioning = false;
     s_auditionOffAt = 0;
@@ -214,6 +227,8 @@ void cGibGobPages::refresh()
         }
 
         char name[20];
+        trackDisplayName(track, name, sizeof(name));
+        snprintf(view.cell[kRowName][1], 20, "%.19s", name);
         gibgobSoundName(getSound(p, track), name, sizeof(name));
         snprintf(view.cell[kRowType][1], 20, "%s", melodic ? "Melodic" : "Drum");
         snprintf(view.cell[kRowSound][1], 20, "%.19s", name);
@@ -225,8 +240,26 @@ void cGibGobPages::refresh()
             snprintf(view.mode, sizeof(view.mode), "LOADING");
             view.modeColor = color::kInstrBtn;
         }
-        snprintf(view.title, sizeof(view.title), row == kRowSound ? "Track %d   Middle: load a sample" : "Track %d",
+        snprintf(view.title, sizeof(view.title),
+                 row == kRowSound  ? "Track %d   Middle: load a sample"
+                 : row == kRowName ? "Track %d   Middle: rename"
+                                   : "Track %d",
                  track + 1);
+        if (s_naming)
+        {
+            snprintf(view.title, sizeof(view.title), "Rename track %d", track + 1);
+            static const char* const kKeys[8] = { "Enter", "", "", "", "", "", "Cancel", "Save" };
+            for (int i = 0; i < 8; i++)
+            {
+                view.bar.text[i] = kKeys[i];
+                view.bar.fill[i] = 0;
+                view.bar.highlighted[i] = false;
+            }
+            view.keyboard = true;
+            display.refreshControl(table);
+            return;
+        }
+        view.keyboard = false;
 
         // bottom bar: the 8 tracks
         for (int i = 0; i < 8; i++)
@@ -356,7 +389,8 @@ void cGibGobPages::loadSample()
     snprintf(title, sizeof(title), "Load sample onto track %d", track + 1);
     cfg.title = title;
     cfg.contextKey = "gibgob_track_wav";
-    cfg.initialDirectory = "/Samples";
+    cfg.initialDirectory = "/Instruments";
+    cfg.rememberLastPath = false; // always start in /Instruments
     cfg.extensionFilter = ".wav";
     cfg.returnModule = this;
     cfg.returnModuleOptions = makeOptions(kPageTrack, origin, track);
@@ -393,6 +427,91 @@ void cGibGobPages::pressMiddle()
 {
     if (page == kPageTrack && row == kRowSound)
         loadSample();
+    else if (page == kPageTrack && row == kRowName)
+        startNaming();
+}
+
+// ---------------------------------------------------------------------------
+// renaming
+
+static void namingEnter()
+{
+    GP->keyboardManager.confirmKey();
+}
+static void namingLeft()
+{
+    GP->keyboardManager.makeMove('a');
+}
+static void namingRight()
+{
+    GP->keyboardManager.makeMove('d');
+}
+static void namingUp()
+{
+    GP->keyboardManager.makeMove('w');
+}
+static void namingDown()
+{
+    GP->keyboardManager.makeMove('s');
+}
+static void namingBackspace()
+{
+    GP->keyboardManager.makeBackspace();
+}
+static void namingCancel()
+{
+    finishNaming(false);
+}
+static void namingSave()
+{
+    finishNaming(true);
+}
+
+static void setNamingFunct()
+{
+    InputProcessor* ip = GP->ip;
+    ip->clearAllButtons();
+    ip->clearAllPots();
+    ip->setButtonObj(interfaceButtonLeft, buttonPress, namingLeft);
+    ip->setButtonObj(interfaceButtonRight, buttonPress, namingRight);
+    ip->setButtonObj(interfaceButtonUp, buttonPress, namingUp);
+    ip->setButtonObj(interfaceButtonDown, buttonPress, namingDown);
+    ip->setButtonObj(interfaceButton0, buttonPress, namingEnter);
+    ip->setButtonObj(interfaceButtonMiniMiddle, buttonPress, namingEnter);
+    ip->setButtonObj(interfaceButtonInsert, buttonPress, namingEnter);
+    ip->setButtonObj(interfaceButtonDelete, buttonPress, namingBackspace);
+    ip->setButtonObj(interfaceButton6, buttonPress, namingCancel);
+    ip->setButtonObj(interfaceButton7, buttonPress, namingSave);
+}
+
+static void startNaming()
+{
+    char name[kTrackNameMax + 8];
+    trackDisplayName(GP->track, name, sizeof(name));
+    name[kTrackNameMax] = 0;
+    GP->keyboardManager.fillName(name);
+    GP->keyboardManager.activateKeyboard(kTrackNameMax);
+    s_naming = true;
+    setNamingFunct();
+    GP->refresh();
+}
+
+static void finishNaming(bool save)
+{
+    if (save)
+    {
+        int t = GP->track;
+        const char* name = GP->keyboardManager.getName();
+        if (name == nullptr || name[0] == 0)
+            snprintf(mtProject.values.TrackNames[t], sizeof(mtProject.values.TrackNames[t]), "Track %d", t + 1);
+        else
+            snprintf(mtProject.values.TrackNames[t], sizeof(mtProject.values.TrackNames[t]), "%.12s", name);
+        newFileManager.setProjectStructChanged();
+    }
+    GP->keyboardManager.deactivateKeyboard();
+    s_naming = false;
+    GP->setDefaultScreenFunct();
+    GP->refresh();
 }
 
 void cGibGobPages::moveCursor(int dCol, int dRow)
@@ -506,9 +625,11 @@ void cGibGobPages::goBack()
         backToInstrumentEditor();
         return;
     }
-    hModule target = (origin == kFromPianoRoll) ? (hModule)&pianoRoll : (hModule)&gibgobHome;
     mtInterface.deactivateModule(this);
-    mtInterface.activateModule(target, (uint32_t)t);
+    if (origin == kFromPianoRoll)
+        mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+    else
+        mtInterface.activateModule(&gibgobHome, homeOptions(t));
 }
 
 void cGibGobPages::backToInstrumentEditor()
@@ -643,9 +764,9 @@ static void functPattern(uint8_t state)
     if (GP->origin == cGibGobPages::kFromInstrumentEditor)
     {
         // Pattern from the synth pages goes to the main sequencer
-        uint32_t t = (uint32_t)GP->track;
+        int t = GP->track;
         mtInterface.deactivateModule(GP);
-        mtInterface.activateModule(&gibgobHome, t);
+        mtInterface.activateModule(&gibgobHome, homeOptions(t));
         return;
     }
     GP->goBack();

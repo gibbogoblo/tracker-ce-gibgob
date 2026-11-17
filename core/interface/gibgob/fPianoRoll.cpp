@@ -42,6 +42,7 @@ static void functPattern(uint8_t state);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
 static void functParams(uint8_t state);
+static void functCopy(uint8_t state);
 
 static void markChanged()
 {
@@ -161,6 +162,7 @@ void cPianoRoll::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonPattern, functPattern);
     bindModuleSwitchButtons(ip, functSwitchModule);
     ip->setButtonObj(interfaceButtonParams, functParams);
+    ip->setButtonObj(interfaceButtonCopy, functCopy);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -290,7 +292,7 @@ void cPianoRoll::refreshView()
     view.modeColor = color::kBox;
     if (g_recArmed)
     {
-        snprintf(view.mode, sizeof(view.mode), "REC");
+        snprintf(view.mode, sizeof(view.mode), "%s", recModeText());
         view.modeColor = color::kRec;
     }
     else if (mode == Mode::BoxDrag)
@@ -330,8 +332,8 @@ void cPianoRoll::refreshView()
 
     // bottom bar: Shift = utilities; sliced sample = slices; otherwise
     // button 1 = single note and buttons 2-8 = the chord palette
-    static const char* const kUtility[8] = { "Oct -", "Oct +", "Semi -", "Semi +",
-                                             "Copy",  "Paste", "Double", "Legato" };
+    static const char* const kUtility[8] = { "Oct -",   "Oct +",  "Semi -", "Semi +",
+                                             "Sel all", "Reverse", "Double", "Legato" };
     for (int i = 0; i < 8; i++)
     {
         if (view.shift)
@@ -374,6 +376,9 @@ void cPianoRoll::refreshView()
 
 void cPianoRoll::update()
 {
+    if (recPoll())
+        refreshView();
+
     if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
     {
         auditionOffAt = 0;
@@ -972,19 +977,23 @@ void cPianoRoll::utility(int button)
             break;
         }
         case 4:
-            copyTrack(p, track);
-            mtPopups.show(0, "Track copied", 1);
-            break;
-        case 5:
-            if (!hasClipboard())
+        {
+            // select every note; the d-pad then moves them all
+            int count = noteCount(p, track);
+            for (int i = 0; i < count; i++)
             {
-                mtPopups.show(0, "Copy a track first", 1);
-                return;
+                Note n = getNote(p, track, i);
+                n.flags |= kNoteFlagSelected;
+                setNote(p, track, i, n);
             }
+            mode = count > 0 ? Mode::Move : Mode::Idle;
+            break;
+        }
+        case 5:
             beginEdit(kEditTool);
-            pasteTrack(p, track);
+            reverseNotes(p, track);
             markChanged();
-            mtPopups.show(0, "Pasted", 1);
+            mtPopups.show(0, "Reversed", 1);
             break;
         case 6:
             beginEdit(kEditTool);
@@ -1007,6 +1016,40 @@ void cPianoRoll::utility(int button)
         default: return;
     }
     refreshView();
+}
+
+// Copy: the selected notes, or the note(s) under the cursor.
+// Shift + Copy: paste them with the first note at the cursor.
+void cPianoRoll::copyOrPaste()
+{
+    Sequencer::strPattern* p = current();
+    if (shiftActive())
+    {
+        if (!hasClipboard())
+        {
+            mtPopups.show(0, "Copy some notes first", 1);
+            return;
+        }
+        beginEdit(kEditTool);
+        int n = pasteNotes(p, track, view.cursorTick);
+        markChanged();
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Pasted %d notes", n);
+        mtPopups.show(0, msg, 1);
+        refreshView();
+        return;
+    }
+    int targets[kMaxNotes];
+    int n = collectTargets(targets, kMaxNotes);
+    if (n == 0)
+    {
+        mtPopups.show(0, "Nothing to copy here", 1);
+        return;
+    }
+    copyNotes(p, track, targets, n);
+    char msg[32];
+    snprintf(msg, sizeof(msg), "Copied %d notes", n);
+    mtPopups.show(0, msg, 1);
 }
 
 void cPianoRoll::openTrackPage()
@@ -1484,24 +1527,24 @@ static void functPlay(uint8_t state)
     {
         PR->releaseAllButtons();
         sequencer.stop();
+        setRecArmed(false); // stopping ends live recording
     }
     PR->refreshView();
 }
 
 static void functRec(uint8_t state)
 {
-    if (state != buttonPress || inMenu())
+    if (inMenu())
         return;
-    if (shiftActive())
+    RecAction a = recButton(state);
+    if (a == RecAction::Undo)
     {
         PR->releaseAllButtons();
         PR->mode = cPianoRoll::Mode::Idle;
         undoEdit();
-        PR->refreshView();
-        return;
     }
-    setRecArmed(!g_recArmed);
-    PR->refreshView();
+    if (a != RecAction::None)
+        PR->refreshView();
 }
 
 static void functUp(uint8_t s)
@@ -1654,7 +1697,7 @@ static void functPattern(uint8_t state)
         return;
     int t = PR->track;
     mtInterface.deactivateModule(PR);
-    mtInterface.activateModule(&gibgobHome, (uint32_t)t);
+    mtInterface.activateModule(&gibgobHome, homeOptions(t));
 }
 
 static void functSwitchModule(uint8_t button)
@@ -1676,6 +1719,12 @@ static void functMenu(uint8_t state)
         mtMenuPopup.showModulePopup(PR);
     else if (state == buttonRelease)
         mtMenuPopup.hideModulePopup(PR);
+}
+
+static void functCopy(uint8_t state)
+{
+    if (state == buttonPress && !inMenu())
+        PR->copyOrPaste();
 }
 
 static void functParams(uint8_t state)

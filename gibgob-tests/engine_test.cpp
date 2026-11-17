@@ -32,8 +32,10 @@ static int nowTick = 0;
 static std::map<int,int> synthOn; // ch*128+pitch -> count
 static bool voiceSounding[8];
 
+static int lastSampleVolume = -1;
 uint8_t playerEngine::noteOn(uint8_t instr, int8_t note, int8_t vel, uint8_t, uint8_t, uint8_t, uint8_t)
 {
+    lastSampleVolume = vel;
     if (irqDepth) { printf("FAIL noteOn under lock\n"); failures++; }
     (void)instr; (void)vel;
     events.push_back({nowTick, 'S', index, note});
@@ -74,8 +76,9 @@ static void freshPattern(int steps = 16)
     events.clear(); synthOn.clear();
     memset(voiceSounding, 0, sizeof(voiceSounding));
     memset(&mtProject, 0, sizeof(mtProject));
-    for (auto& i : mtProject.instrument) i.isActive = 1;
+    for (auto& i : mtProject.instrument) { i.isActive = 1; i.volume = 50; }
     for (int i = 0; i < 8; i++) instrumentPlayer[i].index = i;
+    setQuantizedRecording(false);
 }
 
 static void runTicks(int from, int count, int steps = 16)
@@ -509,11 +512,17 @@ int main()
     CHECK(getNote(&pat, 5, 0).pitch == 72 && getNote(&pat, 5, 1).pitch == 75);
     legatoNotes(&pat, 5);
     CHECK(getNote(&pat, 5, 0).length == 96 && getNote(&pat, 5, 1).length == 768 - 96 && getNote(&pat, 5, 2).length == 768 - 96);
-    copyTrack(&pat, 5);
+    { int idx[2] = { 1, 2 }; copyNotes(&pat, 5, idx, 2); }
     CHECK(hasClipboard());
     clearNotes(&pat, 2);
-    CHECK(pasteTrack(&pat, 2) && noteCount(&pat, 2) == 3 && getNote(&pat, 2, 0).pitch == 72);
-    CHECK(!(getNote(&pat, 2, 1).flags & kNoteFlagSelected));
+    CHECK(pasteNotes(&pat, 2, 48 * 3) == 2 && noteCount(&pat, 2) == 2);
+    CHECK(getNote(&pat, 2, 0).start == 144 && getNote(&pat, 2, 1).start == 144 && getNote(&pat, 2, 0).pitch == 75);
+    CHECK(!(getNote(&pat, 2, 0).flags & kNoteFlagSelected));
+    CHECK(pasteNotes(&pat, 2, 767) == 2);          // fits at the very end
+    clearNotes(&pat, 7);
+    addNote(&pat, 7, mk(0, 48, 60)); addNote(&pat, 7, mk(48, 96, 62));
+    reverseNotes(&pat, 7);
+    CHECK(getNote(&pat, 7, 0).start == 720 && getNote(&pat, 7, 1).start == 624);
     CHECK(patternSwing(&pat) == 50);
     setPatternSwing(&pat, 62);
     CHECK(patternSwing(&pat) == 62);
@@ -522,6 +531,60 @@ int main()
     adoptDefaults(&pat);
     freshPattern();
     CHECK(patternSwing(&pat) == 75); // a new pattern starts with the last swing
+
+    // T18: velocity scales the sample's own Volume (100 = as set)
+    freshPattern();
+    setTrackType(&pat, 3, TrackType::Drum); setSound(&pat, 3, 3);
+    mtProject.instrument[3].volume = 40;
+    addNote(&pat, 3, mk(0, 24, 60, 100)); addNote(&pat, 3, mk(96, 24, 60, 50));
+    runTicks(0, 1); CHECK(lastSampleVolume == 40);
+    runTicks(1, 100); CHECK(lastSampleVolume == 20);
+    mtProject.instrument[3].volume = 100;
+    { Note n = mk(200, 24, 60, 127); n.flags = kNoteFlagAccent; addNote(&pat, 3, n); }
+    runTicks(101, 150); CHECK(lastSampleVolume == 100); // capped
+    stopAll();
+
+    // T19: Go Ape keeps the same basic rhythm whatever the amounts
+    {
+        std::vector<int> base;
+        for (int amount : { 0, 60, 100 })
+        {
+            freshPattern();
+            setTrackType(&pat, 6, TrackType::Melodic); setSound(&pat, 6, 65);
+            TrackSettings a; a.arpMode = kArpUp; a.arpRate = 3; a.apeOn = true; a.apeSeed = 4242;
+            a.apeRhythm = amount; a.apeGate = amount; a.apeNotes = amount;
+            setSettings(&pat, 6, a);
+            addNote(&pat, 6, mk(0, 768, 60)); addNote(&pat, 6, mk(0, 768, 64));
+            runTicks(0, 64 * 48, 16);
+            std::vector<int> stepsPlayed; // arp steps that start a note on the grid
+            for (auto& ev : events) if (ev.kind == 'M' && ev.tick % 48 == 0) stepsPlayed.push_back(ev.tick);
+            if (base.empty()) base = stepsPlayed; else CHECK(stepsPlayed == base);
+            stopAll();
+        }
+        CHECK(!base.empty() && base.size() < 64); // some rests in the basic rhythm
+    }
+
+    // T20: quantized live recording lands on the step and is not heard twice
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+    setQuantizedRecording(true);
+    runTicks(0, 46); // now at tick 45, just before step 2
+    { uint8_t pch = 70; CHECK(liveRecordOn(5, &pch, 1, 100, true)); }
+    CHECK(getNote(&pat, 5, 0).start == 48);
+    int onsBefore2 = countKind('M');
+    runTicks(46, 60);
+    CHECK(countKind('M') == onsBefore2); // skipped once: it was heard live
+    { uint8_t pch = 70; liveRecordOff(5, &pch, 1); }
+    CHECK(getNote(&pat, 5, 0).length % 48 == 0 && getNote(&pat, 5, 0).length >= 48);
+    runTicks(106, 768);
+    CHECK(countKind('M') == onsBefore2 + 1); // plays on the next loop
+    setQuantizedRecording(false);
+    stopAll();
+
+    // T21: step 1 can be nudged early into the end of the track
+    CHECK(stepOffset(765, 0, 768) == -3 && startFromOffset(0, -3, 768) == 765);
+    CHECK(belongsToStep(765, 0, 768) && !belongsToStep(765, 15, 768));
+    CHECK(stepOffset(50, 1, 768) == 2 && startFromOffset(1, -24, 768) == 24);
 
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;

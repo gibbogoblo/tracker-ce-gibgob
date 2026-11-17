@@ -35,6 +35,7 @@ class Sequencer
     strPattern* getActualPattern() { return pattern; }
     bool isPlay() { return playing; }
     void startCountIn() {}
+    bool isCountingIn() { return false; }
     void playPattern() { playing = true; }
     strPattern* pattern = nullptr;
     bool playing = false;

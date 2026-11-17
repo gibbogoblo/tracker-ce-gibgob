@@ -1908,6 +1908,7 @@ static void functLoadWav()
     cfg.title = "Load WAV - Sample Editor";
     cfg.contextKey = "se_load_wav";
     cfg.initialDirectory = "/Instruments";
+    cfg.rememberLastPath = false;
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;
     cfg.returnModuleOptions = 1;
@@ -1963,6 +1964,7 @@ static void functExportWav()
     cfg.title = "Export WAV - Sample Editor";
     cfg.contextKey = "se_export_wav";
     cfg.initialDirectory = "/Instruments";
+    cfg.rememberLastPath = false;
     cfg.defaultFileName = defName;
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;

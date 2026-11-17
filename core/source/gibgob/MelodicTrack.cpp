@@ -322,6 +322,11 @@ struct TrackPlayState
 {
     ActiveNote notes[kMaxActiveNotes];
     ArpState arp;
+    // a quantized recording put a note just ahead of the playhead: it was
+    // already heard live, so playback skips it once
+    int16_t skipTick;
+    uint8_t skipCount;
+    uint8_t skipPitch[kMaxChordNotes];
     uint32_t runTicks; // micro steps since playback started
     uint8_t serialCounter;
 };
@@ -329,6 +334,7 @@ struct TrackPlayState
 TrackPlayState playState[kTracks];
 volatile int s_playTick[kTracks];
 volatile bool s_liveMetronome = false;
+bool s_quantizedRec = false;
 
 // Which sequencer note owns each of the 8 sample voices. A track normally
 // plays on its own voice; extra notes of a chord borrow the voices of tracks
@@ -370,6 +376,8 @@ void ensureInit()
         playState[t].arp.arpIdx = 0;
         playState[t].runTicks = 0;
         playState[t].serialCounter = 0;
+        playState[t].skipTick = -1;
+        playState[t].skipCount = 0;
         audition[t].on = false;
         voiceUse[t].on = false;
         voiceUse[t].track = -1;
@@ -415,9 +423,12 @@ int allocVoice(int track, uint8_t serial, int forceVoice = -1)
     return v;
 }
 
-inline int8_t velocityToVolume(uint8_t velocity)
+// The engine uses a note's volume instead of the sample's Volume setting, so
+// scale that setting: velocity 100 = the sample's own volume.
+inline int8_t velocityToVolume(uint8_t instrument, uint8_t velocity)
 {
-    return (int8_t)((velocity * 100 + 63) / 127);
+    int base = isSampleInstrument(instrument) ? mtProject.instrument[instrument].volume : 50;
+    return (int8_t)clampInt((base * velocity + 50) / 100, 0, MAX_INSTRUMENT_VOLUME);
 }
 
 void soundOffPoly(uint8_t instrument, uint8_t pitch)
@@ -592,8 +603,8 @@ void startNote(int track,
         uint8_t fxType[2], fxValue[2];
         noteEffects(instrument, legatoVoice >= 0 ? noteFlags : (uint8_t)(noteFlags & ~kNoteFlagSlide), fxType,
                     fxValue);
-        instrumentPlayer[v].noteOn(instrument, (int8_t)pitch, velocityToVolume(velocity), fxType[0], fxValue[0],
-                                   fxType[1], fxValue[1]);
+        instrumentPlayer[v].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), fxType[0],
+                                   fxValue[0], fxType[1], fxValue[1]);
     }
     else
     {
@@ -702,10 +713,11 @@ bool arpStep(ArpState& a, const TrackSettings& s, uint32_t runTick, ArpOut& out)
 
     if (ape)
     {
-        // rhythm: rests and doubles
-        if ((int)(r1 % 100) < s.apeRhythm * 45 / 100)
+        // the basic rhythm is fixed by the seed: the same rests every time,
+        // whatever the amounts. Rhythm only adds doubles on top.
+        if ((int)(r1 % 100) < 35)
             return false; // rest
-        bool ratchet = (int)((r1 >> 8) % 100) < s.apeRhythm * 25 / 100;
+        bool ratchet = (int)((r1 >> 8) % 100) < s.apeRhythm * 40 / 100;
 
         // gate length
         if (s.apeGate > 0)
@@ -1016,7 +1028,6 @@ void setPatternSwing(Sequencer::strPattern* p, int value)
 // ---------------- note utilities ----------------
 __NOINIT(EXTERNAL_RAM) static Note s_clip[kMaxNotes];
 static int s_clipCount = -1;
-static int s_clipSteps = 16;
 
 void transposeNotes(Sequencer::strPattern* p, int track, int semitones)
 {
@@ -1057,33 +1068,101 @@ void legatoNotes(Sequencer::strPattern* p, int track)
     }
 }
 
-void copyTrack(const Sequencer::strPattern* p, int track)
+void reverseNotes(Sequencer::strPattern* p, int track)
 {
     int count = noteCount(p, track);
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
     for (int i = 0; i < count; i++)
     {
-        s_clip[i] = getNote(p, track, i);
-        s_clip[i].flags &= (uint8_t)~(kNoteFlagSelected | kNoteFlagRecording);
+        Note n = getNote(p, track, i);
+        int len = n.length < trackTicks ? n.length : trackTicks;
+        int start = trackTicks - (n.start + len);
+        if (start < 0)
+            start = 0;
+        n.start = (uint16_t)clampInt(start, 0, trackTicks - 1);
+        setNote(p, track, i, n);
     }
-    s_clipCount = count;
-    s_clipSteps = trackSteps(p, track);
 }
 
-bool pasteTrack(Sequencer::strPattern* p, int track)
+void copyNotes(const Sequencer::strPattern* p, int track, const int* indices, int count)
 {
-    if (s_clipCount < 0)
-        return false;
-    stopTrack(track);
-    clearNotes(p, track);
+    if (count <= 0)
+        return;
+    int first = 0x7FFF;
+    for (int i = 0; i < count; i++)
+    {
+        int s = getNote(p, track, indices[i]).start;
+        if (s < first)
+            first = s;
+    }
+    int n = 0;
+    for (int i = 0; i < count && n < kMaxNotes; i++)
+    {
+        Note note = getNote(p, track, indices[i]);
+        note.flags &= (uint8_t)~(kNoteFlagSelected | kNoteFlagRecording);
+        note.start = (uint16_t)(note.start - first); // relative to the first note
+        s_clip[n++] = note;
+    }
+    s_clipCount = n;
+}
+
+int pasteNotes(Sequencer::strPattern* p, int track, int tick)
+{
+    if (s_clipCount <= 0)
+        return 0;
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
+    int pasted = 0;
     for (int i = 0; i < s_clipCount; i++)
-        addNote(p, track, s_clip[i]);
-    setTrackSteps(p, track, s_clipSteps);
-    return true;
+    {
+        Note n = s_clip[i];
+        int start = tick + n.start;
+        if (start >= trackTicks)
+            continue; // past the end of the track
+        n.start = (uint16_t)start;
+        if (addNote(p, track, n) < 0)
+            break;
+        pasted++;
+    }
+    return pasted;
 }
 
 bool hasClipboard()
 {
-    return s_clipCount >= 0;
+    return s_clipCount > 0;
+}
+
+int stepOffset(int start, int step, int trackTicks)
+{
+    int off = start - step * kTicksPerStep;
+    if (step == 0 && start >= trackTicks - kTicksPerStep / 2)
+        off = start - trackTicks; // step 1 nudged early sits at the end
+    return off;
+}
+
+int startFromOffset(int step, int offset, int trackTicks)
+{
+    int start = step * kTicksPerStep + offset;
+    if (start < 0)
+        start += trackTicks;
+    if (start >= trackTicks)
+        start -= trackTicks;
+    return clampInt(start, 0, trackTicks - 1);
+}
+
+bool belongsToStep(int start, int step, int trackTicks)
+{
+    int off = stepOffset(start, step, trackTicks);
+    return off >= -kTicksPerStep / 2 && off < kTicksPerStep / 2;
+}
+
+void setQuantizedRecording(bool on)
+{
+    s_quantizedRec = on;
+}
+
+bool quantizedRecording()
+{
+    return s_quantizedRec;
 }
 
 // =====================================================================
@@ -1465,6 +1544,19 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
         if (n.start != tick || n.length == 0)
             continue;
 
+        if (st.skipTick == tick)
+        {
+            bool skip = false;
+            for (int k = 0; k < st.skipCount; k++)
+                if (st.skipPitch[k] == n.pitch)
+                {
+                    skip = true;
+                    st.skipPitch[k] = 0xFF; // only once
+                }
+            if (skip)
+                continue;
+        }
+
         int chance = n.chance();
         if (chance < 100 && !percent(chance))
             continue;
@@ -1484,6 +1576,9 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
             startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
         }
     }
+
+    if (st.skipTick == tick)
+        st.skipTick = -1;
 
     // 4. arpeggiator clock: from the start of playback, so Go Ape sequences
     //    line up with the bars
@@ -1592,7 +1687,8 @@ void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocit
                 serial = ++playState[track].serialCounter;
                 voice = allocVoice(track, serial);
             }
-            instrumentPlayer[voice].noteOn(instrument, (int8_t)pitch, velocityToVolume(velocity), 0, 0, 0, 0);
+            instrumentPlayer[voice].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), 0, 0, 0,
+                                           0);
         }
         else
         {
@@ -1646,7 +1742,16 @@ bool liveRecordOn(int track, const uint8_t* pitches, int count, uint8_t velocity
         return false;
     Sequencer::strPattern* p = current();
     int patternTicks = trackSteps(p, track) * kTicksPerStep;
-    int tick = clampInt(s_playTick[track], 0, patternTicks - 1);
+    int now = clampInt(s_playTick[track], 0, patternTicks - 1);
+    int tick = now;
+    bool ahead = false;
+    if (s_quantizedRec)
+    {
+        tick = ((now + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
+        if (tick >= patternTicks)
+            tick = 0;
+        ahead = tick > now || (tick == 0 && now > 0);
+    }
 
     bool any = false;
     for (int i = 0; i < count && i < kMaxChordNotes; i++)
@@ -1660,6 +1765,17 @@ bool liveRecordOn(int track, const uint8_t* pitches, int count, uint8_t velocity
         if (addNote(p, track, n) < 0)
             break;
         any = true;
+    }
+    if (any && ahead)
+    {
+        // heard already: don't play it again when the playhead gets there
+        TrackPlayState& st = playState[track];
+        DISABLE_AUDIO_INTERRUPTS();
+        st.skipCount = 0;
+        for (int i = 0; i < count && i < kMaxChordNotes; i++)
+            st.skipPitch[st.skipCount++] = pitches[i] > 127 ? 127 : pitches[i];
+        st.skipTick = (int16_t)tick;
+        ENABLE_AUDIO_INTERRUPTS();
     }
     return any;
 }
@@ -1689,7 +1805,9 @@ void liveRecordOff(int track, const uint8_t* pitches, int pitchCount)
         int len = now - n.start;
         if (len <= 0)
             len += patternTicks;
-        n.length = (uint16_t)clampInt(len, kTicksPerStep / 8, 0x7FFF);
+        if (s_quantizedRec)
+            len = ((len + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep; // whole steps
+        n.length = (uint16_t)clampInt(len, s_quantizedRec ? kTicksPerStep : kTicksPerStep / 8, 0x7FFF);
         n.flags &= (uint8_t)~kNoteFlagRecording;
         setNote(p, track, i, n);
     }

@@ -104,7 +104,7 @@ void DrumSeqControl::update()
     }
 
     // fixed furniture before text-heavy parts
-    drawInfoStrip(view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
+    drawInfoStrip(10, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
     drawBottomBar(view->bar, fBold);
 
     // playhead, cursor and Shift border before the text, so text is the only

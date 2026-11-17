@@ -33,6 +33,8 @@ struct LaneView
     bool nameCursor = false; // cursor is on the track name column
     bool shift = false;
 
+    char patText[12] = { 0 };  // "Pat 3" box at the top left
+    bool patHighlight = false; // blinks while Shift is on: Shift+Up/Down changes pattern
     char title[56] = { 0 };
     char mode[12] = { 0 };
     uint32_t modeColor = 0;

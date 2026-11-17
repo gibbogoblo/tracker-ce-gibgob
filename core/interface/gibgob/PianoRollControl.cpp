@@ -192,7 +192,7 @@ void PianoRollControl::update()
     }
 
     // ---- fixed furniture before the notes, so notes can never push it out ----
-    drawInfoStrip(view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
+    drawInfoStrip(10, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
     drawBottomBar(view->bar, fBold);
 
     const bool overlay = view->menu.active || view->picker.active;

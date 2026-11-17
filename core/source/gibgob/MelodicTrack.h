@@ -185,14 +185,26 @@ int renderArp(Sequencer::strPattern* p, int track);
 void transposeNotes(Sequencer::strPattern* p, int track, int semitones);
 // every note lasts until the next note starts (chords keep their shared start)
 void legatoNotes(Sequencer::strPattern* p, int track);
-// copies the track's notes and length; paste replaces the track with them
-void copyTrack(const Sequencer::strPattern* p, int track);
-bool pasteTrack(Sequencer::strPattern* p, int track); // false if nothing was copied
+// plays the track backwards: a note that ended at the end now starts at the start
+void reverseNotes(Sequencer::strPattern* p, int track);
+// note clipboard: copy notes (by index), paste them with the first one at `tick`
+void copyNotes(const Sequencer::strPattern* p, int track, const int* indices, int count);
+int pasteNotes(Sequencer::strPattern* p, int track, int tick); // notes pasted
 bool hasClipboard();
+
+// nudge around a step: offset of a note from its step (-24..23), step 1 can
+// reach back into the end of the track
+int stepOffset(int start, int step, int trackTicks);
+int startFromOffset(int step, int offset, int trackTicks);
+bool belongsToStep(int start, int step, int trackTicks);
 
 // ---- global swing (stored with the pattern, carried into new patterns) ----
 int patternSwing(const Sequencer::strPattern* p); // 50 = straight, 25..75
 void setPatternSwing(Sequencer::strPattern* p, int value);
+
+// ---- quantized live recording (notes land on the nearest step) ----
+void setQuantizedRecording(bool on);
+bool quantizedRecording();
 
 // ---- metronome while live recording ----
 void setLiveMetronome(bool on);

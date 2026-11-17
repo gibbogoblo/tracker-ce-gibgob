@@ -26,6 +26,7 @@ struct TableView
     char mode[12] = { 0 };
     uint32_t modeColor = 0;
     bool shift = false;
+    bool keyboard = false; // on-screen keyboard is open: draw only a backdrop
     BottomBar bar;
     HelpView help;
 };

@@ -15,6 +15,11 @@ constexpr uint32_t kOutside = 0x050607;
 constexpr uint32_t kGridStep = 0x232C34;
 constexpr uint32_t kGridBeat = 0x3A4752;
 constexpr uint32_t kColumn = 0x26313A;
+// muted tracks: near-black monochrome
+constexpr uint32_t kMutedHead = 0x2A2A2E;
+constexpr uint32_t kMutedLane = 0x0C0C0E;
+constexpr uint32_t kMutedNote = 0x3C3C42;
+constexpr int kPatBoxW = 84;
 
 constexpr int kLanesTop = kInfoY + kInfoH + 3;
 constexpr int kLanesBottom = kBottomBarY - 5;
@@ -79,10 +84,10 @@ void LaneControl::update()
         bool cur = (t == view->cursorTrack);
 
         uint32_t base = lane.melodic ? color::kMelodic : color::kDrum;
-        draw::color(scaleColor(base, lane.muted ? 22 : (cur ? 100 : 55), 100));
+        draw::color(lane.muted ? (cur ? 0x45454B : kMutedHead) : scaleColor(base, cur ? 100 : 55, 100));
         draw::rect(2, y1, kHeadW, y2);
 
-        draw::color(cur ? kLaneBgCursor : kLaneBg);
+        draw::color(lane.muted ? kMutedLane : (cur ? kLaneBgCursor : kLaneBg));
         draw::rect(kGridX1, y1, kGridX2, y2);
     }
 
@@ -141,11 +146,17 @@ void LaneControl::update()
         const LaneInfo& lane = view->lanes[t];
         int y1 = kLanesTop + t * laneH;
         bool cur = (t == view->cursorTrack);
-        draw::color((cur && !lane.muted) ? color::kTextDark : color::kText);
+        draw::color(lane.muted ? color::kTextDim : (cur ? color::kTextDark : color::kText));
         draw::text(7, y1 + laneH / 2 - 1, cur ? fBold : fRegular, OPT_CENTERY, lane.name);
     }
 
-    drawInfoStrip(view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
+    drawInfoStrip(kPatBoxW + 12, view->title, view->mode, view->modeColor, view->params, view->selectedParam,
+                  fRegular, fBold);
+    // pattern box: highlighted (blinking) while Shift is on
+    draw::color(view->patHighlight ? color::kSelect : color::kLine);
+    draw::rect(4, kInfoY + 3, kPatBoxW, kInfoY + kInfoH - 4);
+    draw::color(view->patHighlight ? color::kTextDark : color::kText);
+    draw::text((4 + kPatBoxW) / 2, kInfoY + kInfoH / 2, fBold, OPT_CENTERX | OPT_CENTERY, view->patText);
     drawBottomBar(view->bar, fBold);
 
     // ---- notes ----
@@ -161,7 +172,7 @@ void LaneControl::update()
             int y2 = kLanesTop + (t + 1) * laneH - 6;
             uint32_t base = lane.melodic ? color::kMelodic : color::kDrum;
             if (lane.muted)
-                base = scaleColor(base, 35, 100);
+                base = kMutedNote;
 
             // melodic lanes show pitch as height inside the lane
             int lo = 127, hi = 0;

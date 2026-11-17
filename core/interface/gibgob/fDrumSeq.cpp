@@ -137,13 +137,12 @@ void cDrumSeq::setDefaultScreenFunct()
 int cDrumSeq::stepNotes(int step, int* out, int maxOut)
 {
     const Sequencer::strPattern* p = current();
-    int tick = step * kTicksPerStep;
+    int trackTicks = trackSteps(p, track) * kTicksPerStep;
     int count = noteCount(p, track);
     int n = 0;
     for (int i = 0; i < count && n < maxOut; i++)
     {
-        Note note = getNote(p, track, i);
-        if (note.start >= tick - kTicksPerStep / 2 && note.start < tick + kTicksPerStep / 2)
+        if (belongsToStep(getNote(p, track, i).start, step, trackTicks))
             out[n++] = i;
     }
     return n;
@@ -191,7 +190,7 @@ void cDrumSeq::refresh()
             cell.on = true;
             cell.velocity = note.velocity;
             cell.chance = (uint8_t)note.chance();
-            cell.nudge = (int8_t)(note.start - step * kTicksPerStep);
+            cell.nudge = (int8_t)stepOffset(note.start, step, steps * kTicksPerStep);
             if (note.pitch != settings.baseNote)
                 snprintf(cell.pitch, sizeof(cell.pitch), "%s", mtNotes[note.pitch]);
         }
@@ -205,13 +204,13 @@ void cDrumSeq::refresh()
         Note note = getNote(p, track, idx[0]);
         vel = note.velocity;
         chn = note.chance();
-        nud = note.start - cursorStep * kTicksPerStep;
+        nud = stepOffset(note.start, cursorStep, steps * kTicksPerStep);
         pitch = note.pitch;
     }
     snprintf(view.title, sizeof(view.title), "Step %d/%d%s", cursorStep + 1, steps, n > 0 ? "" : "   (empty)");
     if (g_recArmed)
     {
-        snprintf(view.mode, sizeof(view.mode), "REC");
+        snprintf(view.mode, sizeof(view.mode), "%s", recModeText());
         view.modeColor = color::kRec;
     }
     else
@@ -258,6 +257,9 @@ void cDrumSeq::refresh()
 
 void cDrumSeq::update()
 {
+    if (recPoll())
+        refresh();
+
     if (s_auditionOffAt != 0 && (uint32_t)s_clock >= s_auditionOffAt)
     {
         s_auditionOffAt = 0;
@@ -291,7 +293,7 @@ void cDrumSeq::toggleStep(int step)
     {
         TrackSettings settings = getSettings(p, track);
         Note note{};
-        note.start = (uint16_t)clampInt(step * kTicksPerStep + nudge, 0, steps * kTicksPerStep - 1);
+        note.start = (uint16_t)startFromOffset(step, nudge, steps * kTicksPerStep);
         note.length = (uint16_t)lengthTicks;
         note.pitch = settings.baseNote;
         note.velocity = (uint8_t)velocity;
@@ -336,7 +338,6 @@ void cDrumSeq::changeParam(int delta)
     int idx[kMaxNotes];
     int n = stepNotes(cursorStep, idx, kMaxNotes);
     int trackTicks = trackSteps(p, track) * kTicksPerStep;
-    int cellTick = cursorStep * kTicksPerStep;
 
     if (n == 0)
     {
@@ -372,9 +373,10 @@ void cDrumSeq::changeParam(int delta)
             case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
             case kParamNudge:
             {
-                int lo = clampInt(cellTick - kTicksPerStep / 2, 0, trackTicks - 1);
-                int hi = clampInt(cellTick + kTicksPerStep / 2 - 1, 0, trackTicks - 1);
-                note.start = (uint16_t)clampInt(note.start + delta, lo, hi);
+                // half a step early or late; step 1 may go early into the track's end
+                int off = clampInt(stepOffset(note.start, cursorStep, trackTicks) + delta, -(kTicksPerStep / 2),
+                                   kTicksPerStep / 2 - 1);
+                note.start = (uint16_t)startFromOffset(cursorStep, off, trackTicks);
                 break;
             }
             case kParamPitch:
@@ -448,22 +450,18 @@ static void functPlay(uint8_t state)
     else
     {
         sequencer.stop();
+        setRecArmed(false); // stopping ends live recording
     }
     DS->refresh();
 }
 
 static void functRec(uint8_t state)
 {
-    if (state != buttonPress)
-        return;
-    if (shiftActive())
-    {
+    RecAction a = recButton(state);
+    if (a == RecAction::Undo)
         undoEdit();
+    if (a != RecAction::None)
         DS->refresh();
-        return;
-    }
-    setRecArmed(!g_recArmed);
-    DS->refresh();
 }
 
 static void functUp(uint8_t s)
@@ -558,7 +556,7 @@ static void functPattern(uint8_t state)
         return;
     int t = DS->track;
     mtInterface.deactivateModule(DS);
-    mtInterface.activateModule(&gibgobHome, (uint32_t)t);
+    mtInterface.activateModule(&gibgobHome, homeOptions(t));
 }
 
 static void functParams(uint8_t state)

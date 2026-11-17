@@ -117,6 +117,70 @@ void toggleHelp(HelpView& help, InputProcessor* ip)
     g_shiftLatched = false;
 }
 
+static bool s_recDown = false;
+static bool s_recLongDone = false;
+static uint32_t s_recPressedAt = 0;
+static bool s_wasPlaying = false;
+
+RecAction recButton(uint8_t state)
+{
+    uint32_t now = (uint32_t)s_uiClock;
+    if (state == buttonPress)
+    {
+        if (shiftActive())
+            return RecAction::Undo;
+        s_recDown = true;
+        s_recLongDone = false;
+        s_recPressedAt = now;
+        return RecAction::None;
+    }
+    if (state == buttonRelease && s_recDown)
+    {
+        s_recDown = false;
+        if (!s_recLongDone)
+        {
+            setRecArmed(!g_recArmed);
+            return RecAction::Toggled;
+        }
+    }
+    return RecAction::None;
+}
+
+bool recPoll()
+{
+    bool changed = false;
+    if (s_recDown && !s_recLongDone && (uint32_t)s_uiClock - s_recPressedAt >= 1000)
+    {
+        s_recLongDone = true;
+        bool q = !quantizedRecording();
+        setQuantizedRecording(q);
+        if (q)
+            setRecArmed(true);
+        changed = true;
+    }
+    // playback stopped while recording: live recording ends
+    bool playing = sequencer.isPlay();
+    if (s_wasPlaying && !playing && !sequencer.isCountingIn() && g_recArmed)
+    {
+        setRecArmed(false);
+        changed = true;
+    }
+    s_wasPlaying = playing;
+    return changed;
+}
+
+const char* recModeText()
+{
+    if (!g_recArmed)
+        return "";
+    return quantizedRecording() ? "Q REC" : "REC";
+}
+
+uint32_t homeOptions(int track)
+{
+    return 0x100u | (uint32_t)(track & 7);
+}
+
 void setRecArmed(bool on)
 {
     g_recArmed = on;
@@ -460,7 +524,8 @@ void drawShiftBorder()
     draw::frame(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1, 4);
 }
 
-void drawInfoStrip(const char* title,
+void drawInfoStrip(int titleX,
+                   const char* title,
                    const char* mode,
                    uint32_t modeColor,
                    const ParamBox* params,
@@ -487,7 +552,7 @@ void drawInfoStrip(const char* title,
     }
 
     draw::color(color::kText);
-    draw::text(10, cy, fontBold, OPT_CENTERY, title);
+    draw::text(titleX, cy, fontBold, OPT_CENTERY, title);
     if (mode != nullptr && mode[0])
     {
         draw::color(modeColor);

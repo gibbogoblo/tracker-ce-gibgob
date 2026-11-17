@@ -28,6 +28,24 @@ bool shiftButton(uint8_t state);
 // Rec toggle; also turns the live-record metronome on and off
 void setRecArmed(bool on);
 
+// Rec button: a short press toggles live recording, a 1 s press toggles
+// quantized recording (and arms Rec), Shift+Rec is undo.
+enum class RecAction : uint8_t
+{
+    None,
+    Toggled,  // short press: Rec on/off
+    Undo,     // Shift+Rec
+};
+RecAction recButton(uint8_t state);
+// call from update(): handles the long press and turns live recording off
+// when playback stops. Returns true if the screen should be redrawn.
+bool recPoll();
+// "REC", "Q REC" or "" for the info strip
+const char* recModeText();
+
+// options for opening the main sequencer on a given track
+uint32_t homeOptions(int track);
+
 // The Mini's FX1 and FX2 buttons arrive swapped relative to their names in
 // the stock code; these are the physical buttons.
 uint8_t physFx1Button();
@@ -143,7 +161,8 @@ struct ParamBox
 constexpr int kInfoY = 31;
 constexpr int kInfoH = 34;
 // draws the info strip: title on the left, optional mode tag, 4 value boxes
-void drawInfoStrip(const char* title,
+void drawInfoStrip(int titleX,
+                   const char* title,
                    const char* mode,
                    uint32_t modeColor,
                    const ParamBox* params,

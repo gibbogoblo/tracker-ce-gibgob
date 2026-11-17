@@ -57,6 +57,15 @@ void TableControl::update()
     draw::color(color::kBg);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
 
+    if (view->keyboard)
+    {
+        // the keyboard draws itself on top; keep this light so both fit
+        drawInfoStrip(10, view->title, view->mode, view->modeColor, nullptr, -1, fRegular, fBold);
+        drawBottomBar(view->bar, fBold);
+        draw::end();
+        return;
+    }
+
     // rows
     for (int r = 0; r < view->rows; r++)
     {
@@ -75,7 +84,7 @@ void TableControl::update()
         draw::rect(view->colX[view->cursorCol] - 6, y1 + 1, colRight(view->cursorCol), y1 + rowH - 4);
     }
 
-    drawInfoStrip(view->title, view->mode, view->modeColor, nullptr, -1, fRegular, fBold);
+    drawInfoStrip(10, view->title, view->mode, view->modeColor, nullptr, -1, fRegular, fBold);
 
     if (hasHeader)
     {
