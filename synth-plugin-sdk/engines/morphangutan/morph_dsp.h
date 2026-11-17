@@ -1026,6 +1026,9 @@ class Fx
 
     bool ready() const { return memory != nullptr; }
 
+    // reverb output only (no dry signal), for effects that mix it themselves
+    bool wetOnly = false;
+
     // modulation: delay mix, delay feedback, reverb mix, reverb decay (from voice 0)
     void process(const Params& p, float tempo, const float* fxMod, float* l, float* r, int n)
     {
@@ -1355,8 +1358,16 @@ class Fx
             {
                 shimmerFeedback = (yl + yr) * 0.5f;
             }
-            l[i] = l[i] * (1.0f - 0.5f * mix) + yl * mix;
-            r[i] = r[i] * (1.0f - 0.5f * mix) + yr * mix;
+            if (wetOnly)
+            {
+                l[i] = yl * mix;
+                r[i] = yr * mix;
+            }
+            else
+            {
+                l[i] = l[i] * (1.0f - 0.5f * mix) + yl * mix;
+                r[i] = r[i] * (1.0f - 0.5f * mix) + yr * mix;
+            }
         }
     }
 

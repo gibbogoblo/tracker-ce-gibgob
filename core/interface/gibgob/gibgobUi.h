@@ -89,6 +89,20 @@ struct HelpView
 // opens / closes the help window; while it is open only Menu works
 void toggleHelp(HelpView& help, InputProcessor* ip);
 
+// ---- welcome window of a new project: "What are we feeling today?" ----
+struct WelcomeView
+{
+    bool active = false;
+    int choice = 0; // 0 = 80, 1 = 140, 2 = 170 BPM
+};
+static constexpr int kWelcomeChoices = 3;
+extern const int kWelcomeBpm[kWelcomeChoices];
+extern const char* const kWelcomeGenre[kWelcomeChoices];
+void requestWelcome(); // a new project was made: greet it on the main sequencer
+bool takeWelcome();    // true once after requestWelcome()
+// full-screen welcome; returns true if drawn (the caller then stops)
+bool drawWelcome(const WelcomeView& w, int fontRegular, int fontBold);
+
 // ---- palette ----
 namespace color
 {

@@ -33,6 +33,7 @@ static const char* const kHelpMain[] = {
     "Shift+small +/-: sound (or the value above)",
     "Shift+big +/-: zoom (or the value above)",
     "Hold Shift + +/-: master volume",
+    "Shift+top: hold perform FX (Menu > Perform)",
     "Button 1: back here from any screen",
 };
 
@@ -102,6 +103,21 @@ static const char* const kHelpPalette[] = {
     "Top 2-8: hear that chord",
     "Button 2: back to the sound parameters",
     "Button 1: main sequencer",
+};
+
+static const char* const kHelpPerform[] = {
+    "Top row: hold to play that button's effect",
+    "   (and select it)",
+    "D-pad: select a button's square",
+    "Note: effect   Instr/FX1/FX2: its settings",
+    "Small +/-: change   Big +/-: bigger steps",
+    "Delete: button off",
+    "Button 1: main sequencer",
+    "Play: play / stop",
+    "Main sequencer: Shift + top row holds them",
+    "Song mode, playing: top row holds them",
+    "   (hold Shift for the song buttons)",
+    "Saved on the SD card for every project",
 };
 
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))

@@ -1,4 +1,6 @@
 #include "mtAudioEngine.h"
+#include "GibGobPerformNode.h"
+#include "gibgob/Perform.h"
 #include "Platform.h"
 #include "VoiceStreamManager.h"
 #ifdef FEATURE_SYNTH
@@ -553,17 +555,29 @@ void audioEngine::connectInputToOutput(AudioInput* input, AudioOutput* output)
 
 void audioEngine::connectMixerToOutput(MixerAndFxs<kVoices>* mixerAndFxs, AudioOutput* output)
 {
+    // GibGob OS: the performance effects sit between the mix and the limiter
+    gibgob::perform::init();
     connections.push_back(
       new AudioConnection(mixerAndFxs->getTracksAndSendsMixer(MixerAndFxChannelType::kLeft),
                           0,
-                          output->getLimiter(AudioOutput::OutputChannels::kLeft),
+                          &gibgobPerformNode,
                           0));
 
     connections.push_back(
       new AudioConnection(mixerAndFxs->getTracksAndSendsMixer(MixerAndFxChannelType::kRight),
                           0,
-                          output->getLimiter(AudioOutput::OutputChannels::kRight),
-                          0));
+                          &gibgobPerformNode,
+                          1));
+
+    connections.push_back(new AudioConnection(&gibgobPerformNode,
+                                              0,
+                                              output->getLimiter(AudioOutput::OutputChannels::kLeft),
+                                              0));
+
+    connections.push_back(new AudioConnection(&gibgobPerformNode,
+                                              1,
+                                              output->getLimiter(AudioOutput::OutputChannels::kRight),
+                                              0));
 
 #ifdef PLATFORM_IMX
     static constexpr int kPolyverbLeftUsbStreamIdx = 16;

@@ -9,6 +9,7 @@
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "gibgob/MelodicTrack.h"
+#include "gibgob/Perform.h"
 #include "mtStructs.h"
 #include "sampleRecorder/sampleRecorder.h"
 
@@ -261,6 +262,7 @@ AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
         if (timerTicks % 12 == 1)
         {
             inc_uStepGlobal();
+            gibgob::perform::clockTick(player.globalPos, player.uStep);
 
             // GibGob OS: metronome while live recording on the GibGob screens
             if (gibgob::liveMetronome() && player.uStep == 1 && !isRec())
@@ -1646,6 +1648,7 @@ void Sequencer::stop(StopContext context)
     songTimer.stop();
     stopAllOpenNotes();
     gibgob::stopAll();
+    gibgob::perform::clockStop();
     cancelFxes();
 
     player.isPlay = 0;

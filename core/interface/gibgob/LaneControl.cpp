@@ -64,6 +64,11 @@ void LaneControl::update()
 
     draw::begin(kDrawBudget);
 
+    if (drawWelcome(view->welcome, fRegular, fBold))
+    {
+        draw::end();
+        return;
+    }
     if (drawHelp(view->help, fRegular, fBold))
     {
         draw::end();

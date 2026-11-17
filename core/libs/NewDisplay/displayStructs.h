@@ -156,6 +156,7 @@ typedef enum enControlId
     controlIdGibGobTrackGrid,
     controlIdGibGobTable,
     controlIdGibGobDrumSeq,
+    controlIdGibGobPerform,
 
     /*
      *

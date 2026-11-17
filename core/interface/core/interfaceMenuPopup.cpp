@@ -34,7 +34,7 @@ const InterfaceMenuPopup::ModuleRef InterfaceMenuPopup::modules[kMenuModulesCoun
     { mtInterface.modules[1], interfaceButtonSampleLoad, 0, nullptr },
     { mtInterface.modules[0], interfaceButtonFile, 0, nullptr },
     { mtInterface.modules[7], interfaceButtonConfig, 0, nullptr },
-    { mtInterface.modules[9], interfaceButtonPerformance, 0, &performModes },
+    { mtInterface.modules[9], interfaceButtonPerformance, 0, nullptr }, // GibGob OS Perform page
     { mtInterface.modules[6], interfaceButtonSampleEdit, 0, nullptr },
     { mtInterface.modules[8], interfaceButtonSampleRec, 0, nullptr },
 

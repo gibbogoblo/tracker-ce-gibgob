@@ -1,3 +1,5 @@
+#include "gibgob/Perform.h"
+#include <stdio.h>
 #include "core/interfaceMenuPopup.h"
 #include "fileManager.h"
 #include "songEditor/songEditor.h"
@@ -58,6 +60,8 @@ static void functCopy();
 static void functPaste();
 
 static void functUndo();
+static void functGibGobTopRow(uint8_t button, uint8_t state);
+static void gibgobPerformLabels();
 
 static void functDelete();
 static void refreshDeleting();
@@ -71,6 +75,7 @@ void cSongEditor::update()
     {
         songPlayerRefreshTimer = 0;
         refreshButtonsLabels();
+        gibgobPerformLabels();
 
         Sequencer::enSeqState seqState = sequencer.getSeqState();
         if (seqState == Sequencer::SEQ_STATE_PLAY_SONG)
@@ -176,6 +181,7 @@ void cSongEditor::start(uint32_t options)
 
 void cSongEditor::stop()
 {
+    gibgob::perform::releaseAll();
     sequencer.stopManualNotes();
     cleanPatternsListResources();
 
@@ -201,14 +207,10 @@ void cSongEditor::setDefaultScreenFunct()
 
     ip->setButtonObj(interfaceButtonShift, functShift);
 
-    ip->setButtonObj(interfaceButton0, buttonPress, functPlayPattern);
-    ip->setButtonObj(interfaceButton1, buttonPress, functPlaySong);
-    ip->setButtonObj(interfaceButton2, buttonPress, functUndo);
-    ip->setButtonObj(interfaceButton3, buttonPress, functAddSlot);
-    ip->setButtonObj(interfaceButton4, buttonPress, functDeleteSlot);
-    ip->setButtonObj(interfaceButton5, functDecPattern);
-    ip->setButtonObj(interfaceButton6, functIncPattern);
-    ip->setButtonObj(interfaceButton7, functTempo);
+    // GibGob OS: while playing, the top row holds the performance effects
+    // (Shift + top row: the song buttons). Stopped: the song buttons.
+    for (uint8_t b = interfaceButton0; b <= interfaceButton7; b++)
+        ip->setButtonObj(b, functGibGobTopRow);
 
     ip->setButtonObj(interfaceButtonCopy, buttonPress, functCopyPaste);
     ip->setButtonObj(interfaceButtonDelete, buttonPress, functDelete);
@@ -1722,4 +1724,106 @@ static void functMenu(uint8_t state)
     {
         mtMenuPopup.hideModulePopup(SE);
     }
+}
+
+// ======================================================================
+// GibGob OS: performance effects on the top row while the song plays
+// ======================================================================
+static bool s_gibgobPerfHeld[8] = { false };
+static int s_gibgobLabelMode = -1; // 0 = song buttons, 1 = effects
+static uint8_t s_gibgobLabelActive = 0;
+static char s_gibgobLabelText[8][16];
+
+static bool gibgobPerformMode()
+{
+    return sequencer.isPlay() && !SE->buttons->isButtonPressed(interfaceButtonShift);
+}
+
+static void functGibGobTopRow(uint8_t button, uint8_t state)
+{
+    const int idx = button - interfaceButton0;
+    if (idx < 0 || idx > 7)
+        return;
+
+    if (state == buttonRelease && s_gibgobPerfHeld[idx])
+    {
+        s_gibgobPerfHeld[idx] = false;
+        gibgob::perform::release(idx);
+        gibgobPerformLabels();
+        return;
+    }
+    if (state == buttonPress && gibgobPerformMode())
+    {
+        s_gibgobPerfHeld[idx] = true;
+        gibgob::perform::press(idx);
+        gibgobPerformLabels();
+        return;
+    }
+
+    // the song buttons
+    switch (idx)
+    {
+        case 0: if (state == buttonPress) functPlayPattern(); break;
+        case 1: if (state == buttonPress) functPlaySong(); break;
+        case 2: if (state == buttonPress) functUndo(); break;
+        case 3: if (state == buttonPress) functAddSlot(); break;
+        case 4: if (state == buttonPress) functDeleteSlot(); break;
+        case 5: functDecPattern(state); break;
+        case 6: functIncPattern(state); break;
+        case 7: functTempo(state); break;
+        default: break;
+    }
+}
+
+// the labels follow the mode: effect names while playing, song buttons otherwise
+static void gibgobPerformLabels()
+{
+    const int mode = gibgobPerformMode() ? 1 : 0;
+    uint8_t active = 0;
+    for (int i = 0; i < 8; i++)
+        if (gibgob::perform::isHeld(i) || gibgob::perform::engine().cellActive(i))
+            active |= (uint8_t)(1u << i);
+
+    if (mode == 0)
+    {
+        if (s_gibgobLabelMode == 1)
+        {
+            // back to the song buttons: release anything still held
+            for (int i = 0; i < 8; i++)
+                if (s_gibgobPerfHeld[i])
+                {
+                    s_gibgobPerfHeld[i] = false;
+                    gibgob::perform::release(i);
+                }
+            SE->showDefaultScreen();
+            SE->refreshButtonsLabels();
+        }
+        s_gibgobLabelMode = 0;
+        return;
+    }
+    if (s_gibgobLabelMode == 1 && active == s_gibgobLabelActive)
+        return;
+    s_gibgobLabelMode = 1;
+    s_gibgobLabelActive = active;
+
+    display.setRemoveControlStyle(SE->label[5], controlStyleShowBitmap);
+    for (int i = 0; i < 8; i++)
+    {
+        const gibgob::perform::Cell c = gibgob::perform::getCell(i);
+        const gibgob::perform::FxInfo& info = gibgob::perform::fxInfo(c.fx);
+        display.setControlData(SE->label[i], nullptr);
+        display.setControlText(SE->label[i], info.shortName);
+        if ((active >> i) & 1)
+            snprintf(s_gibgobLabelText[i], sizeof(s_gibgobLabelText[i]), "ON");
+        else if (info.paramCount > 0)
+            gibgob::perform::paramText(c.fx, 0, c.p[0], s_gibgobLabelText[i], sizeof(s_gibgobLabelText[i]));
+        else
+            s_gibgobLabelText[i][0] = 0;
+        display.setControlText2(SE->label[i], s_gibgobLabelText[i]);
+        display.setControlColors(SE->label[i], ((active >> i) & 1) ? display.getTheme().activeLabelsColors
+                                                                   : display.getTheme().activeButtonLabelsColors);
+        display.setControlValue(SE->label[i], 1);
+        display.refreshControl(SE->label[i]);
+    }
+    display.synchronizeRefresh();
 }

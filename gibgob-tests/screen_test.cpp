@@ -2,6 +2,9 @@
 #include "gibgob/PianoRollControl.h"
 #include "gibgob/TableControl.h"
 #include "gibgob/DrumSeqControl.h"
+#include "gibgob/PerformControl.h"
+#include "gibgob/PerformFx.h"
+#include <algorithm>
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/MelodicTrack.h"
 #include "FT812.h"
@@ -71,14 +74,14 @@ void API_CMD_TEXT(int16_t x, int16_t y, int16_t, uint16_t options, const char* s
 }
 
 static Sequencer::strPattern pat;
-static int render(cDisplayControl& c, const char* name, int limit)
+static int render(cDisplayControl& c, const char* name, int limit, bool expectBorder = true)
 {
     borderRects = 0;
     words = 0; verts = 0; inBegin = false;
     c.update();
     if (inBegin) { printf("%s: BEGIN left open\n", name); fails++; }
     // the Shift border (4 rectangles, drawn last) must always survive
-    if (borderRects < 8) { printf("%s: shift border missing (%d)\n", name, borderRects); fails++; }
+    if (expectBorder && borderRects < 8) { printf("%s: shift border missing (%d)\n", name, borderRects); fails++; }
     if (verts % 2) { printf("%s: odd vertex count\n", name); fails++; }
     int est = draw::used();
     printf("%-34s %4d words (helper counted %4d)\n", name, words, est);
@@ -127,6 +130,12 @@ int main()
         LaneControl lc(&prop);
         char nm[40]; snprintf(nm, 40, "main sequencer, %d steps, full", zoomSteps);
         render(lc, nm, kLimit);
+        if (zoomSteps == 16)
+        {
+            lv.welcome.active = true; lv.welcome.choice = 2; lv.shift = false; // full-screen window, no Shift border
+            render(lc, "welcome window", kLimit, false);
+            lv.welcome.active = false;
+        }
     }
 
     for (int zoom : { -12, 0, 24, 48 })
@@ -178,6 +187,43 @@ int main()
         prop.data = &pv2;
         TableControl tc2(&prop);
         render(tc2, "chord palette page", kLimit);
+    }
+
+    {
+        // perform page: every cell lit, longest names and settings
+        PerformView pv; pv.cursor = 7; pv.shift = true; pv.bar = bar;
+        for (int i = 0; i < 8; i++)
+        {
+            PerformView::CellView& c = pv.cells[i];
+            snprintf(c.name, sizeof(c.name), "Filter sweep");
+            // the longest real setting line ("Pattern  Trance 6"); checked below
+            for (int l = 0; l < 3; l++) snprintf(c.line[l], sizeof(c.line[l]), "Pattern  Trance 6");
+            c.color = performFxColor(i + 1); c.active = (i % 2) == 0; c.off = false;
+        }
+        snprintf(pv.title, sizeof(pv.title), "Perform  -  button 8");
+        memcpy(pv.params, pb, sizeof(pb)); pv.selectedParam = 3;
+        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &pv;
+        // no real setting line is longer than the one tested
+        size_t longest = 0;
+        for (int fx = 1; fx < gibgob::perform::kFxCount; fx++)
+        {
+            const gibgob::perform::FxInfo& in = gibgob::perform::fxInfo(fx);
+            if (strlen(in.name) > 12) { printf("  effect name too long: %s\n", in.name); fails++; }
+            for (int k = 0; k < in.paramCount; k++)
+                for (int v = 0; v < in.params[k].count; v++)
+                {
+                    char val[16]; gibgob::perform::paramText(fx, k, v, val, sizeof(val));
+                    longest = std::max(longest, strlen(in.params[k].name) + 2 + strlen(val));
+                }
+        }
+        if (longest > strlen("Pattern  Trance 6")) { printf("  a setting line is longer than tested (%zu)\n", longest); fails++; }
+        PerformControl pfc(&prop);
+        render(pfc, "perform page", kLimit);
+        pv.help.active = true; pv.help.title = "Perform - shortcuts";
+        pv.help.lines = kHelpPerform; pv.help.count = (int)(sizeof(kHelpPerform) / sizeof(kHelpPerform[0]));
+        words = 0; verts = 0; pfc.update();
+        printf("%-34s %4d words\n", "help: perform", words);
+        if (words > kLimit || draw::skipped()) { printf("  help too big\n"); fails++; }
     }
 
     {

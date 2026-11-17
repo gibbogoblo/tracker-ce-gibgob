@@ -9,6 +9,8 @@
 #include "core/songTimer.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
+#include "gibgob/Perform.h"
+#include "gibgob/PerformControl.h"
 #include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/drumSeq.h"
@@ -134,6 +136,9 @@ void cGibGobHome::start(uint32_t options)
         held[i] = false;
         heldRecording[i] = false;
     }
+    for (int i = 0; i < 8; i++)
+        perfHeld[i] = false;
+    perform::loadSaved();
     lastPattern = -1; // forces the defaults to be read again
     lastPlayPos = -2;
     auditionOffAt = 0;
@@ -144,8 +149,55 @@ void cGibGobHome::start(uint32_t options)
     titleBar->setTitle(titleText);
 
     setDefaultScreenFunct();
+    if (takeWelcome())
+        openWelcome();
     refresh();
     display.synchronizeRefresh();
+}
+
+// ---------------------------------------------------------------------------
+// welcome window of a new project: pick the tempo you're feeling
+static void functWelcomeLeft(uint8_t state)
+{
+    if (state == buttonPress)
+        GH->welcomeMove(-1);
+}
+static void functWelcomeRight(uint8_t state)
+{
+    if (state == buttonPress)
+        GH->welcomeMove(1);
+}
+static void functWelcomeMiddle(uint8_t state)
+{
+    if (state == buttonPress)
+        GH->welcomeChoose();
+}
+
+void cGibGobHome::openWelcome()
+{
+    view.welcome.active = true;
+    view.welcome.choice = 0;
+    ip->clearAllButtons();
+    ip->clearAllPots();
+    ip->setButtonObj(interfaceButtonLeft, functWelcomeLeft);
+    ip->setButtonObj(interfaceButtonRight, functWelcomeRight);
+    ip->setButtonObj(interfaceButtonMiniMiddle, functWelcomeMiddle);
+}
+
+void cGibGobHome::welcomeMove(int d)
+{
+    int c = view.welcome.choice + d;
+    view.welcome.choice = c < 0 ? 0 : (c >= kWelcomeChoices ? kWelcomeChoices - 1 : c);
+    refresh();
+}
+
+void cGibGobHome::welcomeChoose()
+{
+    mtProject.values.globalTempo = (float)kWelcomeBpm[view.welcome.choice];
+    newFileManager.setProjectStructChanged();
+    view.welcome.active = false;
+    setDefaultScreenFunct();
+    refresh();
 }
 
 void cGibGobHome::stop()
@@ -326,7 +378,26 @@ void cGibGobHome::refresh()
         view.selectedParam = param;
     }
 
-    // bottom bar: the 8 track buttons, named after their tracks
+    // bottom bar: the 8 track buttons, named after their tracks.
+    // With Shift on they are the performance effects.
+    if (shiftActive())
+    {
+        uint8_t active = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            const perform::Cell c = perform::getCell(i);
+            const bool on = perform::isHeld(i) || perform::engine().cellActive(i);
+            if (on)
+                active |= (uint8_t)(1u << i);
+            snprintf(barText[i], sizeof(barText[i]), "%s",
+                     c.fx == perform::kFxOff ? "--" : perform::fxInfo(c.fx).shortName);
+            view.bar.fill[i] = c.fx == perform::kFxOff ? 0x3C3C42 : performFxColor(c.fx);
+            view.bar.highlighted[i] = on;
+            view.bar.text[i] = barText[i];
+        }
+        lastPerfActive = active;
+    }
+    else
     for (int i = 0; i < 8; i++)
     {
         bool muted = view.lanes[i].muted;
@@ -395,6 +466,16 @@ void cGibGobHome::update()
             mask |= (uint8_t)(1u << t);
     if (mask != lastSounding)
         changed = true;
+
+    if (shiftNow)
+    {
+        uint8_t perfActive = 0;
+        for (int i = 0; i < 8; i++)
+            if (perform::isHeld(i) || perform::engine().cellActive(i))
+                perfActive |= (uint8_t)(1u << i);
+        if (perfActive != lastPerfActive)
+            changed = true;
+    }
 
     if (changed)
         refresh();
@@ -754,6 +835,21 @@ void cGibGobHome::toggleMute(int track)
 
 void cGibGobHome::trackButton(int track, bool pressed)
 {
+    // Shift + top row: performance effects, held as long as the button is
+    if (pressed && shiftActive())
+    {
+        perfHeld[track] = true;
+        perform::press(track);
+        refresh();
+        return;
+    }
+    if (!pressed && perfHeld[track])
+    {
+        perfHeld[track] = false;
+        perform::release(track);
+        refresh();
+        return;
+    }
     if (!pressed)
     {
         if (!held[track])
@@ -769,9 +865,6 @@ void cGibGobHome::trackButton(int track, bool pressed)
         refresh();
         return;
     }
-
-    if (shiftActive())
-        return; // Shift + top row is kept free for performance effects
 
     Sequencer::strPattern* p = current();
     uint8_t pitch = getSettings(p, track).baseNote;
@@ -799,6 +892,12 @@ void cGibGobHome::trackButton(int track, bool pressed)
 
 void cGibGobHome::releaseAllButtons()
 {
+    for (int t = 0; t < kTracks; t++)
+        if (perfHeld[t])
+        {
+            perfHeld[t] = false;
+            perform::release(t);
+        }
     for (int t = 0; t < kTracks; t++)
     {
         if (!held[t])

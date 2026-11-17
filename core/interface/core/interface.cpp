@@ -2,6 +2,7 @@
 #include "gibgob/pianoRoll.h"
 #include "gibgob/gibgobPages.h"
 #include "gibgob/drumSeq.h"
+#include "gibgob/gibgobPerform.h"
 #include <string.h>
 
 #include "core/interface.h"
@@ -69,7 +70,7 @@ const hModule Interface::modules[modulesCount] = {
     &sampleEditor,     // 6
     &configEditor,     // 7
     &sampleRecorder,   // 8
-    &performanceMode,  // 9
+    &gibgobPerform,    // 9  GibGob OS Perform page (replaces the stock one)
     &imageViewer,       // 10
     &globalFileBrowser, // 11
     &masterParams,      // 12

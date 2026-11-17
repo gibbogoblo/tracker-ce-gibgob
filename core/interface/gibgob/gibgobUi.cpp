@@ -505,6 +505,65 @@ void drawBottomBar(const BottomBar& bar, int fontHandle)
     }
 }
 
+const int kWelcomeBpm[kWelcomeChoices] = { 80, 140, 170 };
+const char* const kWelcomeGenre[kWelcomeChoices] = { "Hip hop", "Garage", "Jungle" };
+static bool s_welcomePending = false;
+
+void requestWelcome()
+{
+    s_welcomePending = true;
+}
+
+bool takeWelcome()
+{
+    bool w = s_welcomePending;
+    s_welcomePending = false;
+    return w;
+}
+
+bool drawWelcome(const WelcomeView& w, int fontRegular, int fontBold)
+{
+    if (!w.active)
+        return false;
+    static const uint32_t kChoiceColor[kWelcomeChoices] = { color::kInstrBtn, color::kFx2Btn, color::kDrum };
+    constexpr int kBigFont = 31; // the display chip's large built-in font
+
+    draw::color(color::kBg);
+    draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
+    draw::color(color::kText);
+    draw::text(kScreenW / 2, kScreenTop + 70, fontBold, OPT_CENTER, "What are we feeling today?");
+
+    const int boxW = 200, boxH = 190, gap = 40;
+    const int x0 = (kScreenW - 3 * boxW - 2 * gap) / 2;
+    const int y1 = kScreenTop + 130;
+    for (int i = 0; i < kWelcomeChoices; i++)
+    {
+        const int x1 = x0 + i * (boxW + gap);
+        const bool sel = i == w.choice;
+        draw::color(sel ? kChoiceColor[i] : color::kPanel);
+        draw::rect(x1, y1, x1 + boxW - 1, y1 + boxH - 1);
+        if (sel)
+        {
+            draw::color(color::kSelect);
+            draw::frame(x1 - 4, y1 - 4, x1 + boxW + 3, y1 + boxH + 3, 3);
+        }
+    }
+    for (int i = 0; i < kWelcomeChoices; i++)
+    {
+        const int cx = x0 + i * (boxW + gap) + boxW / 2;
+        const bool sel = i == w.choice;
+        char bpm[8];
+        snprintf(bpm, sizeof(bpm), "%d", kWelcomeBpm[i]);
+        draw::color(sel ? color::kTextDark : color::kText);
+        draw::text(cx, y1 + 72, kBigFont, OPT_CENTER, bpm);
+        draw::text(cx, y1 + 122, fontRegular, OPT_CENTER, "BPM");
+        draw::text(cx, y1 + 156, fontBold, OPT_CENTER, kWelcomeGenre[i]);
+    }
+    draw::color(color::kTextDim);
+    draw::text(kScreenW / 2, y1 + boxH + 50, fontRegular, OPT_CENTER, "Left / Right: choose      Middle: let's go");
+    return true;
+}
+
 bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
 {
     if (!help.active || help.lines == nullptr)

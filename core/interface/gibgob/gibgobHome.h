@@ -54,6 +54,9 @@ class cGibGobHome : public ModuleBase
     void openPianoRoll();
     void openTrackPage();
     void releaseAllButtons();
+    void openWelcome();
+    void welcomeMove(int d);
+    void welcomeChoose();
 
     int cellNotes(int* out, int maxOut);
 
@@ -72,6 +75,8 @@ class cGibGobHome : public ModuleBase
     int lengthTicks = 48;
 
     bool held[8] = { false };
+    bool perfHeld[8] = { false }; // Shift + top row: performance effect held
+    uint8_t lastPerfActive = 0;
     bool heldRecording[8] = { false };
     uint8_t heldPitch[8] = { 0 };
     uint32_t auditionOffAt = 0;

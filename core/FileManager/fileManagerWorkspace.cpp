@@ -5,6 +5,7 @@
 
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
+#include "gibgob/gibgobUi.h"
 
 #include <cstring>
 
@@ -22,6 +23,7 @@ bool cFileManager::createNewProjectInWorkspace()
 
     getDefaultProject(&mtProject);
     gibgob::resetDefaults(); // GibGob OS: new projects start with the factory track layout
+    gibgob::requestWelcome(); // "What are we feeling today?" on the main sequencer
     mtProject.values.projectNotSavedFlag = 2; // nie zapiany do folderu Projects
     mtProject.values.actualPattern = 1;
 

@@ -5,6 +5,7 @@
 #define ONE_MINUS_SRC_ALPHA 4
 #define OPT_CENTERX 512
 #define OPT_CENTERY 1024
+#define OPT_CENTER 1536UL
 #define OPT_RIGHTX 2048
 void API_COLOR(uint32_t c);
 void API_COLOR_A(uint8_t a);
