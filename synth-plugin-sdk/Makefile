@@ -38,7 +38,7 @@ LDFLAGS       := -nostartfiles --specs=nano.specs \
                  -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=calloc \
                  -Wl,--wrap=_malloc_r -Wl,--wrap=_free_r -Wl,--wrap=_calloc_r
 
-all: $(BUILD_DIR)/CHIP.psyn
+all: $(BUILD_DIR)/CHIP.psyn $(BUILD_DIR)/MRPH.psyn
 
 $(BUILD_DIR)/CHIP.elf: $(SDK_DIR)/engines/chip.cpp $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
 	@mkdir -p $(BUILD_DIR)
@@ -65,7 +65,43 @@ $(BUILD_DIR)/CHIP.psyn: $(BUILD_DIR)/CHIP.elf $(SDK_DIR)/tools/psyn_builder.py
 		--supports-idle-sleep $(SUPPORTS_IDLE_SLEEP) \
 		--has-voice-tick-idle $(HAS_VOICE_TICK_IDLE)
 
+# ---- MORPHANGUTAN (GibGob OS) ----
+# the xPack toolchain needs the exception index symbols defined
+PSYN_EXTRA_LDFLAGS ?= -Wl,--defsym=__exidx_start=0 -Wl,--defsym=__exidx_end=0
+
+$(BUILD_DIR)/MRPH.elf: $(SDK_DIR)/engines/morphangutan.cpp $(SDK_DIR)/engines/morphangutan/morph_dsp.h $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I$(SDK_DIR)/engines $< $(LDFLAGS) $(PSYN_EXTRA_LDFLAGS) -o $@
+
+$(BUILD_DIR)/MRPH.psyn: $(BUILD_DIR)/MRPH.elf $(SDK_DIR)/tools/psyn_builder.py
+	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py \
+		--elf $< \
+		--out $@ \
+		--code-name "MRPH" \
+		--display-name "Morphangutan" \
+		--patch-folder "MORPHANGUTAN" \
+		--type-id-wave 60 \
+		--type-id-play-tracker 60 \
+		--default-voices 6 \
+		--max-voices 8 \
+		--output-channels 2 \
+		--renders-aux 0 \
+		--has-sample-slots 0 \
+		--supports-idle-sleep 1 \
+		--has-voice-tick-idle 1
+
+# host tests + WAV previews (runs on the computer, not the Tracker)
+HOSTCXX ?= g++
+morph-test:
+	$(HOSTCXX) -O2 -std=c++20 -Wall $(SDK_DIR)/engines/morphangutan/dsp_test.cpp -o $(BUILD_DIR)/morph_dsp_test
+	$(BUILD_DIR)/morph_dsp_test
+
+morph-previews:
+	@mkdir -p $(BUILD_DIR)/morph_previews
+	$(HOSTCXX) -O2 -std=c++20 -Wall $(SDK_DIR)/engines/morphangutan/preview.cpp -o $(BUILD_DIR)/morph_preview
+	$(BUILD_DIR)/morph_preview $(BUILD_DIR)/morph_previews
+
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean
+.PHONY: all clean morph-test morph-previews
