@@ -90,6 +90,30 @@ $(BUILD_DIR)/MRPH.psyn: $(BUILD_DIR)/MRPH.elf $(SDK_DIR)/tools/psyn_builder.py
 		--supports-idle-sleep 1 \
 		--has-voice-tick-idle 1
 
+# ---- hardware test builds of MORPHANGUTAN (to find what the Tracker dislikes) ----
+# TA: mono, no FX   TB: stereo, no FX   TC: sine test tone, mono, no FX   TD: full, automatic ID
+MORPH_TEST_FLAGS_TA := -DMORPH_MONO -DMORPH_NO_FX
+MORPH_TEST_FLAGS_TB := -DMORPH_NO_FX
+MORPH_TEST_FLAGS_TC := -DMORPH_MONO -DMORPH_NO_FX -DMORPH_TEST_SINE
+MORPH_TEST_FLAGS_TD :=
+MORPH_TEST_CH_TA := 1
+MORPH_TEST_CH_TB := 2
+MORPH_TEST_CH_TC := 1
+MORPH_TEST_CH_TD := 2
+
+$(BUILD_DIR)/MR%.elf: $(SDK_DIR)/engines/morphangutan.cpp $(SDK_DIR)/engines/morphangutan/morph_dsp.h
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(MORPH_TEST_FLAGS_$*) -I$(SDK_DIR)/engines $< $(LDFLAGS) $(PSYN_EXTRA_LDFLAGS) -o $@
+
+$(BUILD_DIR)/MR%.psyn: $(BUILD_DIR)/MR%.elf $(SDK_DIR)/tools/psyn_builder.py
+	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py --elf $< --out $@ \
+		--code-name "MR$*" --display-name "Morph test $*" --patch-folder "MR$*" \
+		--type-id-wave 0 --type-id-play-tracker 0 --default-voices 4 --max-voices 8 \
+		--output-channels $(MORPH_TEST_CH_$*) --renders-aux 0 --has-sample-slots 0 \
+		--supports-idle-sleep 1 --has-voice-tick-idle 1
+
+morph-hwtest: $(BUILD_DIR)/MRTA.psyn $(BUILD_DIR)/MRTB.psyn $(BUILD_DIR)/MRTC.psyn $(BUILD_DIR)/MRTD.psyn
+
 # host tests + WAV previews (runs on the computer, not the Tracker)
 HOSTCXX ?= g++
 morph-test:
@@ -104,4 +128,4 @@ morph-previews:
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean morph-test morph-previews
+.PHONY: all clean morph-test morph-previews morph-hwtest

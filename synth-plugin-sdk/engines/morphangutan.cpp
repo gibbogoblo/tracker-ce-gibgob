@@ -8,6 +8,11 @@
 
 #include "morphangutan/morph_dsp.h"
 
+// Hardware test switches (normal build: none defined)
+//   MORPH_MONO      mono output instead of stereo
+//   MORPH_NO_FX     no instrument effects (no post process)
+//   MORPH_TEST_SINE plain sine wave instead of the MORPHANGUTAN voice
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -197,7 +202,13 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
         delete[] fxMemory;
     }
 
+#ifdef MORPH_TEST_SINE
+    bool isActive() final { return sineGate || sineLevel > 0.0001f; }
+    bool sineGate = false;
+    float sineLevel = 0.0f, sinePhase = 0.0f, sineHz = 440.0f;
+#else
     bool isActive() final { return dsp.active(); }
+#endif
 
     bool hasTickIdle() const final { return true; }
 
@@ -210,16 +221,54 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     {
         params.glideMode = static_cast<uint8_t>(playMode);
         dsp.noteOn(params, static_cast<float>(note), velocity, isLegatoStep);
+#ifdef MORPH_TEST_SINE
+        sineGate = true;
+        sineHz = 440.0f * sdk::fastPow2((static_cast<float>(note) - 69.0f) / 12.0f);
+#endif
     }
 
-    void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final { dsp.noteOff(); }
+    void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final
+    {
+        dsp.noteOff();
+#ifdef MORPH_TEST_SINE
+        sineGate = false;
+#endif
+    }
 
     void renderVoiceAudio(const InstrumentVoiceContext& ctx, AudioBufferStereoRef outputBuffer) final
     {
         auto left = outputBuffer[0];
         auto right = outputBuffer[1];
         const int n = static_cast<int>(std::min(left.size(), right.size()));
+#ifdef MORPH_TEST_SINE
+        (void)ctx;
+        if (sineGate || sineLevel > 0.0001f)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                sineLevel += ((sineGate ? 0.4f : 0.0f) - sineLevel) * 0.002f;
+                sinePhase += sineHz * (1.0f / 44100.0f);
+                if (sinePhase >= 1.0f)
+                {
+                    sinePhase -= 1.0f;
+                }
+                left[i] = right[i] = sdk::fastSine(sinePhase) * sineLevel;
+            }
+        }
+        else
+        {
+            std::fill(left.begin(), left.end(), 0.0f);
+            std::fill(right.begin(), right.end(), 0.0f);
+        }
+#else
         dsp.render(params, ctx.tempo, pitchBendSemitones, left.data(), right.data(), n);
+#endif
+#ifdef MORPH_MONO
+        for (int i = 0; i < n; ++i)
+        {
+            left[i] = 0.5f * (left[i] + right[i]);
+        }
+#endif
         for (int i = 0; i < n && i < static_cast<int>(lastGraphSamples.size()); ++i)
         {
             lastGraphSamples[i] = 0.5f * (left[i] + right[i]);
@@ -234,6 +283,7 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
         renderVoiceAudio(ctx, outputBuffer);
     }
 
+#ifndef MORPH_NO_FX
     // Delay and reverb run once on the mix of all voices (the host calls this
     // on the instrument's first voice only). Their memory is taken the first
     // time an effect is switched on.
@@ -268,6 +318,7 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     }
 
     bool hasPostProcess() const final { return true; }
+#endif
 
     void renderGraph(std::span<float> points) override
     {
@@ -598,7 +649,11 @@ void MorphangutanVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
     };
 
     metadata.instrumentTypeId = 60;
+#ifdef MORPH_MONO
+    metadata.outputChannels = Patch::Metadata::OutputChannels::kMono;
+#else
     metadata.outputChannels = Patch::Metadata::OutputChannels::kStereo;
+#endif
 }
 
 } // namespace polysynth
