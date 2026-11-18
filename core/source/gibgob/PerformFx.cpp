@@ -340,6 +340,8 @@ struct Engine::Impl
     Cell dlyCell;
 
     bool reverbTail = false;
+    float revInL[128];
+    float revInR[128];
     float reverbQuiet = 0.0f;
 
     Impl()
@@ -649,7 +651,9 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
     }
 
     // ================= per sample =================
-    float revInL[128], revInR[128];
+    // reverb input (in the engine, not on the interrupt stack)
+    float* revInL = s.revInL;
+    float* revInR = s.revInR;
     const bool reverbRunning = s.reverbTail && s.reverbParams.reverbType != morph::kReverbOff;
 
     for (int i = 0; i < n; i++)

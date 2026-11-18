@@ -55,7 +55,8 @@ AUDIO_CORE_RAM void AudioEffectGibGobPerform::update(void)
         return;
     }
 
-    float l[AUDIO_BLOCK_SAMPLES], r[AUDIO_BLOCK_SAMPLES];
+    // kept off the interrupt stack (only the audio interrupt uses them)
+    static float l[AUDIO_BLOCK_SAMPLES], r[AUDIO_BLOCK_SAMPLES];
     for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
     {
         l[i] = (float)left->data[i] * (1.0f / 32768.0f);

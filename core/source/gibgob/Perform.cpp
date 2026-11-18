@@ -74,7 +74,8 @@ void init()
     factoryCells(cells);
     for (int i = 0; i < kCells; i++)
         s_engine.setCell(i, cells[i]);
-    s_engine.attach(s_memory);
+    // the 1.75 MB of buffers are prepared later, by loadSaved(), once the
+    // screens are up: start-up stays exactly as before
 }
 
 void loadSaved()
@@ -84,6 +85,8 @@ void loadSaved()
         return;
     loaded = true;
     load();
+    // until now the effects stage passed audio through untouched
+    s_engine.attach(s_memory);
 }
 
 void press(int cell)
