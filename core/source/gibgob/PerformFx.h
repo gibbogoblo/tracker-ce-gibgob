@@ -41,8 +41,17 @@ enum Fx : uint8_t
     kFxTalkbox,
     kFxVinyl,
     kFxGate,
+    // CHIMP OUT additions (new ids only at the end: saved buttons keep theirs)
+    kFxHalftime,
+    kFxBassKill,
+    kFxRiser,
+    kFxScratch,
+    kFxPump,
+    kFxDrumCut,    // mutes the drum tracks (handled outside the engine)
+    kFxMelodicCut, // mutes the melodic tracks (handled outside the engine)
     kFxCount
 };
+static constexpr int kFxDelay = kFxDelayCut; // the delay (was "Delay cut")
 
 struct Cell
 {
@@ -77,6 +86,13 @@ Cell defaultCell(int fx);
 void factoryCells(Cell cells[kCells]);
 
 // ---- the processor ----
+// twist switches of a held button (Engine::flags)
+static constexpr uint8_t kTwistDryCut = 0x01;    // delay / reverb: mute the mix
+static constexpr uint8_t kTwistFreeze = 0x02;    // reverb: hold the tail
+static constexpr uint8_t kTwistSpinUp = 0x04;    // vinyl: back up to speed
+static constexpr uint8_t kTwistBrake1 = 0x10;    // vinyl: brake harder (x2 per step)
+static constexpr uint8_t kTwistBrakeMask = 0x30;
+
 struct Clock
 {
     bool playing = false;
@@ -96,7 +112,12 @@ class Engine
     // UI side (any thread): which cells are held and what they hold.
     void setCell(int i, const Cell& c);
     Cell cell(int i) const { return cells[i & 7]; }
-    void setHeld(uint8_t mask) { held = mask; }
+    Cell liveCell(int i) const { return live[i & 7]; }
+    // holding: a held button plays from a copy of its settings, which the
+    // twists change; letting go forgets the twists
+    void setHeld(uint8_t mask);
+    // + / Up (dir > 0) or - / Down (dir < 0) while button i is held
+    void twist(int i, int dir);
     uint8_t heldMask() const { return held; }
     void releaseAll() { held = 0; }
 
@@ -112,6 +133,8 @@ class Engine
     uint8_t* mem = nullptr;
     Impl* impl = nullptr;
     Cell cells[kCells];
+    Cell live[kCells];          // what a held button plays (settings + twists)
+    volatile uint8_t flags[kCells] = { 0, 0, 0, 0, 0, 0, 0, 0 }; // twist switches
     volatile uint8_t held = 0;
     volatile uint8_t activeMask = 0;
 };

@@ -21,9 +21,17 @@ void press(int cell);
 void release(int cell);
 void releaseAll();
 bool isHeld(int cell);
+bool anyHeld();
+// + / Up (dir > 0) or - / Down (dir < 0) while a button is held: changes the
+// latest held button's effect until it is let go. Returns false if none held.
+bool twist(int dir);
+// call from the screens' update(): keeps Drum cut / Melodic cut on the right
+// voices while they are held (chords borrow voices of other tracks)
+void uiTick();
 
 // the eight buttons (saved to the SD card by save())
 Cell getCell(int i);
+Cell getLiveCell(int i); // what a held button plays right now (with its twists)
 void setCell(int i, const Cell& c);
 void save();
 

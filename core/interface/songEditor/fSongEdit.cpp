@@ -657,6 +657,11 @@ static void functTempo(uint8_t state)
 
 static void functEncoder(int16_t value)
 {
+    if (gibgob::perform::anyHeld())
+    {
+        gibgob::perform::twist(value > 0 ? 1 : -1);
+        return;
+    }
     if (SE->isBusy)
     {
         return;
@@ -706,6 +711,12 @@ static void functShift(uint8_t state)
 
 static void functUp()
 {
+    // GibGob OS: holding a CHIMP OUT effect, Up twists it
+    if (gibgob::perform::anyHeld())
+    {
+        gibgob::perform::twist(+1);
+        return;
+    }
     if (SE->isBusy)
     {
         return;
@@ -730,6 +741,11 @@ static void functUp()
 
 static void functDown()
 {
+    if (gibgob::perform::anyHeld())
+    {
+        gibgob::perform::twist(-1);
+        return;
+    }
     if (SE->isBusy)
     {
         return;
@@ -1778,6 +1794,7 @@ static void functGibGobTopRow(uint8_t button, uint8_t state)
 // the labels follow the mode: effect names while playing, song buttons otherwise
 static void gibgobPerformLabels()
 {
+    gibgob::perform::uiTick();
     const int mode = gibgobPerformMode() ? 1 : 0;
     uint8_t active = 0;
     for (int i = 0; i < 8; i++)

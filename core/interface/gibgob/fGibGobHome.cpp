@@ -467,6 +467,7 @@ void cGibGobHome::update()
     if (mask != lastSounding)
         changed = true;
 
+    perform::uiTick();
     if (shiftNow)
     {
         uint8_t perfActive = 0;
@@ -957,6 +958,13 @@ static void functUp(uint8_t s)
 {
     if (!pressOrRepeat(s))
         return;
+    // holding a CHIMP OUT effect: Up twists it (Down / - the other way)
+    if (perform::anyHeld())
+    {
+        if (s == buttonPress && perform::twist(+1))
+            GH->refresh();
+        return;
+    }
     if (shiftActive())
     {
         if (s == buttonPress)
@@ -970,6 +978,12 @@ static void functDown(uint8_t s)
 {
     if (!pressOrRepeat(s))
         return;
+    if (perform::anyHeld())
+    {
+        if (s == buttonPress && perform::twist(-1))
+            GH->refresh();
+        return;
+    }
     if (shiftActive())
     {
         if (s == buttonPress)
@@ -1061,6 +1075,13 @@ static void functParamButton(uint8_t button, uint8_t state)
 
 static void functEncoder(int16_t value)
 {
+    // holding a CHIMP OUT effect: +/- twist it, one step per press
+    if (perform::anyHeld())
+    {
+        if (perform::twist(value > 0 ? 1 : -1))
+            GH->refresh();
+        return;
+    }
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;

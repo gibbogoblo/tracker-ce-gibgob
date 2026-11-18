@@ -1317,6 +1317,29 @@ AUDIO_CORE_RAM void audioEngine::setSynthReverbSend(int synthIdx, float value)
     mixerAndFxs.getPreFxMixer(MixerAndFxs<kVoices>::FxType::kReverb)->gain(mixerInputIdx, gain);
 }
 
+void audioEngine::gibgobCutSynth(int synthIdx, bool cut)
+{
+    if (synthIdx < 0 || synthIdx >= kSynthParts)
+    {
+        return;
+    }
+    // the mixers fade gain changes over a block, so this does not click
+    const float gain = cut ? 0.0f : 1.0f;
+    mixerAndFxs.getTracksMixer(MixerAndFxChannelType::kLeft)->gain(kVoices + synthIdx, gain);
+    mixerAndFxs.getTracksMixer(MixerAndFxChannelType::kRight)->gain(kVoices + synthIdx, gain);
+    if (cut)
+    {
+        const int mixerInputIdx = 2 + 2 * kVoices + synthIdx;
+        mixerAndFxs.getPreFxMixer(MixerAndFxs<kVoices>::FxType::kDelay)->gain(mixerInputIdx, AMP_MUTED);
+        mixerAndFxs.getPreFxMixer(MixerAndFxs<kVoices>::FxType::kReverb)->gain(mixerInputIdx, AMP_MUTED);
+    }
+    else
+    {
+        refreshSynthParam(SynthParam::kDelaySend);
+        refreshSynthParam(SynthParam::kReverbSend);
+    }
+}
+
 AUDIO_CORE_RAM void audioEngine::setSynthPanning(int synthIdx, float value)
 {
     float gainR = mapClamped<float>(value, -100.0f, 0.0f, 0.0f, 1.0f);

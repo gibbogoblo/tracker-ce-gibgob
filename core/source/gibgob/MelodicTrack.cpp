@@ -1631,6 +1631,13 @@ void stopAll()
     }
 }
 
+int voiceOwner(int voice)
+{
+    if (voice < 0 || voice >= kTracks)
+        return 0;
+    return s_lastVoiceOwner[voice] >= 0 ? s_lastVoiceOwner[voice] : voice;
+}
+
 void markLegacyPlayed(int track)
 {
     if (validTrack(track))

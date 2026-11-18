@@ -135,6 +135,11 @@ class audioEngine
     float getSynthVoiceRMS(uint8_t channel, int synthIdx);
 #endif
     void muteTrack(uint8_t channel, uint8_t state);
+#ifdef FEATURE_SYNTH
+    // GibGob OS (Drum / Melodic cut): mutes a synth part's output and sends,
+    // smoothly, while it keeps playing; false puts its settings back
+    void gibgobCutSynth(int synthIdx, bool cut);
+#endif
     void soloTrack(uint8_t channel, uint8_t state);
     void muteDelaySend(uint8_t channel, uint8_t state);
     void muteReverbSend(uint8_t channel, uint8_t state);

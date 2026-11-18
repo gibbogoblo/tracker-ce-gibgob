@@ -224,6 +224,7 @@ void stopAll();
 void stopTrack(int track);
 void markLegacyPlayed(int track); // an old tracker step sounded on this track
 int playheadTick(int track);      // micro steps inside the track, -1 when stopped
+int voiceOwner(int voice);        // track that last played on a sample voice (chords borrow voices)
 bool isSounding(int track);       // for activity lights
 
 // ---- live playing (UI context) ----

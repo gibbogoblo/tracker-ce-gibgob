@@ -12,7 +12,7 @@ const char* const kModuleNamesList[kMenuModulesCount] = { "Sequencer",
                                                           "Sample Loader",
                                                           "File",
                                                           "Config",
-                                                          "Perform",
+                                                          "CHIMP OUT",
                                                           "Sample Editor",
                                                           "Sample Recorder" };
 

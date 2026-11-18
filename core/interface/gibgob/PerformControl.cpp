@@ -25,6 +25,13 @@ uint32_t performFxColor(int fx)
         case kFxTalkbox: return 0x53B886;
         case kFxVinyl: return 0xB8AA53;
         case kFxGate: return 0xC7CCD1;
+        case kFxHalftime: return 0x4FA3E0;
+        case kFxBassKill: return 0x8C5A3C;
+        case kFxRiser: return 0xE0D45A;
+        case kFxScratch: return 0xE05A8C;
+        case kFxPump: return 0x6FD69A;
+        case kFxDrumCut: return 0xB85548;
+        case kFxMelodicCut: return 0x5F53B8;
         default: return 0x3C3C42;
     }
 }

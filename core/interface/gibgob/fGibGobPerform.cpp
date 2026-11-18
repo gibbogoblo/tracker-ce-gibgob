@@ -60,7 +60,7 @@ void cGibGobPerform::start(uint32_t /*options*/)
     screenOpened();
     pf::loadSaved();
     view.help.active = false;
-    view.help.title = "Perform - shortcuts";
+    view.help.title = "CHIMP OUT FX - shortcuts";
     view.help.lines = kHelpPerform;
     view.help.count = (int)(sizeof(kHelpPerform) / sizeof(kHelpPerform[0]));
     for (int i = 0; i < 8; i++)
@@ -69,7 +69,7 @@ void cGibGobPerform::start(uint32_t /*options*/)
     lastActive = 0xFF;
 
     songTimer.hide();
-    snprintf(titleText, sizeof(titleText), "Perform");
+    snprintf(titleText, sizeof(titleText), "CHIMP OUT FX");
     titleBar->show();
     titleBar->setTitle(titleText);
 
@@ -124,6 +124,7 @@ void cGibGobPerform::setDefaultScreenFunct()
 
 void cGibGobPerform::update()
 {
+    pf::uiTick();
     uint8_t active = 0;
     for (int i = 0; i < 8; i++)
         if (pf::isHeld(i) || pf::engine().cellActive(i))
@@ -140,7 +141,7 @@ void cGibGobPerform::refresh()
     uint8_t active = 0;
     for (int i = 0; i < 8; i++)
     {
-        const pf::Cell c = pf::getCell(i);
+        const pf::Cell c = pf::isHeld(i) ? pf::getLiveCell(i) : pf::getCell(i);
         const pf::FxInfo& info = pf::fxInfo(c.fx);
         PerformView::CellView& v = view.cells[i];
         const bool on = pf::isHeld(i) || pf::engine().cellActive(i);
@@ -197,7 +198,7 @@ void cGibGobPerform::refresh()
         field = kFieldEffect;
     view.selectedParam = field;
 
-    snprintf(view.title, sizeof(view.title), "Perform  -  button %d", cursor + 1);
+    snprintf(view.title, sizeof(view.title), "CHIMP OUT  -  button %d", cursor + 1);
 
     display.refreshControl(control);
 }
@@ -284,11 +285,23 @@ static void functPlay(uint8_t state)
 
 static void functUp(uint8_t s)
 {
+    if (pf::anyHeld())
+    {
+        if (s == buttonPress && pf::twist(+1))
+            GPF->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GPF->moveCursor(0, -1);
 }
 static void functDown(uint8_t s)
 {
+    if (pf::anyHeld())
+    {
+        if (s == buttonPress && pf::twist(-1))
+            GPF->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GPF->moveCursor(0, 1);
 }
@@ -343,6 +356,13 @@ static void functFieldButton(uint8_t button, uint8_t state)
 
 static void functEncoder(int16_t value)
 {
+    // holding a button: +/- twist its effect (until it is let go)
+    if (pf::anyHeld())
+    {
+        if (pf::twist(value > 0 ? 1 : -1))
+            GPF->refresh();
+        return;
+    }
     const bool big = value >= 10 || value <= -10;
     GPF->changeValue(value > 0 ? 1 : -1, big);
 }

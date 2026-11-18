@@ -1028,6 +1028,8 @@ class Fx
 
     // reverb output only (no dry signal), for effects that mix it themselves
     bool wetOnly = false;
+    // freeze: the tail holds (no loss, no new input) until switched off
+    bool freeze = false;
 
     // modulation: delay mix, delay feedback, reverb mix, reverb decay (from voice 0)
     void process(const Params& p, float tempo, const float* fxMod, float* l, float* r, int n)
@@ -1298,13 +1300,18 @@ class Fx
         // damping: amount of high end lost in the tank on every pass
         float dampCoef = dark ? 0.12f + tone * 0.25f : 0.25f + tone * 0.7f;
         float bw = dark ? 0.2f + tone * 0.3f : 0.55f + tone * 0.44f;
+        if (freeze)
+        {
+            decay = 0.9995f;
+            dampCoef = 1.0f; // no damping: the frozen sound keeps its colour
+        }
         const float modDepth = dark ? 16.0f : 8.0f;
         const float lfoInc = (dark ? 0.6f : 1.0f) * kInvSampleRate;
 
         for (int i = 0; i < n; ++i)
         {
-            float x = (l[i] + r[i]) * 0.5f;
-            if (shim)
+            float x = freeze ? 0.0f : (l[i] + r[i]) * 0.5f;
+            if (shim && !freeze)
             {
                 // feed an octave-up copy of the tail back in
                 shimmerLp += (shimmerFeedback - shimmerLp) * 0.3f;

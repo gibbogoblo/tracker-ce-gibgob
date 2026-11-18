@@ -58,6 +58,16 @@ const float kTalkLen16[] = { 2, 4, 8, 16, 32 };
 const char* const kVinylTime[] = { "1/4", "1/2", "1 bar", "2 bars" };
 const float kVinylLen16[] = { 4, 8, 16, 32 };
 const char* const kGateRate[] = { "1/8", "1/16", "1/32" };
+const char* const kHalfSpeed[] = { "1/2", "2/3", "3/4" };
+const float kHalfRate[] = { 0.5f, 2.0f / 3.0f, 0.75f };
+const char* const kBassFreq[] = { "80", "120", "160", "250", "400" };
+const float kBassHz[] = { 80.0f, 120.0f, 160.0f, 250.0f, 400.0f };
+const char* const kRiserLen[] = { "1 bar", "2 bars", "4 bars" };
+const float kRiserLen16[] = { 16, 32, 64 };
+const char* const kScratchPattern[] = { "Baby", "Chirp", "Trans", "Stab" };
+const char* const kScratchSpeed[] = { "1/8", "1/16" };
+const char* const kPumpRate[] = { "1/4", "1/8", "1/2" };
+const float kPumpLen16[] = { 4, 2, 8 };
 const char* const kGatePattern[] = { "Straight", "Trance 1", "Trance 2", "Trance 3",
                                      "Trance 4", "Trance 5", "Trance 6" };
 // 16 slots, first slot = most significant bit
@@ -80,7 +90,7 @@ const FxInfo kInfo[kFxCount] = {
         { "Filter", N(kFilterCut), 0, kFilterCut, 0 },
         { "Decay", N(kDecay), 0, kDecay, 0 } } },
     { "Stutter", "STUT", 2,
-      { { "Pattern", 8, 0, nullptr, 1 }, { "Filter", N(kFilterCut), 0, kFilterCut, 0 } } },
+      { { "Pattern", 16, 0, nullptr, 1 }, { "Filter", N(kFilterCut), 0, kFilterCut, 0 } } },
     { "Filter sweep", "SWEEP", 3,
       { { "Shape", N(kSweepShape), 1, kSweepShape, 0 },
         { "Speed", N(kSweepSpeed), 2, kSweepSpeed, 0 },
@@ -89,7 +99,7 @@ const FxInfo kInfo[kFxCount] = {
       { { "Frequency", N(kCombFreq), 6, kCombFreq, 0 }, { "Amount", 10, 6, nullptr, 1 } } },
     { "Cut", "CUT", 2,
       { { "Noise", N(kNoise), 0, kNoise, 0 }, { "Level", 10, 3, nullptr, 1 } } },
-    { "Delay cut", "DLYCUT", 3,
+    { "Delay", "DELAY", 3,
       { { "Time", N(kDelayTime), 3, kDelayTime, 0 },
         { "Type", N(kDelayType), 0, kDelayType, 0 },
         { "Feedback", 10, 5, nullptr, 1 } } },
@@ -107,6 +117,18 @@ const FxInfo kInfo[kFxCount] = {
       { { "Rate", N(kGateRate), 1, kGateRate, 0 },
         { "Pattern", N(kGatePattern), 0, kGatePattern, 0 },
         { "Depth", 10, 9, nullptr, 1 } } },
+    { "Halftime", "HALF", 1, { { "Speed", N(kHalfSpeed), 0, kHalfSpeed, 0 } } },
+    { "Bass kill", "BASS", 2,
+      { { "Freq", N(kBassFreq), 2, kBassFreq, 0 }, { "Amount", 10, 9, nullptr, 1 } } },
+    { "Riser", "RISER", 2,
+      { { "Length", N(kRiserLen), 1, kRiserLen, 0 }, { "Level", 10, 5, nullptr, 1 } } },
+    { "Scratch", "SCRTCH", 2,
+      { { "Pattern", N(kScratchPattern), 0, kScratchPattern, 0 },
+        { "Speed", N(kScratchSpeed), 0, kScratchSpeed, 0 } } },
+    { "Pump", "PUMP", 2,
+      { { "Rate", N(kPumpRate), 0, kPumpRate, 0 }, { "Depth", 10, 6, nullptr, 1 } } },
+    { "Drum cut", "DRUMS", 0, {} },
+    { "Melodic cut", "MELO", 0, {} },
 };
 
 // Stutter patterns: for each 1/16 of the bar, which 1/16 it plays
@@ -120,7 +142,7 @@ struct StutStep
 #define S_(x) { x, 0 }
 #define R2(x) { x, 2 }
 #define R4(x) { x, 4 }
-const StutStep kStutter[8][16] = {
+const StutStep kStutter[16][16] = {
     // 1 Repeat: every other beat plays the beat before
     { S_(0), S_(1), S_(2), S_(3), S_(0), S_(1), S_(2), S_(3), S_(8), S_(9), S_(10), S_(11), S_(8), S_(9), S_(10), S_(11) },
     // 2 Threes: 3-step loops across the beat
@@ -137,6 +159,22 @@ const StutStep kStutter[8][16] = {
     { S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(4), S_(5), S_(4), S_(5), S_(10), S_(11), S_(8), R2(8), S_(9), R4(9) },
     // 8 Glitch: little rolls all over
     { S_(0), R4(0), S_(2), S_(3), S_(4), S_(5), R2(5), S_(7), S_(8), S_(9), S_(10), R4(10), S_(12), S_(13), R2(14), R4(15) },
+    // 9 Half loop: the second half of the bar plays the first half again
+    { S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(6), S_(7), S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(6), S_(7) },
+    // 10 Last beat: straight, then the last beat hammers its first 1/16
+    { S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(6), S_(7), S_(8), S_(9), S_(10), S_(11), S_(12), S_(12), S_(12), S_(12) },
+    // 11 Three over four: a 3-step loop across the whole bar
+    { S_(0), S_(1), S_(2), S_(0), S_(1), S_(2), S_(0), S_(1), S_(2), S_(0), S_(1), S_(2), S_(0), S_(1), S_(2), S_(0) },
+    // 12 Amen edit: beats 1-2 come back in the second half
+    { S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(6), S_(7), S_(8), S_(9), S_(2), S_(3), S_(12), S_(13), S_(6), S_(7) },
+    // 13 Double time: every 1/8 rolls at 1/32
+    { S_(0), R2(0), S_(2), R2(2), S_(4), R2(4), S_(6), R2(6), S_(8), R2(8), S_(10), R2(10), S_(12), R2(12), S_(14), R2(14) },
+    // 14 Glitch end: straight until the last beat falls apart
+    { S_(0), S_(1), S_(2), S_(3), S_(4), S_(5), S_(6), S_(7), S_(8), S_(9), S_(10), S_(11), S_(12), R2(12), R4(13), R4(13) },
+    // 15 Beats backwards: the beats of the bar in reverse order
+    { S_(12), S_(13), S_(14), S_(15), S_(8), S_(9), S_(10), S_(11), S_(4), S_(5), S_(6), S_(7), S_(0), S_(1), S_(2), S_(3) },
+    // 16 One beat: the first beat loops all bar
+    { S_(0), S_(1), S_(2), S_(3), S_(0), S_(1), S_(2), S_(3), S_(0), S_(1), S_(2), S_(3), S_(0), S_(1), S_(2), S_(3) },
 };
 
 // vowel formants (Hz): A E I O U
@@ -161,7 +199,12 @@ inline float lerp(float a, float b, float t)
 }
 inline bool isTimeFx(int fx)
 {
-    return fx == kFxRoll || fx == kFxStutter || fx == kFxReverse || fx == kFxVinyl;
+    return fx == kFxRoll || fx == kFxStutter || fx == kFxReverse || fx == kFxVinyl || fx == kFxHalftime ||
+           fx == kFxScratch;
+}
+inline bool isTrackCut(int fx)
+{
+    return fx == kFxDrumCut || fx == kFxMelodicCut;
 }
 
 // effects that exist once (the latest held button of that kind sets it)
@@ -174,6 +217,9 @@ enum Kind
     kKindCut,
     kKindDelay,
     kKindReverb,
+    kKindBass,
+    kKindRiser,
+    kKindPump,
     kKindCount
 };
 int kindOf(int fx)
@@ -187,6 +233,9 @@ int kindOf(int fx)
         case kFxCut: return kKindCut;
         case kFxDelayCut: return kKindDelay;
         case kFxReverb: return kKindReverb;
+        case kFxBassKill: return kKindBass;
+        case kFxRiser: return kKindRiser;
+        case kFxPump: return kKindPump;
         default: return -1;
     }
 }
@@ -252,10 +301,10 @@ void factoryCells(Cell cells[kCells])
     cells[1].p[1] = 3; // filter 3k
     cells[2] = defaultCell(kFxStutter);
     cells[3] = defaultCell(kFxFilter);
-    cells[4] = defaultCell(kFxDelayCut);
+    cells[4] = defaultCell(kFxDelay);
     cells[5] = defaultCell(kFxReverb);
     cells[5].p[0] = 2; // shimmer
-    cells[6] = defaultCell(kFxReverse);
+    cells[6] = defaultCell(kFxHalftime);
     cells[7] = defaultCell(kFxVinyl);
 }
 
@@ -288,6 +337,9 @@ struct Engine::Impl
     int32_t anchorStep = 0;
     uint32_t anchor = 0;
     float vinylLen = 1.0f;
+    float vinylSpeed = 1.0f, vinylBack = 0.0f;
+    int stutPattern = 0;
+    int32_t stutLastStep = -1;
     float curBack = 0.0f, lastBack = 0.0f, curDelta = 0.0f;
     uint32_t curSeg = 0;
     float curGain = 1.0f;
@@ -329,15 +381,26 @@ struct Engine::Impl
     float rumble = 0.0f;
     float crackle = 0.0f;
 
-    // delay cut: 0 idle (records the mix), 1 engaged, 2 tail
+    // delay: 0 idle, 1 held (the mix goes in), 2 held + cut (only the echoes
+    // go round, the mix is muted), 3 tail (echoes ring out)
     int dlyState = 0;
+    float dlySend = 0.0f;
+    float dryCut = 0.0f; // delay / reverb twist: the mix is muted
     uint32_t dlyPos = 0;
     float dlySamples = 0.0f;
     float dlyLp[2] = { 0, 0 };
     float wow = 0.0f;
     float dlyQuiet = 0.0f;
-    float dlyFeed = 0.0f; // 0 = records the mix, 1 = only echoes go round
     Cell dlyCell;
+    float dlyWet = 0.0f;
+
+    // bass kill, riser, pump
+    StereoSvf bassHp;
+    float bassAmount = 1.0f;
+    StereoSvf riserBp;
+    float riserLen = 44100.0f, riserLevel = 0.5f;
+    int pumpLen16 = 4;
+    float pumpDepth = 0.6f, pumpEnv = 1.0f;
 
     bool reverbTail = false;
     float revInL[128];
@@ -383,6 +446,99 @@ void Engine::attach(void* memory)
     mem = (uint8_t*)memory;
 }
 
+void Engine::setHeld(uint8_t mask)
+{
+    // a newly held button starts from its saved settings, without twists
+    const uint8_t newly = (uint8_t)(mask & ~held);
+    for (int i = 0; i < kCells; i++)
+        if (newly & (1u << i))
+        {
+            live[i] = cells[i];
+            flags[i] = 0;
+        }
+    held = mask;
+}
+
+void Engine::twist(int i, int dir)
+{
+    i &= 7;
+    if (!((held >> i) & 1))
+        return;
+    Cell c = live[i];
+    const FxInfo& in = fxInfo(c.fx);
+    auto clampP = [&](int k, int v)
+    {
+        if (k >= in.paramCount)
+            return 0;
+        const int hi = in.params[k].count - 1;
+        return v < 0 ? 0 : (v > hi ? hi : v);
+    };
+    const bool up = dir > 0;
+    uint8_t f = flags[i];
+    switch (c.fx)
+    {
+        case kFxRoll: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 2 : -2)); break; // 1/16 > 1/32 > 1/64
+        case kFxStutter: c.p[0] = (uint8_t)((c.p[0] + (up ? 1 : 15)) % 16); break; // on the next beat
+        case kFxFilter:
+            if (up)
+                c.p[2] = (uint8_t)clampP(2, c.p[2] + 2);
+            else
+                c.p[0] ^= 2; // LP <-> HP
+            break;
+        case kFxComb: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
+        case kFxCut:
+            if (up)
+                c.p[0] = c.p[0] == 0 ? 2 : 0; // noise on / off
+            else
+                c.p[0] = (uint8_t)(c.p[0] % 3 + 1); // next noise
+            break;
+        case kFxDelay:
+            if (up)
+                f ^= kTwistDryCut;
+            else
+                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
+            break;
+        case kFxReverb: f ^= up ? kTwistDryCut : kTwistFreeze; break;
+        case kFxReverse: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 12 : -12)); break;
+        case kFxTalkbox:
+            if (up)
+                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
+            else
+                c.p[1] = (uint8_t)(c.p[1] == 0 ? in.params[1].count - 1 : c.p[1] - 1);
+            break;
+        case kFxVinyl:
+            if (up)
+                f |= kTwistSpinUp;
+            else if ((f & kTwistBrakeMask) != kTwistBrakeMask)
+                f = (uint8_t)(f + kTwistBrake1);
+            break;
+        case kFxGate:
+            if (up)
+                c.p[0] = (uint8_t)clampP(0, c.p[0] + 1);
+            else
+                c.p[1] = (uint8_t)((c.p[1] + 1) % in.params[1].count);
+            break;
+        case kFxHalftime: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
+        case kFxBassKill: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
+        case kFxRiser: c.p[1] = (uint8_t)clampP(1, c.p[1] + (up ? 1 : -1)); break;
+        case kFxScratch:
+            if (up)
+                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
+            else
+                c.p[1] ^= 1;
+            break;
+        case kFxPump:
+            if (up)
+                c.p[1] = (uint8_t)clampP(1, c.p[1] + 2);
+            else
+                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
+            break;
+        default: break;
+    }
+    live[i] = c;
+    flags[i] = f;
+}
+
 void Engine::setCell(int i, const Cell& c)
 {
     Cell v = c;
@@ -393,6 +549,8 @@ void Engine::setCell(int i, const Cell& c)
         if (k >= in.paramCount || v.p[k] >= in.params[k].count)
             v.p[k] = k < in.paramCount ? in.params[k].def : 0;
     cells[i & 7] = v;
+    if (!((held >> (i & 7)) & 1))
+        live[i & 7] = v;
 }
 
 // ======================================================================
@@ -467,7 +625,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
     auto startTime = [&](int cellIdx)
     {
         s.timeCell = cellIdx;
-        s.timeFx = cells[cellIdx];
+        s.timeFx = live[cellIdx];
         const int fx = s.timeFx.fx;
         // the grid the effect locks to (in 1/16): rolls of a beat or 1/8 wait for theirs
         int grid = 1;
@@ -476,17 +634,23 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             const float len = kRollLen16[s.timeFx.p[0] < 8 ? s.timeFx.p[0] : 3];
             grid = len >= 4.0f ? 4 : (len >= 2.0f ? 2 : 1);
         }
+        if (fx == kFxHalftime)
+            grid = 4; // from the beat
         if (fx == kFxVinyl)
         {
             // a vinyl drop starts right away
             s.waiting = false;
             s.anchor = s.now;
             s.vinylLen = kVinylLen16[s.timeFx.p[0] < 4 ? s.timeFx.p[0] : 1] * S;
+            s.vinylSpeed = 1.0f;
+            s.vinylBack = 0.0f;
             return;
         }
         if (fx == kFxStutter)
         {
             s.waiting = false; // the pattern follows the bar, it can start anywhere
+            s.stutPattern = s.timeFx.p[0] & 15;
+            s.stutLastStep = -1;
             return;
         }
         // nearest grid line: a little late still counts as on the line
@@ -510,7 +674,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
         if (pressed & (1 << i))
         {
             s.order[i] = ++s.orderCounter;
-            const int fx = cells[i].fx;
+            const int fx = live[i].fx;
             if (isTimeFx(fx))
                 startTime(i);
             const int k = kindOf(fx);
@@ -520,11 +684,13 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 s.pressedAt[k] = s.now;
                 if (k == kKindDelay)
                 {
-                    s.dlyCell = cells[i];
+                    s.dlyCell = live[i];
                     if (s.dlyState == 0)
                         s.dlySamples = -1.0f; // jump straight to this button's time
                     s.dlyState = 1;
                 }
+                if (k == kKindRiser)
+                    s.riserBp.reset();
                 if (k == kKindReverb)
                     s.reverbTail = true;
             }
@@ -539,7 +705,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             // fall back to another held time effect, or back to live
             int best = -1;
             for (int j = 0; j < kCells; j++)
-                if ((heldNow & (1 << j)) && isTimeFx(cells[j].fx) && (best < 0 || s.order[j] > s.order[best]))
+                if ((heldNow & (1 << j)) && isTimeFx(live[j].fx) && (best < 0 || s.order[j] > s.order[best]))
                     best = j;
             s.timeCell = -1;
             if (best >= 0)
@@ -551,21 +717,24 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 continue;
             int best = -1;
             for (int j = 0; j < kCells; j++)
-                if ((heldNow & (1 << j)) && kindOf(cells[j].fx) == k && (best < 0 || s.order[j] > s.order[best]))
+                if ((heldNow & (1 << j)) && kindOf(live[j].fx) == k && (best < 0 || s.order[j] > s.order[best]))
                     best = j;
             s.owner[k] = best;
             if (k == kKindDelay && best < 0)
-                s.dlyState = 2; // let the echoes ring out
+                s.dlyState = 3; // let the echoes ring out
         }
     }
     // a cell changed while held: follow it
-    if (s.timeCell >= 0 && cells[s.timeCell].fx != s.timeFx.fx)
+    if (s.timeCell >= 0 && live[s.timeCell].fx != s.timeFx.fx)
         s.timeCell = -1;
     if (s.timeCell >= 0)
         for (int k = 0; k < kMaxParams; k++)
-            s.timeFx.p[k] = cells[s.timeCell].p[k];
+            s.timeFx.p[k] = live[s.timeCell].p[k];
 
     uint8_t active = 0;
+    for (int i = 0; i < kCells; i++)
+        if (((heldNow >> i) & 1) && isTrackCut(live[i].fx))
+            active |= (uint8_t)(1 << i);
     if (s.timeCell >= 0)
         active |= (uint8_t)(1 << s.timeCell);
     for (int k = 0; k < kKindCount; k++)
@@ -575,7 +744,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
 
     const Cell* own[kKindCount];
     for (int k = 0; k < kKindCount; k++)
-        own[k] = s.owner[k] >= 0 ? &cells[s.owner[k]] : nullptr;
+        own[k] = s.owner[k] >= 0 ? &live[s.owner[k]] : nullptr;
 
     // ---- per block settings ----
     // roll / stutter filter
@@ -629,7 +798,12 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
     const int noiseType = s.noiseType;
     const float noiseLevel = s.noiseLevel;
 
-    // delay cut
+    // delay: follows the held button (its time can be twisted)
+    if (own[kKindDelay])
+    {
+        s.dlyCell = *own[kKindDelay];
+        s.dlyState = (flags[s.owner[kKindDelay]] & kTwistDryCut) ? 2 : 1;
+    }
     const Cell& dc = s.dlyCell;
     const float dlyTarget =
       clampf(kDelayLen16[dc.p[0] < 7 ? dc.p[0] : 3] * S, 64.0f, (float)(kDelayFrames - 64));
@@ -648,6 +822,26 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
         s.reverbParams.reverbDecay = 0.085f * (float)(rc.p[1] + 1); // longest stays finite
         s.reverbParams.reverbMix = 0.1f * (float)(rc.p[2] + 1);
         s.reverbParams.reverbTone = 0.55f;
+    }
+    const uint8_t revFlags = own[kKindReverb] ? flags[s.owner[kKindReverb]] : 0;
+    s.reverb.freeze = (revFlags & kTwistFreeze) != 0;
+    // the delay or reverb twist that mutes the mix
+    const bool dryCutOn = (own[kKindDelay] && s.dlyState == 2) || (revFlags & kTwistDryCut) != 0;
+
+    if (own[kKindBass])
+    {
+        s.bassHp.setup(morph::prewarp(kBassHz[own[kKindBass]->p[0] < 5 ? own[kKindBass]->p[0] : 2]), 1.3f);
+        s.bassAmount = (float)(own[kKindBass]->p[1] + 1) / 10.0f;
+    }
+    if (own[kKindRiser])
+    {
+        s.riserLen = kRiserLen16[own[kKindRiser]->p[0] < 3 ? own[kKindRiser]->p[0] : 1] * S;
+        s.riserLevel = 0.03f * (float)(own[kKindRiser]->p[1] + 1);
+    }
+    if (own[kKindPump])
+    {
+        s.pumpLen16 = (int)kPumpLen16[own[kKindPump]->p[0] < 3 ? own[kKindPump]->p[0] : 0];
+        s.pumpDepth = (float)(own[kKindPump]->p[1] + 1) / 10.0f;
     }
 
     // ================= per sample =================
@@ -706,7 +900,14 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                         vStep++;
                         into -= S;
                     }
-                    const StutStep& st = kStutter[s.timeFx.p[0] & 7][vStep & 15];
+                    // a twisted pattern takes over on the next beat
+                    if (vStep != s.stutLastStep)
+                    {
+                        s.stutLastStep = vStep;
+                        if ((vStep & 3) == 0)
+                            s.stutPattern = s.timeFx.p[0] & 15;
+                    }
+                    const StutStep& st = kStutter[s.stutPattern][vStep & 15];
                     int d = (vStep & 15) - st.src;
                     if (d < 0)
                         d += 16;
@@ -733,12 +934,70 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 }
                 else if (fx == kFxVinyl)
                 {
+                    // the record slows to a stop; Up spins it back up faster than
+                    // normal until it has caught up with the song, Down brakes harder
+                    const uint8_t vf = flags[s.timeCell];
                     const float D = s.vinylLen;
-                    const float ev = e - kPreRoll;
-                    const float x = ev < D ? ev : D;
-                    t.back = x * x / (2.0f * D) + (ev > D ? (ev - D) : 0.0f);
-                    t.seg = 3;
-                    t.gain = ev < 0.8f * D ? 1.0f : clampf((D - ev) / (0.2f * D), 0.0f, 1.0f);
+                    if (vf & kTwistSpinUp)
+                    {
+                        s.vinylSpeed += 2.0f / D;
+                        if (s.vinylSpeed > 2.0f)
+                            s.vinylSpeed = 2.0f;
+                    }
+                    else
+                    {
+                        const float brake = (float)(1 << ((vf & kTwistBrakeMask) >> 4));
+                        s.vinylSpeed -= brake / D;
+                        if (s.vinylSpeed < 0.0f)
+                            s.vinylSpeed = 0.0f;
+                    }
+                    s.vinylBack += 1.0f - s.vinylSpeed;
+                    if (s.vinylBack <= 0.0f)
+                    {
+                        // caught up: back on the song
+                        s.vinylBack = 0.0f;
+                        s.vinylSpeed = 1.0f;
+                    }
+                    t.back = s.vinylBack;
+                    t.seg = s.vinylBack > 0.0f ? 3 : 0;
+                    t.gain = s.vinylSpeed > 0.15f ? 1.0f : s.vinylSpeed / 0.15f;
+                }
+                else if (fx == kFxHalftime)
+                {
+                    // half (or 2/3, 3/4) speed from the beat: an octave down, the groove
+                    // stretched. Every bar of source starts again from the song, so
+                    // it never runs out of recording.
+                    const float rate = kHalfRate[s.timeFx.p[0] < 3 ? s.timeFx.p[0] : 0];
+                    const float take = 16.0f * S / rate;
+                    const uint32_t k = (uint32_t)(e / take);
+                    const float ee = e - (float)k * take;
+                    t.back = ee * (1.0f - rate);
+                    t.seg = 20 + k + ((uint32_t)s.timeFx.p[0] << 16);
+                }
+                else if (fx == kFxScratch)
+                {
+                    // the beat before is scratched back and forth; every beat takes
+                    // the latest beat again
+                    const int pat = s.timeFx.p[0] & 3;
+                    const float P = (s.timeFx.p[1] ? 1.0f : 2.0f) * S; // stroke length
+                    const float beat = 4.0f * S;
+                    const uint32_t k = (uint32_t)(e / beat);
+                    const float ee = e - (float)k * beat;
+                    float x = ee / P;
+                    x -= (float)(int)x;
+                    // smooth stroke: out and back, peak speed about 1
+                    const float D = P * 0.3183f; // P / pi
+                    const float off = D * 0.5f * (1.0f - morph::sinTurns(x + 0.25f));
+                    t.back = beat + ee - off;
+                    t.seg = 30 + k;
+                    float g = 1.0f;
+                    if (pat == 1 && x >= 0.5f)
+                        g = 0.0f; // chirp: only the forward stroke
+                    else if (pat == 2 && (((int)(ee / (S * 0.5f))) & 1))
+                        g = 0.0f; // transformer: chopped at 1/32
+                    else if (pat == 3 && x >= 0.35f)
+                        g = 0.0f; // stab: a short push
+                    t.gain = g;
                 }
             }
         }
@@ -846,6 +1105,19 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             outR *= g;
         }
 
+        // ---------- pump: ducks on every beat (or 1/8, 1/2) and swells back ----------
+        if (s.mix[kKindPump] > 0.0f)
+        {
+            const int len = s.pumpLen16 > 0 ? s.pumpLen16 : 4;
+            const float x = ((float)(s.step % len) + s.frac) / (float)len;
+            const float dip = (1.0f - x) * (1.0f - x);
+            const float target = 1.0f - s.pumpDepth * dip;
+            s.pumpEnv += (target - s.pumpEnv) * 0.06f;
+            const float g = 1.0f - s.mix[kKindPump] * (1.0f - s.pumpEnv);
+            outL *= g;
+            outR *= g;
+        }
+
         // ---------- filter sweep ----------
         if (s.mix[kKindFilter] > 0.0f)
         {
@@ -892,6 +1164,20 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             s.combPos = (s.combPos + 1) & (kCombSize - 1);
             outL = lerp(outL, y[0], s.mix[kKindComb]);
             outR = lerp(outR, y[1], s.mix[kKindComb]);
+        }
+
+        // ---------- bass kill ----------
+        if (s.mix[kKindBass] > 0.0f)
+        {
+            float lo, bp, hp;
+            s.bassHp.f[0].process(outL, lo, bp, hp);
+            outL = lerp(outL, hp, s.mix[kKindBass] * s.bassAmount);
+            s.bassHp.f[1].process(outR, lo, bp, hp);
+            outR = lerp(outR, hp, s.mix[kKindBass] * s.bassAmount);
+        }
+        else
+        {
+            s.bassHp.reset();
         }
 
         // ---------- talkbox ----------
@@ -966,7 +1252,25 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             }
         }
 
-        // ---------- delay cut ----------
+        // ---------- riser: noise sweeping up over 1/2/4 bars ----------
+        if (s.mix[kKindRiser] > 0.0f)
+        {
+            const float x = clampf((float)(s.now - s.pressedAt[kKindRiser]) / s.riserLen, 0.0f, 1.0f);
+            if ((s.ctrlCount & 15) == 1)
+                s.riserBp.setup(morph::prewarp(200.0f * morph::pow2(x * 5.3f)), 0.7f);
+            float lo, bp, hp;
+            const float g = s.riserLevel * (0.15f + 0.85f * x * x) * s.mix[kKindRiser] * 0.7f;
+            s.riserBp.f[0].process(s.rng.bipolar(), lo, bp, hp);
+            noiseL += bp * g;
+            s.riserBp.f[1].process(s.rng.bipolar(), lo, bp, hp);
+            noiseR += bp * g;
+        }
+
+        // the delay / reverb twist mutes the mix (reverb and delay still hear it)
+        s.dryCut += ((dryCutOn ? 1.0f : 0.0f) - s.dryCut) * 0.01f;
+        const float sendL = outL, sendR = outR;
+
+        // ---------- delay ----------
         float dlyOutL = 0.0f, dlyOutR = 0.0f;
         {
             s.dlySamples += clampf((dlyTarget - s.dlySamples) * 0.0005f, -dlyGlideMax, dlyGlideMax);
@@ -990,10 +1294,11 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 wl = s.dlyLp[0];
                 wr = s.dlyLp[1];
             }
-            // idle: keeps a recording of the mix to echo when pressed.
-            // engaged / tail: only the echoes go round. The switch is a short
-            // fade, so the recording has no hard edge in it.
-            s.dlyFeed += ((s.dlyState == 0 ? 0.0f : 1.0f) - s.dlyFeed) * 0.02f;
+            // held: the mix goes in and the echoes come out. Held + cut: only
+            // the echoes go round (the mix just before keeps repeating). Let go:
+            // the echoes ring out. Sends and outputs fade, so nothing clicks.
+            s.dlySend += ((s.dlyState == 1 ? 1.0f : 0.0f) - s.dlySend) * 0.02f;
+            s.dlyWet += ((s.dlyState != 0 ? 1.0f : 0.0f) - s.dlyWet) * 0.02f;
             float recL, recR, echoL, echoR;
             if (dlyType == 2)
             {
@@ -1014,13 +1319,13 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 echoL = morph::softClip(echoL * 1.2f) * 0.85f;
                 echoR = morph::softClip(echoR * 1.2f) * 0.85f;
             }
-            const float inL = lerp(recL, echoL, s.dlyFeed);
-            const float inR = lerp(recR, echoR, s.dlyFeed);
-            if (s.dlyState != 0)
+            const float inL = recL * s.dlySend + echoL;
+            const float inR = recR * s.dlySend + echoR;
+            if (s.dlyState != 0 || s.dlyWet > 0.0005f)
             {
-                dlyOutL = wl * s.dlyFeed;
-                dlyOutR = wr * s.dlyFeed;
-                if (s.dlyState == 2)
+                dlyOutL = wl * s.dlyWet;
+                dlyOutR = wr * s.dlyWet;
+                if (s.dlyState == 3)
                 {
                     const float lvl = (wl < 0 ? -wl : wl) + (wr < 0 ? -wr : wr);
                     s.dlyQuiet = lvl < 0.0005f ? s.dlyQuiet + 1.0f : 0.0f;
@@ -1034,15 +1339,14 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             s.dly[(s.dlyPos & kDelayMask) * 2] = toI16(inL);
             s.dly[(s.dlyPos & kDelayMask) * 2 + 1] = toI16(inR);
             s.dlyPos++;
-            // while held the mix is cut and only the echoes play
-            const float g = 1.0f - s.mix[kKindDelay];
-            outL *= g;
-            outR *= g;
         }
 
-        // reverb input: the mix while held
-        revInL[i] = own[kKindReverb] ? outL * s.mix[kKindReverb] : 0.0f;
-        revInR[i] = own[kKindReverb] ? outR * s.mix[kKindReverb] : 0.0f;
+        // reverb input: the mix while held (also while the mix itself is cut)
+        revInL[i] = own[kKindReverb] ? sendL * s.mix[kKindReverb] : 0.0f;
+        revInR[i] = own[kKindReverb] ? sendR * s.mix[kKindReverb] : 0.0f;
+
+        outL *= 1.0f - s.dryCut;
+        outR *= 1.0f - s.dryCut;
 
         l[i] = outL + noiseL + dlyOutL;
         r[i] = outR + noiseR + dlyOutR;

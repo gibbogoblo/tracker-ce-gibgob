@@ -1,6 +1,8 @@
 #include "gibgob/Perform.h"
 
 #include "TrackerImpl.h"
+#include "gibgob/MelodicTrack.h"
+#include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #include <string.h>
@@ -75,11 +77,84 @@ void loadSaved()
     s_engine.attach(s_memory);
 }
 
+// ---- Drum cut / Melodic cut: mute the tracks of a type, sounds keep playing
+// silently (a long sample comes back where it would be). Done on the voices
+// (sample tracks) and on the synth parts the tracks use.
+static bool s_cutDrums = false, s_cutMelodic = false;
+static uint8_t s_cutVoices = 0;  // voices this is muting now
+static uint8_t s_cutSynths = 0;  // synth parts this is muting now
+static uint8_t s_order[kCells] = { 0 };
+static uint8_t s_orderCounter = 0;
+
+static void applyTrackCut()
+{
+    const Sequencer::strPattern* p = gibgob::current();
+    auto typeCut = [&](int track)
+    {
+        const bool melodic = gibgob::isMelodic(p, track);
+        return melodic ? s_cutMelodic : s_cutDrums;
+    };
+    uint8_t voices = 0, synths = 0;
+    if (s_cutDrums || s_cutMelodic)
+    {
+        for (int v = 0; v < gibgob::kTracks; v++)
+            if (typeCut(gibgob::voiceOwner(v)))
+                voices |= (uint8_t)(1u << v);
+        for (int t = 0; t < gibgob::kTracks; t++)
+        {
+            const uint8_t sound = gibgob::getSound(p, t);
+            if (isSynthInstrument(sound) && typeCut(t))
+            {
+                const int part = instrumentIdxToMidiChannel(sound) - 1;
+                if (part >= 0 && part < 8)
+                    synths |= (uint8_t)(1u << part);
+            }
+        }
+    }
+    for (int v = 0; v < gibgob::kTracks; v++)
+    {
+        const uint8_t bit = (uint8_t)(1u << v);
+        if ((voices ^ s_cutVoices) & bit)
+            ::engine.muteTrack((uint8_t)v, (voices & bit) || mtProject.values.trackMute[v] ? 1 : 0);
+    }
+#ifdef FEATURE_SYNTH
+    for (int part = 0; part < kSynthParts; part++)
+    {
+        const uint8_t bit = (uint8_t)(1u << part);
+        if ((synths ^ s_cutSynths) & bit)
+            ::engine.gibgobCutSynth(part, (synths & bit) != 0);
+    }
+#endif
+    s_cutVoices = voices;
+    s_cutSynths = synths;
+}
+
+static void updateTrackCutFlags()
+{
+    bool drums = false, melodic = false;
+    for (int i = 0; i < kCells; i++)
+    {
+        if (!isHeld(i))
+            continue;
+        const Cell c = s_engine.cell(i);
+        drums |= c.fx == kFxDrumCut;
+        melodic |= c.fx == kFxMelodicCut;
+    }
+    if (drums != s_cutDrums || melodic != s_cutMelodic || drums || melodic)
+    {
+        s_cutDrums = drums;
+        s_cutMelodic = melodic;
+        applyTrackCut();
+    }
+}
+
 void press(int cell)
 {
     if (cell < 0 || cell >= kCells)
         return;
+    s_order[cell] = ++s_orderCounter;
     s_engine.setHeld((uint8_t)(s_engine.heldMask() | (1u << cell)));
+    updateTrackCutFlags();
 }
 
 void release(int cell)
@@ -87,11 +162,36 @@ void release(int cell)
     if (cell < 0 || cell >= kCells)
         return;
     s_engine.setHeld((uint8_t)(s_engine.heldMask() & ~(1u << cell)));
+    updateTrackCutFlags();
 }
 
 void releaseAll()
 {
     s_engine.releaseAll();
+    updateTrackCutFlags();
+}
+
+bool anyHeld()
+{
+    return s_engine.heldMask() != 0;
+}
+
+bool twist(int dir)
+{
+    int best = -1;
+    for (int i = 0; i < kCells; i++)
+        if (isHeld(i) && (best < 0 || s_order[i] > s_order[best]))
+            best = i;
+    if (best < 0)
+        return false;
+    s_engine.twist(best, dir);
+    return true;
+}
+
+void uiTick()
+{
+    if (s_cutDrums || s_cutMelodic || s_cutVoices || s_cutSynths)
+        updateTrackCutFlags();
 }
 
 bool isHeld(int cell)
@@ -102,6 +202,11 @@ bool isHeld(int cell)
 Cell getCell(int i)
 {
     return s_engine.cell(i);
+}
+
+Cell getLiveCell(int i)
+{
+    return s_engine.liveCell(i);
 }
 
 void setCell(int i, const Cell& c)
