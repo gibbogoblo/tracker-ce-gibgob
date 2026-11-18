@@ -220,17 +220,19 @@ void cGibGobPages::refresh()
         view.cursorRow = row;
         view.cursorCol = 1;
 
+        const bool slice = isSliceTrack(p, track);
         for (int r = 0; r < kTrackRowCount; r++)
         {
             snprintf(view.cell[r][0], sizeof(view.cell[r][0]), "%s", kTrackRowNames[r]);
-            view.rowColor[r] = melodic ? color::kMelodic : color::kDrum;
+            view.rowColor[r] = slice ? color::kSlice : (melodic ? color::kMelodic : color::kDrum);
         }
 
         char name[20];
         trackDisplayName(track, name, sizeof(name));
         snprintf(view.cell[kRowName][1], 20, "%.19s", name);
         gibgobSoundName(getSound(p, track), name, sizeof(name));
-        snprintf(view.cell[kRowType][1], 20, "%s", melodic ? "Melodic" : "Drum");
+        // a beat-slice sample makes the track a Slice track whatever its type
+        snprintf(view.cell[kRowType][1], 20, "%s", slice ? "Slice (auto)" : (melodic ? "Melodic" : "Drum"));
         snprintf(view.cell[kRowSound][1], 20, "%.19s", name);
         snprintf(view.cell[kRowBaseNote][1], 20, "%s", mtNotes[s.baseNote]);
         snprintf(view.cell[kRowLength][1], 20, "%d steps", trackSteps(p, track));

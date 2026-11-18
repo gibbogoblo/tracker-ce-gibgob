@@ -127,8 +127,8 @@ const FxInfo kInfo[kFxCount] = {
         { "Speed", N(kScratchSpeed), 0, kScratchSpeed, 0 } } },
     { "Pump", "PUMP", 2,
       { { "Rate", N(kPumpRate), 0, kPumpRate, 0 }, { "Depth", 10, 6, nullptr, 1 } } },
-    { "Drum cut", "DRUMS", 0, {} },
-    { "Melodic cut", "MELO", 0, {} },
+    { "Track cut", "TRKCUT", 0, {} },
+    { "Track cut", "TRKCUT", 0, {} }, // old "Melodic cut" buttons: the same effect
 };
 
 // Stutter patterns: for each 1/16 of the bar, which 1/16 it plays
@@ -526,6 +526,12 @@ void Engine::twist(int i, int dir)
                 c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
             else
                 c.p[1] ^= 1;
+            break;
+        case kFxDrumCut:
+        case kFxMelodicCut:
+            // holding does nothing: Up mutes the drum (and slice) tracks,
+            // Down the melodic tracks; again to bring them back
+            f ^= up ? kTwistCutDrums : kTwistCutMelodic;
             break;
         case kFxPump:
             if (up)

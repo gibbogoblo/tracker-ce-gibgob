@@ -224,6 +224,8 @@ void cGibGobPerform::changeValue(int delta, bool big)
             fx = pf::kFxCount - 1;
         if (fx >= pf::kFxCount)
             fx = 0;
+        if (fx == pf::kFxMelodicCut) // the same as Track cut: skip it
+            fx = delta > 0 ? 0 : pf::kFxDrumCut;
         c = pf::defaultCell(fx);
     }
     else

@@ -12,6 +12,7 @@ struct LaneInfo
 {
     char name[16]; // "1 Kick"
     bool melodic;
+    bool slice = false; // beat-slice sample: drawn like a drum lane, in its own colour
     bool muted;
     bool sounding;
     int steps = 16;    // this track's length

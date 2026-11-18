@@ -88,7 +88,7 @@ void LaneControl::update()
         int y2 = y1 + laneH - 2;
         bool cur = (t == view->cursorTrack);
 
-        uint32_t base = lane.melodic ? color::kMelodic : color::kDrum;
+        uint32_t base = lane.slice ? color::kSlice : (lane.melodic ? color::kMelodic : color::kDrum);
         draw::color(lane.muted ? (cur ? 0x45454B : kMutedHead) : scaleColor(base, cur ? 100 : 55, 100));
         draw::rect(2, y1, kHeadW, y2);
 
@@ -175,7 +175,7 @@ void LaneControl::update()
                 continue;
             int y1 = kLanesTop + t * laneH + 4;
             int y2 = kLanesTop + (t + 1) * laneH - 6;
-            uint32_t base = lane.melodic ? color::kMelodic : color::kDrum;
+            uint32_t base = lane.slice ? color::kSlice : (lane.melodic ? color::kMelodic : color::kDrum);
             if (lane.muted)
                 base = kMutedNote;
 

@@ -122,7 +122,7 @@ int main()
     {
         LaneView lv; lv.pattern = &pat; lv.stepsVisible = zoomSteps; lv.patternTicks = 64 * 48; lv.firstTick = 48 * 8;
         lv.cursorTrack = 7; lv.cursorTick = 48 * 9; lv.shift = true; lv.nameCursor = zoomSteps == 16;
-        for (int t = 0; t < 8; t++) { snprintf(lv.lanes[t].name, 16, "%d WWWWWWWWW", t + 1); lv.lanes[t].melodic = t % 2; lv.lanes[t].muted = false; lv.lanes[t].sounding = true;
+        for (int t = 0; t < 8; t++) { snprintf(lv.lanes[t].name, 16, "%d WWWWWWWWW", t + 1); lv.lanes[t].melodic = t % 2; lv.lanes[t].slice = (t == 4); lv.lanes[t].muted = false; lv.lanes[t].sounding = true;
             lv.lanes[t].steps = 12 + t * 7; lv.lanes[t].playhead = 48 * 9 + t * 11; }
         snprintf(lv.title, sizeof(lv.title), "Pat 255   Track 8   Step 128/128"); snprintf(lv.mode, 12, "REC"); lv.modeColor = 0xFF0000;
         memcpy(lv.params, pb, sizeof(pb)); lv.bar = bar;
@@ -153,6 +153,15 @@ int main()
         PianoRollControl pc(&prop);
         char nm[40]; snprintf(nm, 40, "piano roll, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
         render(pc, nm, kLimit);
+        {
+            // slice editor: 48 slice rows, labels and button markers
+            PianoRollView sv = pv; sv.sliceCount = 48; sv.topPitch = 24 + 47; sv.cursorPitch = 40;
+            for (int b = 0; b < 8; b++) sv.sliceButton[b] = (int8_t)(b * 6);
+            prop.data = &sv; PianoRollControl sc(&prop);
+            char sn[40]; snprintf(sn, 40, "slice editor, %dx%d, full", sv.stepsVisible, sv.rowsVisible);
+            render(sc, sn, kLimit);
+            prop.data = &pv;
+        }
         if (zoom == 48)
         {
             // menus and the note picker over the fullest piano roll

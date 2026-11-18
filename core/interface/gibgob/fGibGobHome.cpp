@@ -299,7 +299,8 @@ void cGibGobHome::refresh()
         LaneInfo& lane = view.lanes[t];
         trackDisplayName(t, names[t], sizeof(names[t]));
         snprintf(lane.name, sizeof(lane.name), "%d %.9s", t + 1, names[t]);
-        lane.melodic = isMelodic(p, t);
+        lane.slice = isSliceTrack(p, t);
+        lane.melodic = isMelodic(p, t) && !lane.slice;
         lane.muted = mtProject.values.trackMute[t] != 0;
         lane.sounding = isSounding(t);
         lane.steps = trackSteps(p, t);
@@ -309,8 +310,7 @@ void cGibGobHome::refresh()
     // values of the step under the cursor, or the defaults for new steps
     int targets[kMaxNotes];
     int n = cellNotes(targets, kMaxNotes);
-    TrackSettings settings = getSettings(p, cursorTrack);
-    int vel = velocity, nud = nudge, pitch = settings.baseNote;
+    int vel = velocity, nud = nudge, pitch = laneNote(p, cursorTrack);
     if (n > 0)
     {
         Note note = getNote(p, cursorTrack, targets[0]);
@@ -346,9 +346,9 @@ void cGibGobHome::refresh()
         gibgobSoundName(getSound(p, cursorTrack), sound, sizeof(sound));
         snprintf(view.params[0].label, sizeof(view.params[0].label), "+/-");
         snprintf(view.params[0].value, sizeof(view.params[0].value), "%.9s", sound);
-        snprintf(view.params[1].label, sizeof(view.params[1].label), "Big+/-");
+        snprintf(view.params[1].label, sizeof(view.params[1].label), "Type");
         snprintf(view.params[1].value, sizeof(view.params[1].value), "%s",
-                 isMelodic(p, cursorTrack) ? "Melodic" : "Drum");
+                 isSliceTrack(p, cursorTrack) ? "Slice" : (isMelodic(p, cursorTrack) ? "Melodic" : "Drum"));
         view.selectedParam = -1;
     }
     else if (view.shift)
@@ -402,7 +402,9 @@ void cGibGobHome::refresh()
     {
         bool muted = view.lanes[i].muted;
         snprintf(barText[i], sizeof(barText[i]), "%.10s", names[i]);
-        view.bar.fill[i] = muted ? 0x3C3C42 : (view.lanes[i].melodic ? color::kMelodic : color::kDrum);
+        view.bar.fill[i] = muted ? 0x3C3C42
+                                 : (view.lanes[i].slice ? color::kSlice
+                                                        : (view.lanes[i].melodic ? color::kMelodic : color::kDrum));
         view.bar.highlighted[i] = view.lanes[i].sounding && !muted;
         view.bar.text[i] = barText[i];
     }
@@ -505,7 +507,8 @@ void cGibGobHome::openPianoRoll()
     int t = cursorTrack;
     int step = cursorStep < 0 ? 0 : cursorStep;
     mtInterface.deactivateModule(this);
-    if (isMelodic(current(), t))
+    // melodic and slice tracks open the piano roll (slice tracks: one row per slice)
+    if (isMelodic(current(), t) || isSliceTrack(current(), t))
     {
         pianoRoll.view.cursorTick = step * kTicksPerStep;
         mtInterface.activateModule(&pianoRoll, (uint32_t)t);
@@ -553,11 +556,12 @@ void cGibGobHome::insertNote()
         Note note{};
         note.start = (uint16_t)startFromOffset(cursorStep, nudge, trackTicks);
         note.length = (uint16_t)lengthTicks;
-        note.pitch = settings.baseNote;
+        note.pitch = laneNote(p, cursorTrack);
+        (void)settings;
         note.velocity = (uint8_t)velocity;
         if (addNote(p, cursorTrack, note) < 0)
         {
-            mtPopups.show(0, "Track is full (124 notes)", 1);
+            mtPopups.show(0, "Track is full (123 notes)", 1);
         }
         else
         {
@@ -592,7 +596,7 @@ void cGibGobHome::pressInsert()
     }
     else
     {
-        mtPopups.show(0, "Can't duplicate: max 128 steps / 124 notes", 2);
+        mtPopups.show(0, "Can't duplicate: max 128 steps / 123 notes", 2);
     }
     refresh();
 }
@@ -868,7 +872,7 @@ void cGibGobHome::trackButton(int track, bool pressed)
     }
 
     Sequencer::strPattern* p = current();
-    uint8_t pitch = getSettings(p, track).baseNote;
+    uint8_t pitch = laneNote(p, track);
     held[track] = true;
     heldPitch[track] = pitch;
     auditionOn(track, pitch, (uint8_t)velocity);
@@ -876,7 +880,7 @@ void cGibGobHome::trackButton(int track, bool pressed)
     if (g_recArmed && sequencer.isPlay())
     {
         // melodic tracks record how long the button is held, drum hits are one step
-        bool hold = isMelodic(p, track);
+        bool hold = isMelodic(p, track) && !isSliceTrack(p, track);
         beginEdit(kEditRecord);
         if (liveRecordOn(track, &pitch, 1, (uint8_t)velocity, hold))
         {
@@ -885,7 +889,7 @@ void cGibGobHome::trackButton(int track, bool pressed)
         }
         else
         {
-            mtPopups.show(0, "Track is full (124 notes)", 1);
+            mtPopups.show(0, "Track is full (123 notes)", 1);
         }
     }
     refresh();

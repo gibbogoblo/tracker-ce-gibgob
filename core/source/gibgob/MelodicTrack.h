@@ -14,7 +14,8 @@
 //
 // Layout of the 1024 bytes of track[8 + t].step[0..127] (8 bytes per slot):
 //   slot 0        : header (magic, version, note count, sound, flags)
-//   slots 1..124  : up to 124 notes, 8 bytes each
+//   slots 1..123  : up to 123 notes, 8 bytes each
+//   slot 124      : slice tracks: the slice on each top-row button
 //   slot 125      : extras (Go Ape seed, track length)
 //   slot 126      : track settings (base note, arp, Go Ape)
 //   slot 127      : two chords of the pattern's chord palette
@@ -27,7 +28,7 @@ namespace gibgob
 
 static constexpr int kTracks = kSampleTracks; // 8 visible tracks
 static constexpr int kTicksPerStep = 48;      // sequencer micro steps per step
-static constexpr int kMaxNotes = 124;         // notes per track per pattern
+static constexpr int kMaxNotes = 123;         // notes per track per pattern
 static constexpr int kMaxTrackSteps = 128;    // longest track
 static constexpr int kMaxActiveNotes = 16;    // sounding notes per track
 static constexpr int kMaxChordNotes = 6;
@@ -134,6 +135,21 @@ void removeNote(Sequencer::strPattern* p, int track, int idx);
 void clearNotes(Sequencer::strPattern* p, int track);
 // last note covering (tick, pitch), or -1
 int findNoteAt(const Sequencer::strPattern* p, int track, int tick, int pitch);
+
+// ---- slice tracks ----
+// A track is a Slice track whenever its sound is a sample in Beat Slice mode
+// (checked live, so it does not matter which happens first). Its notes are
+// slices: pitch kFirstSliceNote + slice, like the stock beat-slice playback.
+// It plays like a drum track: each chop cuts the one before.
+static constexpr int kFirstSliceNote = 24;
+bool isSliceTrack(const Sequencer::strPattern* p, int track);
+int sliceCount(const Sequencer::strPattern* p, int track); // 0 when not a slice track
+// the slice (0..) a top-row button plays (default: button 1 = slice 1 ...)
+int sliceForButton(const Sequencer::strPattern* p, int track, int button);
+void setSliceForButton(Sequencer::strPattern* p, int track, int button, int slice);
+// the note a track's own button / a new lane step plays: the base note, or on
+// a slice track the slice of top button 1
+uint8_t laneNote(const Sequencer::strPattern* p, int track);
 
 // Remember this pattern's track types, sounds and palette as the defaults for
 // patterns that have no GibGob data yet (so a new pattern starts the same way).

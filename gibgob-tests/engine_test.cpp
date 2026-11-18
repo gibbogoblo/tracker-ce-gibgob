@@ -595,6 +595,33 @@ int main()
     CHECK(belongsToStep(765, 0, 768) && !belongsToStep(765, 15, 768));
     CHECK(stepOffset(50, 1, 768) == 2 && startFromOffset(1, -24, 768) == 24);
 
+    // T22: slice tracks: a beat-slice sample makes a track a Slice track,
+    // whatever its stored type; top buttons map to slices and survive notes
+    freshPattern();
+    mtProject.instrument[7].isActive = 1;
+    mtProject.instrument[7].playMode = playModeBeatSlice;
+    mtProject.instrument[7].sliceNumber = 12;
+    setTrackType(&pat, 2, TrackType::Melodic); setSound(&pat, 2, 7);
+    setTrackType(&pat, 1, TrackType::Drum); setSound(&pat, 1, 7);
+    CHECK(isSliceTrack(&pat, 2) && isSliceTrack(&pat, 1));
+    CHECK(sliceCount(&pat, 2) == 12 && sliceCount(&pat, 0) == 0);
+    CHECK(sliceForButton(&pat, 2, 0) == 0 && sliceForButton(&pat, 2, 7) == 7);
+    CHECK(laneNote(&pat, 2) == kFirstSliceNote);
+    addNote(&pat, 2, mk(0, 10, kFirstSliceNote + 3));
+    setSliceForButton(&pat, 2, 0, 9);
+    setSliceForButton(&pat, 2, 5, 11);
+    CHECK(sliceForButton(&pat, 2, 0) == 9 && sliceForButton(&pat, 2, 5) == 11 && sliceForButton(&pat, 2, 1) == 1);
+    CHECK(laneNote(&pat, 2) == kFirstSliceNote + 9);
+    CHECK(noteCount(&pat, 2) == 1 && getNote(&pat, 2, 0).pitch == kFirstSliceNote + 3); // the note survives
+    for (int i = 0; i < 130; i++) addNote(&pat, 2, mk((i % 16) * 48, 10, kFirstSliceNote + (i % 12)));
+    CHECK(noteCount(&pat, 2) == kMaxNotes && sliceForButton(&pat, 2, 0) == 9); // a full track keeps the map
+    // a normal sample is no slice track
+    mtProject.instrument[7].playMode = 0;
+    CHECK(!isSliceTrack(&pat, 2) && laneNote(&pat, 2) == getSettings(&pat, 2).baseNote);
+    mtProject.instrument[7].playMode = playModeBeatSlice;
+    mtProject.instrument[7].sliceNumber = 0;
+    CHECK(!isSliceTrack(&pat, 2));
+
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

@@ -300,7 +300,7 @@ void cDrumSeq::toggleStep(int step)
         note.setChance(chance);
         if (addNote(p, track, note) < 0)
         {
-            mtPopups.show(0, "Track is full (124 notes)", 1);
+            mtPopups.show(0, "Track is full (123 notes)", 1);
         }
         else if (!sequencer.isPlay())
         {

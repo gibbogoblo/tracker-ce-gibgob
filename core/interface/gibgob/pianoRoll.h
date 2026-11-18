@@ -47,6 +47,7 @@ class cPianoRoll : public ModuleBase
     void pressLeft();
     void pressRight();
     void pressMiddle();
+    bool assignSliceToHeld(); // slice track: held top button + Middle
     void pressInsert();
     void pressDelete();
     void toggleShift();

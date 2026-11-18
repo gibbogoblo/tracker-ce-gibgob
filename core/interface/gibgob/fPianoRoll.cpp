@@ -108,13 +108,15 @@ void cPianoRoll::start(uint32_t options)
     {
         // sliced sample: start on the slices
         chordSlot = -1;
-        if (view.cursorPitch < FIRST_BEAT_SLICE_NOTE || view.cursorPitch > FIRST_BEAT_SLICE_NOTE + 47)
-            view.cursorPitch = FIRST_BEAT_SLICE_NOTE;
-        view.topPitch = view.cursorPitch + 8;
+        int n = sliceCount(current(), track);
+        if (view.cursorPitch < kFirstSliceNote || view.cursorPitch > kFirstSliceNote + n - 1)
+            view.cursorPitch = kFirstSliceNote;
+        view.topPitch = kFirstSliceNote + n - 1;
     }
 
     songTimer.hide();
-    snprintf(titleText, sizeof(titleText), "Track %d  -  Piano Roll", track + 1);
+    snprintf(titleText, sizeof(titleText), padsMode() ? "Track %d  -  Slices" : "Track %d  -  Piano Roll",
+             track + 1);
     titleBar->show();
     titleBar->setTitle(titleText);
 
@@ -170,11 +172,8 @@ void cPianoRoll::setDefaultScreenFunct()
 // ---------------------------------------------------------------------------
 bool cPianoRoll::padsMode()
 {
-    uint8_t sound = getSound(current(), track);
-    if (!isSampleInstrument(sound))
-        return false;
-    const strInstrument& in = mtProject.instrument[sound];
-    return in.isActive == 1 && in.playMode == playModeBeatSlice;
+    // slice track (beat-slice sample): one row per slice
+    return isSliceTrack(current(), track);
 }
 
 int cPianoRoll::chordNoteCount()
@@ -199,6 +198,10 @@ void cPianoRoll::refreshView()
     view.cursorTick = clampInt(view.cursorTick, 0, view.patternTicks - view.gridTicks);
     view.cursorTick -= view.cursorTick % view.gridTicks;
     view.cursorPitch = clampInt(view.cursorPitch, 0, 127);
+    const int slices = sliceCount(p, track);
+    view.sliceCount = slices;
+    if (slices > 0)
+        view.cursorPitch = clampInt(view.cursorPitch, kFirstSliceNote, kFirstSliceNote + slices - 1);
 
     // scroll horizontally just enough to keep the cursor visible
     int vis = view.stepsVisible * view.gridTicks;
@@ -218,6 +221,17 @@ void cPianoRoll::refreshView()
     if (view.cursorPitch < view.topPitch - view.rowsVisible + 1)
         view.topPitch = view.cursorPitch + view.rowsVisible - 1;
     view.topPitch = clampInt(view.topPitch, view.rowsVisible - 1, 127);
+    if (slices > 0)
+    {
+        // never scroll past the last slice (rows below the first are empty)
+        int top = kFirstSliceNote + slices - 1;
+        if (view.topPitch > top)
+            view.topPitch = top;
+        if (view.topPitch < view.cursorPitch)
+            view.topPitch = view.cursorPitch;
+        for (int b = 0; b < 8; b++)
+            view.sliceButton[b] = (int8_t)sliceForButton(p, track, b);
+    }
 
     // ghost: a single note, or the palette chord's shape on the cursor note
     bool pads = padsMode();
@@ -284,10 +298,14 @@ void cPianoRoll::refreshView()
         nud = n.start - ((n.start + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
     }
 
-    snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", mtNotes[pitch],
-             chordSlot >= 0 ? chordType(ghostChord.type).label : (pads ? "Slice" : "Note"),
-             view.cursorTick / kTicksPerStep + 1, len / kTicksPerStep,
-             (len % kTicksPerStep) * 100 / kTicksPerStep);
+    if (pads)
+        snprintf(view.title, sizeof(view.title), "Slice %d  Step %d  Len %d.%02d", pitch - kFirstSliceNote + 1,
+                 view.cursorTick / kTicksPerStep + 1, len / kTicksPerStep,
+                 (len % kTicksPerStep) * 100 / kTicksPerStep);
+    else
+        snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", mtNotes[pitch],
+                 chordSlot >= 0 ? chordType(ghostChord.type).label : "Note", view.cursorTick / kTicksPerStep + 1,
+                 len / kTicksPerStep, (len % kTicksPerStep) * 100 / kTicksPerStep);
 
     view.modeColor = color::kBox;
     if (g_recArmed)
@@ -344,9 +362,10 @@ void cPianoRoll::refreshView()
         }
         else if (pads)
         {
-            snprintf(barText[i], sizeof(barText[i]), "Slice %d", i + 1);
-            view.bar.fill[i] = color::kDrum;
-            view.bar.highlighted[i] = (view.cursorPitch == FIRST_BEAT_SLICE_NOTE + i);
+            int s = sliceForButton(p, track, i);
+            snprintf(barText[i], sizeof(barText[i]), "Slice %d", s + 1);
+            view.bar.fill[i] = color::kSlice;
+            view.bar.highlighted[i] = (view.cursorPitch == kFirstSliceNote + s);
         }
         else if (i == 0)
         {
@@ -557,6 +576,14 @@ void cPianoRoll::moveSelection(int dTicks, int dPitch)
             dPitch = -note.pitch;
         if (note.pitch + dPitch > 127)
             dPitch = 127 - note.pitch;
+        if (view.sliceCount > 0)
+        {
+            // slices stay on slice rows
+            if (note.pitch + dPitch < kFirstSliceNote)
+                dPitch = kFirstSliceNote - note.pitch;
+            if (note.pitch + dPitch > kFirstSliceNote + view.sliceCount - 1)
+                dPitch = kFirstSliceNote + view.sliceCount - 1 - note.pitch;
+        }
     }
     if (dTicks == 0 && dPitch == 0)
         return;
@@ -638,13 +665,41 @@ void cPianoRoll::placeGhost()
         n.setChance(chance);
         if (addNote(p, track, n) < 0)
         {
-            mtPopups.show(0, "Track is full (124 notes)", 1);
+            mtPopups.show(0, "Track is full (123 notes)", 1);
             break;
         }
         any = true;
     }
     if (any)
         markChanged();
+}
+
+// slice tracks: hold a top button, move to a slice row, press Middle =
+// that button plays the slice from now on
+bool cPianoRoll::assignSliceToHeld()
+{
+    if (!padsMode() || mode != Mode::Idle)
+        return false;
+    int button = -1;
+    for (int i = 0; i < 8; i++)
+        if (held[i])
+        {
+            button = i;
+            break;
+        }
+    if (button < 0)
+        return false;
+    int slice = view.cursorPitch - kFirstSliceNote;
+    if (slice < 0 || slice >= sliceCount(current(), track))
+        return false;
+    setSliceForButton(current(), track, button, slice);
+    heldNotes[button][0] = (uint8_t)view.cursorPitch; // its release frees the right note
+    char msg[40];
+    snprintf(msg, sizeof(msg), "Button %d = slice %d", button + 1, slice + 1);
+    mtPopups.show(0, msg, 1);
+    markChanged();
+    refreshView();
+    return true;
 }
 
 void cPianoRoll::pressMiddle()
@@ -889,7 +944,7 @@ void cPianoRoll::topButton(int button, bool pressed)
     int n = 0;
     if (pads)
     {
-        int pitch = clampInt(FIRST_BEAT_SLICE_NOTE + button, 0, 127);
+        int pitch = clampInt(kFirstSliceNote + sliceForButton(p, track, button), 0, 127);
         notes[0] = (uint8_t)pitch;
         n = 1;
         chordSlot = -1;
@@ -928,7 +983,7 @@ void cPianoRoll::topButton(int button, bool pressed)
     if (recording)
     {
         // slices on a drum track are single hits; everything else records its held length
-        bool hold = !(pads && !isMelodic(p, track));
+        bool hold = !pads;
         beginEdit(kEditRecord);
         if (liveRecordOn(track, notes, n, (uint8_t)velocity, hold))
         {
@@ -937,7 +992,7 @@ void cPianoRoll::topButton(int button, bool pressed)
         }
         else
         {
-            mtPopups.show(0, "Track is full (124 notes)", 1);
+            mtPopups.show(0, "Track is full (123 notes)", 1);
         }
     }
     refreshView();
@@ -1004,7 +1059,7 @@ void cPianoRoll::utility(int button)
             }
             else
             {
-                mtPopups.show(0, "Can't double: max 128 steps / 124 notes", 2);
+                mtPopups.show(0, "Can't double: max 128 steps / 123 notes", 2);
             }
             break;
         case 7:
@@ -1602,6 +1657,8 @@ static void functMiddle(uint8_t state)
             return;
         }
         PR->auditionOffAt = 0;
+        if (PR->assignSliceToHeld())
+            return;
         PR->pressMiddle();
     }
     else if (state == buttonRelease)

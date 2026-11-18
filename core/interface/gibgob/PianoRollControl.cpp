@@ -3,6 +3,7 @@
 #include "FT812.h"
 #include "display.h"
 #include "mtStructs.h"
+#include <stdio.h>
 
 namespace gibgob
 {
@@ -87,19 +88,42 @@ void PianoRollControl::update()
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
 
     // ---- rows: black keys darker, C rows tinted (drawn per colour) ----
-    draw::color(kRowBlack);
-    for (int r = 0; r < rows; r++)
+    const bool slices = view->sliceCount > 0;
+    const int lastSlice = kFirstSliceNote + view->sliceCount - 1;
+    if (slices)
     {
-        int pitch = view->topPitch - r;
-        if (isBlackKey(pitch))
-            draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        // every other slice a little darker; rows past the slices greyed out
+        draw::color(kRowBlack);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (pitch >= kFirstSliceNote && pitch <= lastSlice && ((pitch - kFirstSliceNote) & 1))
+                draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
+        draw::color(kOutside);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (pitch < kFirstSliceNote || pitch > lastSlice)
+                draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
     }
-    draw::color(kRowC);
-    for (int r = 0; r < rows; r++)
+    else
     {
-        int pitch = view->topPitch - r;
-        if (pitch % 12 == 0)
-            draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        draw::color(kRowBlack);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (isBlackKey(pitch))
+                draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
+        draw::color(kRowC);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (pitch % 12 == 0)
+                draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
     }
 
     // ---- crosshair on the cursor row and column (helps when zoomed out) ----
@@ -153,6 +177,37 @@ void PianoRollControl::update()
             draw::rect(x, gy1, x, gy2);
     }
 
+    // ---- slice keys: "S1".."Sn", slices on a top button in the slice colour ----
+    if (slices)
+    {
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (pitch < kFirstSliceNote || pitch > lastSlice)
+                continue;
+            bool onButton = false;
+            for (int b = 0; b < 8; b++)
+                onButton = onButton || (kFirstSliceNote + view->sliceButton[b] == pitch);
+            draw::color(onButton ? color::kSlice : kKeyWhite);
+            draw::rect(2, gy1 + r * rh, kKeyW - 3, gy1 + r * rh + (rh > 2 ? rh - 2 : rh));
+        }
+        const bool few = rh < 14 || overlayOpen;
+        draw::color(color::kTextDark);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (pitch < kFirstSliceNote || pitch > lastSlice)
+                continue;
+            int s = pitch - kFirstSliceNote;
+            if (few && (s % 4) != 0)
+                continue;
+            char t[6];
+            snprintf(t, sizeof(t), "S%d", s + 1);
+            draw::text(6, gy1 + r * rh + rh / 2, fRegular, OPT_CENTERY, t);
+        }
+    }
+    else
+    {
     // ---- piano keys ----
     draw::color(kKeyWhite);
     for (int r = 0; r < rows; r++)
@@ -190,6 +245,7 @@ void PianoRollControl::update()
             draw::text(6, gy1 + r * rh + rh / 2, fRegular, OPT_CENTERY, mtNotes[pitch]);
         }
     }
+    } // piano keys
 
     // ---- fixed furniture before the notes, so notes can never push it out ----
     drawInfoStrip(10, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);

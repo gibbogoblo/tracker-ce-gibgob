@@ -35,6 +35,7 @@ constexpr uint8_t kArpFlagApe = 0x01;
 
 constexpr int kSlotBytes = 8;
 constexpr int kSlotNotes = 1;
+constexpr int kSlotSliceMap = 124;
 constexpr int kSlotExtras = 125;
 constexpr int kSlotSettings = 126;
 constexpr int kSlotPalette = 127;
@@ -87,6 +88,7 @@ inline int clampInt(int v, int lo, int hi)
 // ---------------- defaults for patterns without GibGob data ----------------
 struct Defaults
 {
+    uint8_t sliceMap[kTracks][8];
     uint8_t melodic[kTracks];
     uint8_t sound[kTracks];
     PaletteChord palette[kPaletteSize];
@@ -94,6 +96,8 @@ struct Defaults
 };
 
 Defaults g_def = {
+    { { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 },
+      { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 } },
     { 0, 0, 0, 0, 1, 1, 1, 1 }, // tracks 1-4 drums, 5-8 melodic
     { 0, 1, 2, 3, 4, 5, 6, 7 },
     {
@@ -203,6 +207,19 @@ TrackSettings decodeSettings(const uint8_t* s, const Header& h)
     t.apeOn = (h.arpFlags & kArpFlagApe) != 0;
     return t;
 }
+
+// ---------------- slices ----------------
+bool isBeatSliceSound(uint8_t instrument)
+{
+    if (!isSampleInstrument(instrument))
+        return false;
+    const strInstrument& in = mtProject.instrument[instrument];
+    return in.isActive == 1 && in.playMode == playModeBeatSlice && in.sliceNumber > 0;
+}
+
+// slot 124: byte i = slice of button i + 1 (0 = not set: the default). Only
+// read when the header's spare byte carries this marker.
+constexpr uint8_t kSliceMapMagic = 0xA5;
 
 // ---------------- extras slot (seed, track length) ----------------
 struct Extras
@@ -797,6 +814,72 @@ bool isMelodic(const Sequencer::strPattern* p, int track)
     return getTrackType(p, track) == TrackType::Melodic;
 }
 
+bool isSliceTrack(const Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr)
+        return false;
+    return isBeatSliceSound(getSound(p, track));
+}
+
+int sliceCount(const Sequencer::strPattern* p, int track)
+{
+    if (!isSliceTrack(p, track))
+        return 0;
+    int n = mtProject.instrument[getSound(p, track)].sliceNumber;
+    return n > MAX_SLICE_NUMBER ? MAX_SLICE_NUMBER : n;
+}
+
+int sliceForButton(const Sequencer::strPattern* p, int track, int button)
+{
+    button &= 7;
+    int slice = button;
+    if (validTrack(track) && p != nullptr)
+    {
+        slice = g_def.sliceMap[track][button];
+        Header h;
+        if (readHeader(p, track, h))
+        {
+            const uint8_t* m = rawBytes(p, track) + kSlotSliceMap * kSlotBytes;
+            if (h.reserved == kSliceMapMagic && m[button] != 0)
+                slice = m[button] - 1;
+        }
+    }
+    const int n = sliceCount(p, track);
+    if (n > 0 && slice >= n)
+        slice = n - 1;
+    return slice < 0 ? 0 : slice;
+}
+
+uint8_t laneNote(const Sequencer::strPattern* p, int track)
+{
+    if (isSliceTrack(p, track))
+        return (uint8_t)(kFirstSliceNote + sliceForButton(p, track, 0));
+    return getSettings(p, track).baseNote;
+}
+
+void setSliceForButton(Sequencer::strPattern* p, int track, int button, int slice)
+{
+    if (!validTrack(track) || p == nullptr)
+        return;
+    button &= 7;
+    slice = clampInt(slice, 0, MAX_SLICE_NUMBER - 1);
+    AudioLock lock;
+    Header h = headerOrDefault(p, track);
+    // the first header write clears the track: do it before the map
+    writeHeaderLocked(p, track, h);
+    uint8_t* m = rawBytes(p, track) + kSlotSliceMap * kSlotBytes;
+    if (h.reserved != kSliceMapMagic)
+    {
+        // first time on this track: start from the defaults
+        for (int b = 0; b < 8; b++)
+            m[b] = (uint8_t)(g_def.sliceMap[track][b] + 1);
+        h.reserved = kSliceMapMagic;
+    }
+    m[button] = (uint8_t)(slice + 1);
+    writeHeaderLocked(p, track, h);
+    g_def.sliceMap[track][button] = (uint8_t)slice;
+}
+
 uint8_t getSound(const Sequencer::strPattern* p, int track)
 {
     if (!validTrack(track) || p == nullptr)
@@ -1003,6 +1086,13 @@ void adoptDefaults(const Sequencer::strPattern* p)
         {
             g_def.melodic[t] = (h.flags & kHeaderFlagMelodic) ? 1 : 0;
             g_def.sound[t] = instrumentOrDefault(h.sound, t);
+            if (h.reserved == kSliceMapMagic)
+            {
+                const uint8_t* m = rawBytes(p, t) + kSlotSliceMap * kSlotBytes;
+                for (int b = 0; b < 8; b++)
+                    if (m[b] != 0)
+                        g_def.sliceMap[t][b] = (uint8_t)(m[b] - 1);
+            }
         }
     }
     for (int i = 0; i < kPaletteSize; i++)
@@ -1534,7 +1624,8 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     TrackSettings settings = decodeSettings(raw + kSlotSettings * kSlotBytes, h);
     settings.apeSeed = readExtras(raw).seed;
     uint8_t instrument = instrumentOrDefault(h.sound, track);
-    bool drum = !(h.flags & kHeaderFlagMelodic);
+    // slice tracks play like drums: one chop at a time
+    bool drum = !(h.flags & kHeaderFlagMelodic) || isBeatSliceSound(instrument);
     bool arp = settings.arpMode != kArpOff;
 
     // 2. second hit of a Go Ape double
@@ -1682,7 +1773,7 @@ void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocit
 
     Audition& a = audition[track];
     a.instrument = instrument;
-    a.oneShot = sample && !isMelodic(p, track);
+    a.oneShot = sample && (!isMelodic(p, track) || isBeatSliceSound(instrument));
     a.count = 0;
     a.on = true;
 

@@ -69,6 +69,10 @@ struct PianoRollView
     int boxPitch1 = 0, boxPitch2 = 0;
 
     int playheadTick = -1; // -1 = stopped
+
+    // slice track: rows are slices 1..sliceCount (notes 24..), 0 = piano
+    int sliceCount = 0;
+    int8_t sliceButton[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; // slice of each top button
     bool shift = false;
 
     char title[56] = { 0 };

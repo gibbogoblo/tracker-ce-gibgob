@@ -120,6 +120,7 @@ constexpr uint32_t kBox = 0xFFB347;
 
 constexpr uint32_t kDrum = 0xB85548;
 constexpr uint32_t kMelodic = 0x5F53B8;
+constexpr uint32_t kSlice = 0xD9A23A; // slice tracks (beat-slice samples)
 
 // match the Note / Instr / FX1 / FX2 button colours
 constexpr uint32_t kNoteBtn = 0x53B886;  // green

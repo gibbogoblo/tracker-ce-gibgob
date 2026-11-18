@@ -91,7 +91,7 @@ static void applyTrackCut()
     const Sequencer::strPattern* p = gibgob::current();
     auto typeCut = [&](int track)
     {
-        const bool melodic = gibgob::isMelodic(p, track);
+        const bool melodic = gibgob::isMelodic(p, track) && !gibgob::isSliceTrack(p, track);
         return melodic ? s_cutMelodic : s_cutDrums;
     };
     uint8_t voices = 0, synths = 0;
@@ -136,9 +136,11 @@ static void updateTrackCutFlags()
     {
         if (!isHeld(i))
             continue;
-        const Cell c = s_engine.cell(i);
-        drums |= c.fx == kFxDrumCut;
-        melodic |= c.fx == kFxMelodicCut;
+        const Cell c = s_engine.liveCell(i);
+        if (c.fx != kFxDrumCut && c.fx != kFxMelodicCut)
+            continue;
+        drums |= (s_engine.cellFlags(i) & kTwistCutDrums) != 0;
+        melodic |= (s_engine.cellFlags(i) & kTwistCutMelodic) != 0;
     }
     if (drums != s_cutDrums || melodic != s_cutMelodic || drums || melodic)
     {
@@ -185,6 +187,7 @@ bool twist(int dir)
     if (best < 0)
         return false;
     s_engine.twist(best, dir);
+    updateTrackCutFlags();
     return true;
 }
 

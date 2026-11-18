@@ -47,8 +47,8 @@ enum Fx : uint8_t
     kFxRiser,
     kFxScratch,
     kFxPump,
-    kFxDrumCut,    // mutes the drum tracks (handled outside the engine)
-    kFxMelodicCut, // mutes the melodic tracks (handled outside the engine)
+    kFxDrumCut,    // "Track cut": its twists mute drum / melodic tracks (outside the engine)
+    kFxMelodicCut, // old name of the same effect (shown and played as Track cut)
     kFxCount
 };
 static constexpr int kFxDelay = kFxDelayCut; // the delay (was "Delay cut")
@@ -92,6 +92,8 @@ static constexpr uint8_t kTwistFreeze = 0x02;    // reverb: hold the tail
 static constexpr uint8_t kTwistSpinUp = 0x04;    // vinyl: back up to speed
 static constexpr uint8_t kTwistBrake1 = 0x10;    // vinyl: brake harder (x2 per step)
 static constexpr uint8_t kTwistBrakeMask = 0x30;
+static constexpr uint8_t kTwistCutDrums = 0x01;   // track cut: drum + slice tracks
+static constexpr uint8_t kTwistCutMelodic = 0x02; // track cut: melodic tracks
 
 struct Clock
 {
@@ -113,6 +115,7 @@ class Engine
     void setCell(int i, const Cell& c);
     Cell cell(int i) const { return cells[i & 7]; }
     Cell liveCell(int i) const { return live[i & 7]; }
+    uint8_t cellFlags(int i) const { return flags[i & 7]; }
     // holding: a held button plays from a copy of its settings, which the
     // twists change; letting go forgets the twists
     void setHeld(uint8_t mask);
