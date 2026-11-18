@@ -526,7 +526,6 @@ bool drawWelcome(const WelcomeView& w, int fontRegular, int fontBold)
     if (!w.active)
         return false;
     static const uint32_t kChoiceColor[kWelcomeChoices] = { color::kInstrBtn, color::kFx2Btn, color::kDrum };
-    constexpr int kBigFont = 31; // the display chip's large built-in font
 
     draw::color(color::kBg);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
@@ -555,7 +554,7 @@ bool drawWelcome(const WelcomeView& w, int fontRegular, int fontBold)
         char bpm[8];
         snprintf(bpm, sizeof(bpm), "%d", kWelcomeBpm[i]);
         draw::color(sel ? color::kTextDark : color::kText);
-        draw::text(cx, y1 + 72, kBigFont, OPT_CENTER, bpm);
+        draw::text(cx, y1 + 72, fontBold, OPT_CENTER, bpm); // regular fonts only
         draw::text(cx, y1 + 122, fontRegular, OPT_CENTER, "BPM");
         draw::text(cx, y1 + 156, fontBold, OPT_CENTER, kWelcomeGenre[i]);
     }
