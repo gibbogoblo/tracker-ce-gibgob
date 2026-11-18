@@ -18,7 +18,6 @@ namespace
 
 __NOINIT(EXTERNAL_RAM) alignas(32) uint8_t s_memory[kMemoryBudget];
 Engine s_engine;
-bool s_init = false;
 
 volatile bool s_playing = false;
 volatile uint32_t s_ticks = 0;
@@ -63,19 +62,6 @@ void load()
 Engine& engine()
 {
     return s_engine;
-}
-
-void init()
-{
-    if (s_init)
-        return;
-    s_init = true;
-    Cell cells[kCells];
-    factoryCells(cells);
-    for (int i = 0; i < kCells; i++)
-        s_engine.setCell(i, cells[i]);
-    // the 1.75 MB of buffers are prepared later, by loadSaved(), once the
-    // screens are up: start-up stays exactly as before
 }
 
 void loadSaved()

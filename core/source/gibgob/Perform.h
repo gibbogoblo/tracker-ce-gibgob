@@ -12,8 +12,9 @@ namespace perform
 {
 
 Engine& engine();
-void init();      // reserves the memory, factory buttons (audio start-up)
-void loadSaved(); // the buttons saved on the SD card (once, when the UI starts)
+// the buttons saved on the SD card, and the effects' memory (once, when the
+// UI starts; until then the effects stage passes audio through untouched)
+void loadSaved();
 
 // holding the top-row buttons
 void press(int cell);

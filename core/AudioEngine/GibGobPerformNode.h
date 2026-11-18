@@ -19,6 +19,10 @@ class AudioEffectGibGobPerform : public AudioStream
     audio_block_t* inputQueueArray[2];
 };
 
-extern AudioEffectGibGobPerform gibgobPerformNode;
+// Created the first time it is asked for. The audio engine wires its graph in
+// its constructor, during static initialisation, so the node must exist by
+// then (a plain global could be constructed after the engine, wiping its
+// connections).
+AudioEffectGibGobPerform& gibgobPerformNode();
 
 #endif

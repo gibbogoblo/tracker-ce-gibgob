@@ -4,7 +4,11 @@
 #include "config.h"
 #include <string.h>
 
-AudioEffectGibGobPerform gibgobPerformNode;
+AudioEffectGibGobPerform& gibgobPerformNode()
+{
+    static AudioEffectGibGobPerform node;
+    return node;
+}
 
 AUDIO_CORE_RAM void AudioEffectGibGobPerform::update(void)
 {
