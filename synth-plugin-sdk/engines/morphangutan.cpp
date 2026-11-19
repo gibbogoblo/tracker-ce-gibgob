@@ -213,8 +213,12 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     bool sineGate = false;
     float sineLevel = 0.0f, sinePhase = 0.0f, sineHz = 440.0f;
 #else
-    bool isActive() final { return dsp.active(); }
+    // active while the key is held, not only while the envelope says so: on
+    // the Tracker a voice that reported itself idle straight after its note-on
+    // was never rendered (found with the MORPH_DIAG build)
+    bool isActive() final { return noteGate || dsp.active(); }
 #endif
+    bool noteGate = false;
 
     bool hasTickIdle() const final { return true; }
 
@@ -227,6 +231,7 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     {
         params.glideMode = static_cast<uint8_t>(playMode);
         dsp.noteOn(params, static_cast<float>(note), velocity, isLegatoStep);
+        noteGate = true;
 #ifdef MORPH_DIAG
         diagGate = true;
         diagSamples = 0;
@@ -241,6 +246,7 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final
     {
         dsp.noteOff();
+        noteGate = false;
 #ifdef MORPH_DIAG
         diagGate = false;
 #endif
@@ -369,19 +375,40 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
             }
             return;
         }
-        if (!fx.ready())
+        if (!fx.ready() && !fxAllocFailed)
         {
-            if (fxAllocFailed)
-            {
-                return;
-            }
             fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
             if (fxMemory == nullptr)
             {
                 fxAllocFailed = true;
-                return;
             }
-            fx.attach(fxMemory);
+            else
+            {
+                fx.attach(fxMemory);
+            }
+        }
+        if (fxAllocFailed)
+        {
+            // the effects could not get their memory: a short high blip every
+            // second while playing, so it is obvious (instead of silent effects)
+            auto left = outputBuffer[0];
+            auto right = outputBuffer[1];
+            const int n = static_cast<int>(std::min(left.size(), right.size()));
+            for (int i = 0; i < n; ++i)
+            {
+                const bool on = (fxBlip % 44100u) < 2205u;
+                fxBlipPhase += 2637.0f * (1.0f / 44100.0f);
+                if (fxBlipPhase >= 1.0f)
+                    fxBlipPhase -= 1.0f;
+                if (on)
+                {
+                    const float b = sdk::fastSine(fxBlipPhase) * 0.2f;
+                    left[i] += b;
+                    right[i] += b;
+                }
+                ++fxBlip;
+            }
+            return;
         }
         auto left = outputBuffer[0];
         auto right = outputBuffer[1];
@@ -410,6 +437,8 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     morph::Fx fx;
     uint8_t* fxMemory = nullptr;
     bool fxAllocFailed = false;
+    uint32_t fxBlip = 0;
+    float fxBlipPhase = 0.0f;
     std::array<float, kAudioBufferSize> lastGraphSamples{};
 };
 
