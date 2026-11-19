@@ -72,6 +72,9 @@ struct PianoRollView
 
     // slice track: rows are slices 1..sliceCount (notes 24..), 0 = piano
     int sliceCount = 0;
+    // ghost notes: the other melodic tracks' notes, faint, and the keys they
+    // play at the cursor lit (view only)
+    bool otherTracks = false;
     int8_t sliceButton[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; // slice of each top button
     bool shift = false;
 

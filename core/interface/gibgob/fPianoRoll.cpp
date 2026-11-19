@@ -44,6 +44,8 @@ static void functMenu(uint8_t state);
 static void functParams(uint8_t state);
 static void functCopy(uint8_t state);
 
+static bool s_otherTracks = false; // ghost notes (Shift + top 3)
+
 static void markChanged()
 {
     newFileManager.setActualPatternStructChanged();
@@ -201,6 +203,7 @@ void cPianoRoll::refreshView()
     view.cursorPitch = clampInt(view.cursorPitch, 0, 127);
     const int slices = sliceCount(p, track);
     view.sliceCount = slices;
+    view.otherTracks = s_otherTracks && slices == 0;
     if (slices > 0)
         view.cursorPitch = clampInt(view.cursorPitch, kFirstSliceNote, kFirstSliceNote + slices - 1);
 
@@ -351,7 +354,7 @@ void cPianoRoll::refreshView()
 
     // bottom bar: Shift = utilities; sliced sample = slices; otherwise
     // button 1 = single note and buttons 2-8 = the chord palette
-    static const char* const kUtility[8] = { "Oct -",   "Oct +",  "Semi -", "Semi +",
+    static const char* const kUtility[8] = { "Oct -",   "Oct +",  "Ghosts", "Semi +",
                                              "Sel all", "Reverse", "Double", "Legato" };
     for (int i = 0; i < 8; i++)
     {
@@ -359,7 +362,7 @@ void cPianoRoll::refreshView()
         {
             snprintf(barText[i], sizeof(barText[i]), "%s", kUtility[i]);
             view.bar.fill[i] = 0;
-            view.bar.highlighted[i] = false;
+            view.bar.highlighted[i] = (i == 2 && s_otherTracks); // lit while ghost notes are on
         }
         else if (pads)
         {
@@ -1021,9 +1024,13 @@ void cPianoRoll::utility(int button)
     Sequencer::strPattern* p = current();
     switch (button)
     {
+        case 2:
+            // ghost notes: see the other melodic tracks (view only)
+            s_otherTracks = !s_otherTracks;
+            mtPopups.show(0, s_otherTracks ? "Ghost notes ON" : "Ghost notes OFF", 1);
+            break;
         case 0:
         case 1:
-        case 2:
         case 3:
         {
             static const int kShift[4] = { -12, 12, -1, 1 };

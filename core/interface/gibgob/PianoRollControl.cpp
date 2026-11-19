@@ -20,6 +20,8 @@ constexpr uint32_t kKeyBlack = 0x2A3036;
 constexpr uint32_t kNote = 0x3FB8AF;
 constexpr uint32_t kNoteSelected = 0xFFB347;
 constexpr uint32_t kCrosshair = 0x26313A;
+constexpr uint32_t kOtherNote = 0xB7AEF5;  // other tracks' notes (drawn faint)
+constexpr uint32_t kOtherKey = 0x9A8CF0;   // keys the other tracks play at the cursor
 
 constexpr int kKeyW = 50;
 constexpr int kGridTop = kInfoY + kInfoH + 3;
@@ -201,7 +203,7 @@ void PianoRollControl::update()
             int s = pitch - kFirstSliceNote;
             if (few && (s % 4) != 0)
                 continue;
-            char t[6];
+            char t[12];
             snprintf(t, sizeof(t), "S%d", s + 1);
             draw::text(6, gy1 + r * rh + rh / 2, fRegular, OPT_CENTERY, t);
         }
@@ -220,6 +222,33 @@ void PianoRollControl::update()
     {
         if (isBlackKey(view->topPitch - r))
             draw::rect(2, gy1 + r * rh, kKeyW - 3, gy1 + r * rh + (rh > 2 ? rh - 2 : rh));
+    }
+    // ghost notes on: light the keys the other melodic tracks play at the cursor
+    if (view->otherTracks && view->pattern)
+    {
+        uint32_t lit[4] = { 0, 0, 0, 0 };
+        for (int t = 0; t < kTracks; t++)
+        {
+            if (t == view->track || !isMelodic(view->pattern, t) || isSliceTrack(view->pattern, t))
+                continue;
+            const int len = trackSteps(view->pattern, t) * kTicksPerStep;
+            const int at = len > 0 ? view->cursorTick % len : 0;
+            const int count = noteCount(view->pattern, t);
+            for (int i = 0; i < count; i++)
+            {
+                const Note n = getNote(view->pattern, t, i);
+                const int s = n.start, e = n.start + n.length;
+                if ((at >= s && at < e) || (e > len && at < e - len))
+                    lit[n.pitch >> 5] |= 1u << (n.pitch & 31);
+            }
+        }
+        draw::color(kOtherKey);
+        for (int r = 0; r < rows; r++)
+        {
+            const int pitch = view->topPitch - r;
+            if (pitch >= 0 && pitch <= 127 && ((lit[pitch >> 5] >> (pitch & 31)) & 1))
+                draw::rect(2, gy1 + r * rh, kKeyW - 3, gy1 + r * rh + (rh > 2 ? rh - 2 : rh));
+        }
     }
 
     // key labels: when rows get small only the C notes are named
@@ -308,6 +337,46 @@ void PianoRollControl::update()
                     draw::rect(x1, y1, x2, y2);
             }
         }
+    }
+
+    // ---- the other melodic tracks' notes: faint, behind nothing, dropped first ----
+    if (view->otherTracks && view->pattern && !overlay)
+    {
+        draw::color(kOtherNote);
+        draw::alpha(70);
+        for (int t = 0; t < kTracks; t++)
+        {
+            if (t == view->track || !isMelodic(view->pattern, t) || isSliceTrack(view->pattern, t))
+                continue;
+            const int len = trackSteps(view->pattern, t) * kTicksPerStep;
+            if (len <= 0)
+                continue;
+            const int count = noteCount(view->pattern, t);
+            for (int i = 0; i < count; i++)
+            {
+                const Note n = getNote(view->pattern, t, i);
+                if (n.pitch > view->topPitch || n.pitch < bottomPitch)
+                    continue;
+                // that track loops under this one, from the same start
+                for (int s = n.start; s < lastTick && s < view->patternTicks; s += len)
+                {
+                    const int e = s + n.length;
+                    if (e <= firstTick)
+                        continue;
+                    int x1 = tickToX(s < firstTick ? firstTick : s);
+                    int x2 = tickToX(e > lastTick ? lastTick : e) - pad;
+                    if (x2 < x1 + 2)
+                        x2 = x1 + 2;
+                    const int y1 = pitchToY(n.pitch) + pad;
+                    int y2 = pitchToY(n.pitch) + rh - 1 - pad;
+                    if (y2 < y1 + 1)
+                        y2 = y1 + 1;
+                    if (draw::room(3 + kReserve))
+                        draw::rect(x1, y1, x2, y2);
+                }
+            }
+        }
+        draw::alpha(255);
     }
 
     // ---- ghost notes ----

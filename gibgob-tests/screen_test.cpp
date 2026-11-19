@@ -201,6 +201,14 @@ int main()
         char nm[40]; snprintf(nm, 40, "piano roll, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
         render(pc, nm, kLimit);
         {
+            // ghost notes on: every other melodic track full under this one
+            PianoRollView gv = pv; gv.otherTracks = true;
+            prop.data = &gv; PianoRollControl gc(&prop);
+            char gn[40]; snprintf(gn, 40, "piano roll + ghosts, %dx%d, full", gv.stepsVisible, gv.rowsVisible);
+            render(gc, gn, kLimit);
+            prop.data = &pv;
+        }
+        {
             // slice editor: 48 slice rows, labels and button markers
             PianoRollView sv = pv; sv.sliceCount = 48; sv.topPitch = 24 + 47; sv.cursorPitch = 40;
             for (int b = 0; b < 8; b++) sv.sliceButton[b] = (int8_t)(b * 6);

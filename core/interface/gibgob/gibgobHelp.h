@@ -58,8 +58,9 @@ static const char* const kHelpPianoRoll[] = {
     "Shift+Up/Down: octave   Shift+L/R: 4 steps",
     "Copy: copy selected notes / note here",
     "Shift+Copy: paste at the cursor",
-    "Shift+top: Oct-/Oct+/Semi-/Semi+/",
+    "Shift+top: Oct-/Oct+/Ghosts/Semi+/",
     "   Select all/Reverse/Double/Legato",
+    "Ghosts: other tracks' notes (view only)",
     "Hold Rec 1 s: quantized rec on / off",
     "Hold Shift + +/-: master volume",
 };
