@@ -51,8 +51,19 @@ static void functMenu(uint8_t state);
 namespace
 {
 constexpr int kEditVisionClear = 90;
-// the two frames in the display chip's memory (where the image viewer puts its pictures)
-constexpr uint32_t kFrameAddress[2] = { 350000, 410000 };
+// the pictures in the display chip's memory (where the image viewer puts its pictures)
+struct PictureSlot
+{
+    const char* path; // without .jpg
+    uint32_t address;
+    int maxW, maxH;
+};
+constexpr int kPictureSlots = 3;
+const PictureSlot kSlots[kPictureSlots] = {
+    { "GibGob/Vision/1", 350000, kVisionTileW, kVisionTileH },
+    { "GibGob/Vision/2", 410000, kVisionTileW, kVisionTileH },
+    { "GibGob/Vision/logo", 470000, kVisionLogoW, kVisionLogoH },
+};
 constexpr int kTicksPerBeat = 4 * kTicksPerStep;
 constexpr int kScreenTicks = kVisionScreenSteps * kTicksPerStep;
 } // namespace
@@ -67,9 +78,9 @@ void cGibbonVision::initDisplayControls()
         view = new (s_viewMemory) VisionView();
     strControlProperties prop;
     prop.x = 0;
-    prop.y = kScreenTop;
+    prop.y = 0;
     prop.w = kScreenW;
-    prop.h = kScreenH;
+    prop.h = 480;
     prop.style = controlStyleShow;
     prop.data = view;
     control = display.createControl<VisionControl>(&prop);
@@ -96,13 +107,16 @@ void cGibbonVision::start(uint32_t options)
 
     // the pictures, loaded one after the other by the display
     view->pictureLoaded = false;
+    view->logoLoaded = false;
     view->pictureHint = "/GibGob/Vision/1.jpg + 2.jpg";
-    pictureState = 1;
+    loadSlot = 0;
+    loadBusy = false;
+    for (int i = 0; i < kPictureSlots; i++)
+        loadedW[i] = loadedH[i] = 0;
 
+    // the view draws its own header over the whole screen
     songTimer.hide();
-    snprintf(titleText, sizeof(titleText), "GIBBON VISION");
-    titleBar->show();
-    titleBar->setTitle(titleText);
+    titleBar->hide();
 
     setDefaultScreenFunct();
     refresh();
@@ -149,56 +163,32 @@ void cGibbonVision::update()
 {
     perform::uiTick();
 
-    // picture loading (one frame at a time, the display does the work)
-    if (pictureState == 1 || pictureState == 3)
+    // pictures: frame 1, frame 2, the logo, one after the other (the display
+    // decodes them into its own memory)
+    if (loadSlot < kPictureSlots)
     {
-        const int f = pictureState == 1 ? 0 : 1;
-        if (display.getImgLoadState() == 0 || display.getImgLoadState() == 3)
+        const PictureSlot& slot = kSlots[loadSlot];
+        if (!loadBusy)
         {
-            char path[40];
-            snprintf(path, sizeof(path), "GibGob/Vision/%d", f + 1);
-            if (display.readImgFromSd(path, kFrameAddress[f], kVisionTileW, kVisionTileH) == 0)
-                pictureState = f == 0 ? 2 : 4;
-            else
-                pictureState = f == 0 ? 6 : 5; // no frame 1: no picture; no frame 2: frame 1 only
-            if (pictureState == 5)
+            if (display.getImgLoadState() == 0 || display.getImgLoadState() == 3)
             {
-                frameW[1] = frameW[0];
-                frameH[1] = frameH[0];
-                view->frameAddress[1] = kFrameAddress[0];
-                refresh();
+                char path[40];
+                snprintf(path, sizeof(path), "%s", slot.path);
+                if (display.readImgFromSd(path, slot.address, slot.maxW, slot.maxH) == 0)
+                    loadBusy = true;
+                else
+                    pictureDone(false); // missing, too big or not a baseline JPEG
             }
         }
-    }
-    else if (pictureState == 2 || pictureState == 4)
-    {
-        if (display.isImgLoaded())
+        else if (display.isImgLoaded())
         {
-            const int f = pictureState == 2 ? 0 : 1;
-            frameW[f] = getProps.Width;
-            frameH[f] = getProps.Height;
-            view->frameAddress[f] = kFrameAddress[f];
-            if (f == 0)
-            {
-                view->frameAddress[1] = kFrameAddress[0];
-                view->frameW = frameW[0];
-                view->frameH = frameH[0];
-                view->pictureLoaded = true;
-                pictureState = 3;
-            }
-            else
-            {
-                // both frames the same size, or frame 2 is not used
-                if (frameW[1] != frameW[0] || frameH[1] != frameH[0])
-                    view->frameAddress[1] = kFrameAddress[0];
-                pictureState = 5;
-            }
-            refresh();
+            loadedW[loadSlot] = getProps.Width;
+            loadedH[loadSlot] = getProps.Height;
+            pictureDone(true);
         }
         else if (display.getImgLoadState() == 0)
         {
-            pictureState = pictureState == 2 ? 6 : 5; // the load failed
-            refresh();
+            pictureDone(false); // the load failed
         }
     }
 
@@ -229,8 +219,6 @@ void cGibbonVision::refresh()
     lastPlayX = c.playing ? intoWindow / (kTicksPerStep / 4) : -1;
     lastFrame = c.playing ? (int)((c.ticks / kTicksPerBeat) & 1) : 0;
     view->frame = lastFrame;
-    view->frameW = frameW[0];
-    view->frameH = frameH[0];
 
     uint8_t sounding = 0;
     int mutedCount = 0;
@@ -275,19 +263,11 @@ void cGibbonVision::refresh()
     // title and value boxes
     const int bar = c.playing ? (int)(c.ticks / (16 * kTicksPerStep)) + 1 : 1;
     const int beat = c.playing ? (int)((c.ticks / kTicksPerBeat) % 4) + 1 : 1;
-    snprintf(view->title, sizeof(view->title), "Pattern %d   Bar %d.%d", mtProject.values.actualPattern, bar, beat);
-    snprintf(view->params[0].label, sizeof(view->params[0].label), "BPM");
-    snprintf(view->params[0].value, sizeof(view->params[0].value), "%d", (int)(mtProject.values.globalTempo + 0.5f));
-    snprintf(view->params[1].label, sizeof(view->params[1].label), "Swing");
-    snprintf(view->params[1].value, sizeof(view->params[1].value), "%d%%", patternSwing(p));
-    snprintf(view->params[2].label, sizeof(view->params[2].label), "Solo");
-    snprintf(view->params[2].value, sizeof(view->params[2].value), "%s", soloTrack >= 0 ? "" : "--");
-    if (soloTrack >= 0)
-        snprintf(view->params[2].value, sizeof(view->params[2].value), "Trk %d", soloTrack + 1);
-    snprintf(view->params[3].label, sizeof(view->params[3].label), "Muted");
-    snprintf(view->params[3].value, sizeof(view->params[3].value), "%d", mutedCount);
-    for (int i = 0; i < 4; i++)
-        view->params[i].color = 0;
+    snprintf(view->patternText, sizeof(view->patternText), "Pattern %d", mtProject.values.actualPattern);
+    snprintf(view->barText, sizeof(view->barText), "Bar %d.%d", bar, beat);
+    snprintf(view->swingText, sizeof(view->swingText), "%d%%", patternSwing(p));
+    snprintf(view->bpmText, sizeof(view->bpmText), "%d", (int)(mtProject.values.globalTempo + 0.5f));
+    (void)mutedCount;
 
     // bottom bar: the CHIMP OUT effects; with Shift on, the tracks
     uint8_t active = 0;
@@ -303,8 +283,7 @@ void cGibbonVision::refresh()
         {
             const perform::Cell cell = perform::getLiveCell(i);
             const bool on = perform::isHeld(i) || perform::engine().cellActive(i);
-            snprintf(barText[i], sizeof(barText[i]), "%s",
-                     cell.fx == perform::kFxOff ? "--" : perform::fxInfo(cell.fx).shortName);
+            performBarLabel(cell.fx, cell.p, barText[i], sizeof(barText[i]));
             view->bar.fill[i] = cell.fx == perform::kFxOff ? 0x3C3C42 : performFxColor(cell.fx);
             view->bar.highlighted[i] = on;
         }
@@ -315,6 +294,32 @@ void cGibbonVision::refresh()
     lastPerfActive = active;
 
     display.refreshControl(control);
+}
+
+// one picture slot finished (loaded or not): use it, go on with the next
+void cGibbonVision::pictureDone(bool ok)
+{
+    loadBusy = false;
+    if (loadSlot == 0 && ok)
+    {
+        view->frameAddress[0] = view->frameAddress[1] = kSlots[0].address;
+        view->frameW = loadedW[0];
+        view->frameH = loadedH[0];
+        view->pictureLoaded = true;
+    }
+    else if (loadSlot == 1 && ok && view->pictureLoaded && loadedW[1] == loadedW[0] && loadedH[1] == loadedH[0])
+    {
+        view->frameAddress[1] = kSlots[1].address; // frame 2 (same size as frame 1)
+    }
+    else if (loadSlot == 2 && ok)
+    {
+        view->logoAddress = kSlots[2].address;
+        view->logoW = loadedW[2];
+        view->logoH = loadedH[2];
+        view->logoLoaded = true;
+    }
+    loadSlot++;
+    refresh();
 }
 
 // ---------------------------------------------------------------------------

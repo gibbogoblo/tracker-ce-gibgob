@@ -37,10 +37,11 @@ class cGibbonVision : public ModuleBase
     int soloTrack = -1;
     uint8_t muteBeforeSolo[8] = { 0 };
 
-    // picture loading: 0 idle, 1 frame 1 asked, 2 frame 1 loading,
-    // 3 frame 2 asked, 4 frame 2 loading, 5 done, 6 none
-    int pictureState = 0;
-    int frameW[2] = { 0, 0 }, frameH[2] = { 0, 0 };
+    // picture loading: slot 0 = frame 1, 1 = frame 2, 2 = logo, 3 = done
+    int loadSlot = 3;
+    bool loadBusy = false;
+    int loadedW[3] = { 0, 0, 0 }, loadedH[3] = { 0, 0, 0 };
+    void pictureDone(bool ok);
 
     int lastPlayX = -2;
     uint8_t lastSounding = 0;

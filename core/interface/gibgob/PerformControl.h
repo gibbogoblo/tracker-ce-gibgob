@@ -48,6 +48,8 @@ class PerformControl : public cDisplayControl
 
 // colour of an effect (cells, bottom bar)
 uint32_t performFxColor(int fx);
+// a readable bottom-bar name for a button ("Roll 1/16", "Stutter", "Filter" ...)
+void performBarLabel(int fx, const uint8_t* params, char* buf, int bufLen);
 
 } // namespace gibgob
 

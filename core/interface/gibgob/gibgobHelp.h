@@ -141,6 +141,7 @@ static const char* const kHelpVision[] = {
     "Picture: /GibGob/Vision/1.jpg and 2.jpg",
     "  up to 254 x 109 pixels, baseline JPEG",
     "  (the two frames swap on every beat)",
+    "Logo: /GibGob/Vision/logo.jpg (264 x 56)",
     "Solo ends when you leave this view",
 };
 

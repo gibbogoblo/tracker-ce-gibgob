@@ -36,6 +36,32 @@ uint32_t performFxColor(int fx)
     }
 }
 
+void performBarLabel(int fx, const uint8_t* params, char* buf, int bufLen)
+{
+    using namespace perform;
+    if (fx == kFxOff)
+    {
+        snprintf(buf, (size_t)bufLen, "--");
+        return;
+    }
+    if (fx == kFxRoll)
+    {
+        char v[16];
+        paramText(fx, 0, params[0], v, sizeof(v));
+        snprintf(buf, (size_t)bufLen, "Roll %s", v);
+        return;
+    }
+    const char* name = fxInfo(fx).name;
+    switch (fx)
+    {
+        case kFxFilter: name = "Filter"; break;
+        case kFxComb: name = "Comb"; break;
+        case kFxVinyl: name = "Vinyl"; break;
+        default: break;
+    }
+    snprintf(buf, (size_t)bufLen, "%s", name);
+}
+
 namespace
 {
 constexpr int kTop = kInfoY + kInfoH + 8;

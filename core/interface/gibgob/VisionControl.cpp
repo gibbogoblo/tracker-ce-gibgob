@@ -168,7 +168,9 @@ namespace
 constexpr uint32_t kTileBg = 0x1C1C24;
 constexpr uint32_t kBarLine = 0x3A3946;
 constexpr uint32_t kMutedGrey = 0x585764;
-constexpr uint32_t kPictureBg = 0x2A2238;
+constexpr uint32_t kPictureBg = 0x2E213B; // the frames' own background
+constexpr uint32_t kHeaderBox = 0x28272F;
+constexpr uint32_t kLogoRed = 0xF5002A;
 constexpr int kHeaderH = 20;
 
 void cellRect(int cell, int& x1, int& y1, int& x2, int& y2)
@@ -203,6 +205,12 @@ void VisionControl::update()
     const int fBold = fonts[3].handle;
 
     draw::begin(kDrawBudget);
+    if (view->help.active)
+    {
+        // the help window starts below where the title bar would be
+        draw::color(color::kBg);
+        draw::rect(0, 0, kScreenW - 1, kScreenTop - 1);
+    }
     if (drawHelp(view->help, fRegular, fBold))
     {
         draw::end();
@@ -211,7 +219,18 @@ void VisionControl::update()
     draw::setLighten(view->shift);
 
     draw::color(color::kBg);
-    draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
+    draw::rect(0, 0, kScreenW - 1, 479);
+
+    // header: Pattern, Bar | logo | Swing, BPM
+    draw::color(kHeaderBox);
+    draw::rect(15, 17, 127, 47);
+    draw::rect(132, 17, 244, 47);
+    draw::rect(kVisionLogoX, kVisionLogoY, kVisionLogoX + kVisionLogoW - 1, kVisionLogoY + kVisionLogoH - 1);
+    draw::rect(557, 17, 669, 47);
+    draw::rect(675, 17, 787, 47);
+    if (view->logoLoaded)
+        draw::bitmap(view->logoAddress, view->logoW, view->logoH,
+                     kVisionLogoX + (kVisionLogoW - view->logoW) / 2, kVisionLogoY + (kVisionLogoH - view->logoH) / 2);
 
     // tile backgrounds and header bands
     draw::color(kTileBg);
@@ -231,7 +250,6 @@ void VisionControl::update()
     }
 
     // the fixed parts before the notes, so the notes can never push them out
-    drawInfoStrip(10, view->title, nullptr, 0, view->params, -1, fRegular, fBold);
     drawBottomBar(view->bar, fBold);
 
     // the picture (or where it goes)
@@ -317,9 +335,26 @@ void VisionControl::update()
         }
     }
     if (view->shift)
-        drawShiftBorder();
+    {
+        // Shift: the border round the whole screen (this view has no title bar)
+        draw::color(color::kShiftBorder);
+        draw::frame(0, 0, kScreenW - 1, 479, 4);
+    }
 
-    // text last: names, lengths, mute / solo tags
+    // text last: header, names, lengths, mute / solo tags
+    draw::color(color::kText);
+    draw::text(71, 32, fBold, OPT_CENTER, view->patternText);
+    draw::text(188, 32, fBold, OPT_CENTER, view->barText);
+    draw::text(779, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->bpmText);
+    draw::text(661, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->swingText);
+    if (!view->logoLoaded)
+    {
+        draw::color(kLogoRed);
+        draw::text(kVisionLogoX + kVisionLogoW / 2, kVisionLogoY + kVisionLogoH / 2, fBold, OPT_CENTER, "GIBBON VISION");
+    }
+    draw::color(color::kTextDim);
+    draw::text(565, 32, fRegular, OPT_CENTERY, "Swing");
+    draw::text(683, 32, fRegular, OPT_CENTERY, "BPM");
     for (int t = 0; t < 8; t++)
     {
         const VisionTile& tile = view->tiles[t];

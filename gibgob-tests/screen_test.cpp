@@ -42,26 +42,54 @@ void sendMidiNoteOff(uint8_t, uint8_t, uint8_t, bool) {}
 // ---- exact word counting, like the firmware's display list capture ----
 static int words = 0, fails = 0, verts = 0;
 static bool inBegin = false;
+static int g_minY = 27; // top of what a screen may draw on
 static int beginPrim = 0;
 static uint32_t lastColor = 0; static int borderRects = 0;
+// optional picture of a frame (SVG) to compare with a design: set g_svg
+static FILE* g_svg = nullptr;
+static int g_alpha = 255, g_vx = 0, g_vy = 0, g_vn = 0;
+static uint32_t g_bmpAddr = 0; static int g_bmpW = 0, g_bmpH = 0;
+static const char* bitmapFile(uint32_t a)
+{
+    return a == 350000 ? "frame1.jpg" : (a == 410000 ? "frame2.jpg" : "logo.jpg");
+}
 void API_COLOR(uint32_t col) { words++; lastColor = col; }
-void API_COLOR_A(uint8_t) { words++; }
+void API_COLOR_A(uint8_t a) { words++; g_alpha = a; }
 void API_BEGIN(int prim) { words++; inBegin = true; beginPrim = prim; }
 void API_END() { words++; inBegin = false; }
 void API_LINE_WIDTH(int) { words++; }
-void API_CMD_SETBITMAP(uint32_t, uint16_t, uint16_t, uint16_t) { words += 5; }
+void API_CMD_SETBITMAP(uint32_t a, uint16_t, uint16_t w, uint16_t h) { words += 5; g_bmpAddr = a; g_bmpW = w; g_bmpH = h; }
 void API_BLEND_FUNC(int, int) { words++; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
     words++;
     if (beginPrim == RECTS) verts++; // rectangles take vertices in pairs (a bitmap takes one)
+    if (g_svg && beginPrim == RECTS)
+    {
+        if (g_vn == 0) { g_vx = x; g_vy = y; g_vn = 1; }
+        else
+        {
+            fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' fill='#%06X' fill-opacity='%.2f'/>\n", std::min<int>(g_vx, x),
+                    std::min<int>(g_vy, y), std::abs(x - g_vx) + 1, std::abs(y - g_vy) + 1, lastColor & 0xFFFFFF, g_alpha / 255.0);
+            g_vn = 0;
+        }
+    }
+    if (g_svg && beginPrim == BITMAPS)
+        fprintf(g_svg, "<image x='%d' y='%d' width='%d' height='%d' href='%s'/>\n", x, y, g_bmpW, g_bmpH, bitmapFile(g_bmpAddr));
     if (lastColor == 0xB85548 || lastColor == 0xC97F75) borderRects++; // plain, or lightened by Shift
     if (!inBegin) { printf("vertex outside BEGIN\n"); fails++; }
-    if (x < -2 || x > 801 || y < 27 || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
+    if (x < -2 || x > 801 || y < g_minY || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
 }
-void API_CMD_TEXT(int16_t x, int16_t y, int16_t, uint16_t options, const char* s)
+void API_CMD_TEXT(int16_t x, int16_t y, int16_t font, uint16_t options, const char* s)
 {
     if (inBegin) { printf("text inside BEGIN\n"); fails++; }
+    if (g_svg)
+    {
+        const char* anchor = (options & OPT_CENTERX) ? "middle" : ((options & OPT_RIGHTX) ? "end" : "start");
+        const int fy = (options & OPT_CENTERY) ? y + 5 : y + 12;
+        fprintf(g_svg, "<text x='%d' y='%d' fill='#%06X' font-family='Liberation Sans, Arial' font-size='%d' font-weight='%s' text-anchor='%s'>%s</text>\n",
+                x, fy, lastColor & 0xFFFFFF, font == 29 ? 15 : 13, font == 29 ? "bold" : "normal", anchor, s);
+    }
     int len = (int)strlen(s);
     const int cw = 9; // wide glyph, worst case
     int width = len * cw - 1;
@@ -138,14 +166,40 @@ int main()
             buildVisionTile(&pat, t, 48 * 7, tile);
             if (tile.count > VisionTile::kMaxMarks) { printf("  vision tile over its marks\n"); fails++; }
         }
-        snprintf(vv.title, sizeof(vv.title), "Pattern 255   Bar 128.4");
-        memcpy(vv.params, pb, sizeof(pb)); vv.bar = bar; vv.shift = true; vv.cursor = 4;
+        snprintf(vv.patternText, sizeof(vv.patternText), "Pattern 255"); snprintf(vv.barText, sizeof(vv.barText), "Bar 128.4");
+        snprintf(vv.swingText, sizeof(vv.swingText), "100%%"); snprintf(vv.bpmText, sizeof(vv.bpmText), "300");
+        vv.bar = bar; vv.shift = true; vv.cursor = 4;
         vv.pictureHint = "/GibGob/Vision/1.jpg + 2.jpg";
-        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &vv;
+        strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &vv;
         VisionControl vc(&prop);
+        g_minY = 0; // this view has the whole screen (no title bar)
         render(vc, "gibbon vision, no picture", kLimit);
+        vv.logoLoaded = true; vv.logoAddress = 470000; vv.logoW = kVisionLogoW; vv.logoH = kVisionLogoH;
         vv.pictureLoaded = true; vv.frameW = kVisionTileW; vv.frameH = kVisionTileH; vv.frameAddress[0] = 350000; vv.frameAddress[1] = 410000;
         render(vc, "gibbon vision, picture", kLimit);
+        if (const char* out = getenv("VISION_SVG"))
+        {
+            // a picture of the frame, unlit (no Shift), playing
+            vv.shift = false; vv.cursor = 4;
+            static const char* const kNames[8] = { "1 Kick", "2 Snare", "3 Hats", "4 Perc", "5 Chords", "6 Bass", "7 Lead", "8 Break" };
+            for (int t = 0; t < 8; t++)
+            {
+                snprintf(vv.tiles[t].name, sizeof(vv.tiles[t].name), "%s", kNames[t]);
+                snprintf(vv.tiles[t].info, sizeof(vv.tiles[t].info), t == 4 || t == 6 ? "64 st  bars 1-4" : "16 st");
+                vv.tiles[t].flash = (t == 0 || t == 2); vv.tiles[t].soloed = false; vv.tiles[t].muted = (t == 3);
+            }
+            snprintf(vv.patternText, sizeof(vv.patternText), "Pattern 3"); snprintf(vv.barText, sizeof(vv.barText), "Bar 3.2");
+            snprintf(vv.swingText, sizeof(vv.swingText), "54%%"); snprintf(vv.bpmText, sizeof(vv.bpmText), "140");
+            static const char* const kFx[8] = { "Roll 1/16", "Roll 1/32", "Stutter", "Filter", "Delay", "Reverb", "Halftime", "Vinyl" };
+            static const uint32_t kFxCol[8] = { 0xE07B39, 0xE07B39, 0xD9A23A, 0x7B6FD6, 0x3FA7B5, 0x5AC8FA, 0x4FA3E0, 0xB8AA53 };
+            for (int i = 0; i < 8; i++) { vv.bar.text[i] = kFx[i]; vv.bar.fill[i] = kFxCol[i]; vv.bar.highlighted[i] = (i == 2); }
+            g_svg = fopen(out, "w");
+            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+            words = 0; vc.update();
+            fprintf(g_svg, "</svg>\n");
+            fclose(g_svg); g_svg = nullptr;
+        }
+        g_minY = 27;
     }
     // a 1-step-long hit on a 16-step drum track shows four times in the 4 bars
     {
