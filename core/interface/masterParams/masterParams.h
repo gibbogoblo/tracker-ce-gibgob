@@ -83,6 +83,7 @@ class cMasterParams : public ModuleBase
 
     displayMode displayType = displayMode::masterValues;
     displayMode displayTypeBeforeMasterPress = displayMode::masterValues;
+    bool gibgobOpenMasterFx = false; // GibGob OS: page 4 asked for (opened from update)
 
     enum
     {

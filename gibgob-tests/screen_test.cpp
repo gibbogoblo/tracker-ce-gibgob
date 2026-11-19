@@ -295,6 +295,21 @@ int main()
         strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &tv;
         TableControl tc(&prop);
         render(tc, "track page", kLimit);
+        {
+            // Master FX page: 4 columns, the longest cells the page writes
+            TableView mv; mv.rows = 6; mv.cols = 4; mv.cursorRow = 5; mv.cursorCol = 3; mv.shift = true;
+            const char* mh[4] = { "Duck (kick)", "Glue", "Colour 1", "Colour 2" };
+            for (int c = 0; c < 4; c++) { mv.colX[c] = 16 + c * 196; mv.header[c] = mh[c]; }
+            for (int r = 0; r < 6; r++)
+                for (int c = 0; c < 4; c++)
+                    snprintf(mv.cell[r][c], 20, "%-9s %.9s", "Dropouts", "Cassette0");
+            for (int r = 0; r < 12; r++) mv.rowColor[r] = 0xE07B39;
+            snprintf(mv.title, sizeof(mv.title), "Pattern 255  (song's - edit to make own)"); snprintf(mv.mode, 12, "GR 12.5");
+            mv.bar = bar;
+            prop.data = &mv; TableControl mc(&prop);
+            render(mc, "master fx page", kLimit);
+            prop.data = &tv;
+        }
 
         TableView pv2; pv2.rows = 8; pv2.cols = 5; int cx[5] = { 24, 130, 240, 400, 540 };
         const char* hd[5] = { "Button", "Root", "Type", "Inversion", "Voicing" };
@@ -371,6 +386,22 @@ int main()
         words = 0; dc.update();
         printf("%-34s %4d words\n", "help: piano roll", words);
         if (words > kLimit || draw::skipped()) { printf("  help too big\n"); fails++; }
+        {
+            // every other help list fits too
+            struct H { const char* name; const char* const* lines; int count; };
+            const H lists[] = { { "help: drum", kHelpDrum, (int)(sizeof(kHelpDrum) / sizeof(kHelpDrum[0])) },
+                                { "help: track page", kHelpTrackPage, (int)(sizeof(kHelpTrackPage) / sizeof(kHelpTrackPage[0])) },
+                                { "help: palette", kHelpPalette, (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0])) },
+                                { "help: gibbon vision", kHelpVision, (int)(sizeof(kHelpVision) / sizeof(kHelpVision[0])) },
+                                { "help: master fx", kHelpMasterFx, (int)(sizeof(kHelpMasterFx) / sizeof(kHelpMasterFx[0])) } };
+            for (const H& h : lists)
+            {
+                dv.help.lines = h.lines; dv.help.count = h.count;
+                words = 0; verts = 0; dc.update();
+                printf("%-34s %4d words\n", h.name, words);
+                if (words > kLimit || draw::skipped() || h.count > 32) { printf("  help too big\n"); fails++; }
+            }
+        }
         if ((int)(sizeof(kHelpMain) / sizeof(kHelpMain[0])) > 32 || (int)(sizeof(kHelpPianoRoll) / sizeof(kHelpPianoRoll[0])) > 32) { printf("  help list longer than 32 lines\n"); fails++; }
     }
 

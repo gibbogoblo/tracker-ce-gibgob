@@ -34,6 +34,7 @@ static const char* const kHelpMain[] = {
     "Hold Shift + +/-: master volume",
     "Shift+top: CHIMP OUT FX (+/- Up/Down twist)",
     "Button 1: back here from any screen",
+    "Menu > Master, page 4: Master FX",
 };
 
 static const char* const kHelpPianoRoll[] = {
@@ -154,6 +155,21 @@ static const char* const kHelpVision[] = {
     "  (the two frames swap on every beat)",
     "Logo: /GibGob/Vision/logo.jpg (264 x 56)",
     "Solo ends when you leave this view",
+};
+
+static const char* const kHelpMasterFx[] = {
+    "D-pad: pick a setting   +/-: change it",
+    "Big +/-: bigger steps",
+    "Top 1: edit the song's settings",
+    "Top 2: edit this pattern's own",
+    "  (the first change makes them its own)",
+    "Top 3: pattern back to the song's",
+    "Duck: every track but the kick track dips",
+    "  on each kick note (depth, release, shape)",
+    "Glue: bus compressor before the limiter",
+    "Colour 1, 2: Cassette, Vinyl, Lo-fi, Width",
+    "Master: back to the first Master page",
+    "Button 1: main sequencer   Play: play/stop",
 };
 
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))

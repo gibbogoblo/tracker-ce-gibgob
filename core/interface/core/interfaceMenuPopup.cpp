@@ -20,8 +20,8 @@ const char* const kModuleNamesList[kMenuModulesCount] = { "Sequencer",
 
 uint32_t instrumentParamOptions[2] = { 1, 2 };
 InterfaceMenuPopup::ModuleModes instrumentParamModes = { 2, instrumentParamOptions, { 2, 0 } };
-uint32_t masterOptions[3] = { (1 << 8), (2 << 8), (3 << 8) };
-InterfaceMenuPopup::ModuleModes masterModes = { 3, masterOptions, { 3, 0 } };
+uint32_t masterOptions[4] = { (1 << 8), (2 << 8), (3 << 8), (4 << 8) }; // 4: GibGob OS Master FX
+InterfaceMenuPopup::ModuleModes masterModes = { 4, masterOptions, { 4, 0 } };
 uint32_t performOptions[2] = { 1, 2 };
 InterfaceMenuPopup::ModuleModes performModes = { 2, performOptions, { 2, 0 } };
 

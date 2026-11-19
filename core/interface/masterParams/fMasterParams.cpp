@@ -1,3 +1,4 @@
+#include "gibgob/gibgobMasterFx.h"
 #include "mtAudioEngine.h"
 #include "mtConfig.h"
 #include "mtPadBoard.h"
@@ -141,6 +142,13 @@ static elapsedMillis refreshTimer;
 
 void cMasterParams::update()
 {
+    if (gibgobOpenMasterFx)
+    {
+        gibgobOpenMasterFx = false;
+        mtInterface.deactivateModule(this);
+        mtInterface.activateModule(&gibgobMasterFx, 0);
+        return;
+    }
 
     if (displayType == displayMode::mixer && !keyboardManager.getState())
     {
@@ -267,6 +275,8 @@ void cMasterParams::start(uint32_t options)
         displayType = displayMode::mixer;
     else if (moduleMode == 3)
         displayType = displayMode::mixerDelayReverb;
+    // GibGob OS: page 4 is the Master FX page, a module of its own
+    gibgobOpenMasterFx = (moduleMode == 4);
 
     //--------------------------------------------------------------------
     // ustawienie funkcji
@@ -1136,7 +1146,11 @@ void cMasterParams::switchScreen()
         else if (isEqualizerScreen)
             switchToEqualizerScreen();
         else
-            switchToMaster();
+        {
+            // GibGob OS: after the mixer pages comes the Master FX page
+            mtInterface.deactivateModule(this);
+            mtInterface.activateModule(&gibgobMasterFx, 0);
+        }
     }
     else if (displayType == cMasterParams::displayMode::mixer)
     {
