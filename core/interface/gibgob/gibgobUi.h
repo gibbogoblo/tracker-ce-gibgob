@@ -148,6 +148,8 @@ void rect(int x1, int y1, int x2, int y2);
 void frame(int x1, int y1, int x2, int y2, int t); // outline of thickness t
 void setLighten(bool on); // Shift on: everything a little lighter
 void text(int x, int y, int fontHandle, uint16_t options, const char* str);
+// an RGB565 picture already in the display chip's memory, top left at x, y
+void bitmap(uint32_t address, int w, int h, int x, int y);
 void end();
 } // namespace draw
 

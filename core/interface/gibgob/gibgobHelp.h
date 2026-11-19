@@ -19,6 +19,7 @@ static const char* const kHelpMain[] = {
     "Small +/-: step length   Big +/-: zoom",
     "On name: small +/- sound",
     "Hold 1 + small +/-: next / previous pattern",
+    "Hold 1 + big +: Gibbon vision",
     "Rec: live rec (stopped: 1 bar count-in)",
     "Hold Rec 1 s: quantized rec on / off",
     "Play: play / stop (stop ends live rec)",
@@ -122,6 +123,24 @@ static const char* const kHelpPerform[] = {
     " Track cut: mute drums / mute melodic",
     "Button 1: main sequencer   Play: play/stop",
     "Saved on the SD card for every project",
+};
+
+static const char* const kHelpVision[] = {
+    "Top row: hold CHIMP OUT FX (no Shift)",
+    "  + Up/+ or Down/-: twist while held",
+    "Shift+top row: play the tracks",
+    "D-pad: pick a track",
+    "Insert: mute / unmute   Shift+Insert: solo",
+    "Middle: open the track's sequencer",
+    "Shift+Delete: clear the track",
+    "Hold 1 + small +/-: next / previous pattern",
+    "Hold 1 + big -, or tap 1: main sequencer",
+    "Play: play / stop   Shift+Play: song",
+    "Button 2: the track's sound parameters",
+    "Picture: /GibGob/Vision/1.jpg and 2.jpg",
+    "  up to 254 x 109 pixels, baseline JPEG",
+    "  (the two frames swap on every beat)",
+    "Solo ends when you leave this view",
 };
 
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))

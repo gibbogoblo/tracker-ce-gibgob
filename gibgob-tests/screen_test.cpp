@@ -3,6 +3,7 @@
 #include "gibgob/TableControl.h"
 #include "gibgob/DrumSeqControl.h"
 #include "gibgob/PerformControl.h"
+#include "gibgob/VisionControl.h"
 #include "gibgob/PerformFx.h"
 #include <algorithm>
 #include "gibgob/gibgobHelp.h"
@@ -41,16 +42,19 @@ void sendMidiNoteOff(uint8_t, uint8_t, uint8_t, bool) {}
 // ---- exact word counting, like the firmware's display list capture ----
 static int words = 0, fails = 0, verts = 0;
 static bool inBegin = false;
+static int beginPrim = 0;
 static uint32_t lastColor = 0; static int borderRects = 0;
 void API_COLOR(uint32_t col) { words++; lastColor = col; }
 void API_COLOR_A(uint8_t) { words++; }
-void API_BEGIN(int) { words++; inBegin = true; }
+void API_BEGIN(int prim) { words++; inBegin = true; beginPrim = prim; }
 void API_END() { words++; inBegin = false; }
 void API_LINE_WIDTH(int) { words++; }
+void API_CMD_SETBITMAP(uint32_t, uint16_t, uint16_t, uint16_t) { words += 5; }
 void API_BLEND_FUNC(int, int) { words++; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
-    words++; verts++;
+    words++;
+    if (beginPrim == RECTS) verts++; // rectangles take vertices in pairs (a bitmap takes one)
     if (lastColor == 0xB85548 || lastColor == 0xC97F75) borderRects++; // plain, or lightened by Shift
     if (!inBegin) { printf("vertex outside BEGIN\n"); fails++; }
     if (x < -2 || x > 801 || y < 27 || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
@@ -117,6 +121,49 @@ int main()
     for (int i = 0; i < 8; i++) { snprintf(bt[i], 16, "G#10 m add9"); bar.text[i] = bt[i]; bar.fill[i] = 0x3FB8AF; bar.highlighted[i] = true; }
     ParamBox pb[4];
     for (int i = 0; i < 4; i++) { snprintf(pb[i].label, 10, "Nudge"); snprintf(pb[i].value, 10, "-100%%"); pb[i].color = 0x4CD964; }
+
+    // Gibbon vision: every track full, everything flashing, every tag shown
+    {
+        VisionView vv;
+        for (int t = 0; t < 8; t++)
+        {
+            VisionTile& tile = vv.tiles[t];
+            snprintf(tile.name, sizeof(tile.name), "%d WWWWWWWWW", t + 1);
+            snprintf(tile.info, sizeof(tile.info), "128 st  bars 5-8");
+            tile.color = (t % 2) ? 0x5F53B8 : 0xB85548;
+            tile.muted = (t == 3);
+            tile.soloed = (t == 5);
+            tile.flash = true;
+            tile.playX = 150;
+            buildVisionTile(&pat, t, 48 * 7, tile);
+            if (tile.count > VisionTile::kMaxMarks) { printf("  vision tile over its marks\n"); fails++; }
+        }
+        snprintf(vv.title, sizeof(vv.title), "Pattern 255   Bar 128.4");
+        memcpy(vv.params, pb, sizeof(pb)); vv.bar = bar; vv.shift = true; vv.cursor = 4;
+        vv.pictureHint = "/GibGob/Vision/1.jpg + 2.jpg";
+        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &vv;
+        VisionControl vc(&prop);
+        render(vc, "gibbon vision, no picture", kLimit);
+        vv.pictureLoaded = true; vv.frameW = kVisionTileW; vv.frameH = kVisionTileH; vv.frameAddress[0] = 350000; vv.frameAddress[1] = 410000;
+        render(vc, "gibbon vision, picture", kLimit);
+    }
+    // a 1-step-long hit on a 16-step drum track shows four times in the 4 bars
+    {
+        static Sequencer::strPattern one;
+        for (auto& t : one.track) { t.length = 15; }
+        setTrackType(&one, 0, TrackType::Drum);
+        Note n{}; n.start = 0; n.length = 48; n.pitch = 60; n.velocity = 100;
+        addNote(&one, 0, n);
+        VisionTile tile;
+        buildVisionTile(&one, 0, 0, tile);
+        bool ok = tile.count == 4;
+        for (int i = 0; ok && i < 4; i++)
+            ok = tile.marks[i].x0 == i * 64;
+        if (!ok) { printf("  vision: a 16-step track does not repeat across the 4 bars (%d marks)\n", tile.count); fails++; }
+        // starting 4 steps in: the hit is 12 steps later
+        buildVisionTile(&one, 0, 4 * 48, tile);
+        if (tile.count != 4 || tile.marks[0].x0 != 48) { printf("  vision: window start not followed (%d)\n", tile.count ? tile.marks[0].x0 : -1); fails++; }
+    }
 
     for (int zoomSteps : { 4, 16, 32 })
     {

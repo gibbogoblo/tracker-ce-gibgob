@@ -15,6 +15,7 @@
 #include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/drumSeq.h"
+#include "gibgob/gibbonVision.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "mtAudioEngine.h"
@@ -524,6 +525,13 @@ void cGibGobHome::openPianoRoll()
         drumSeq.cursorStep = step;
         mtInterface.activateModule(&drumSeq, (uint32_t)t);
     }
+}
+
+void cGibGobHome::openVision()
+{
+    int t = cursorTrack;
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibbonVision, 0x100u | (uint32_t)t);
 }
 
 void cGibGobHome::openTrackPage()
@@ -1094,11 +1102,13 @@ static void functEncoder(int16_t value)
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
-    // holding button 1: small +/- = next / previous pattern
+    // holding button 1: small +/- = next / previous pattern, big + = Gibbon vision
     if (GH->patternHeld)
     {
         if (!big)
             GH->changePattern(dir);
+        else if (dir > 0)
+            GH->openVision();
         return;
     }
     // big +/- always zoom (big + = fewer steps on screen)

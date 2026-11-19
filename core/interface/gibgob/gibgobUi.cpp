@@ -446,6 +446,26 @@ void text(int x, int y, int fontHandle, uint16_t options, const char* str)
     s_used += cost;
 }
 
+void bitmap(uint32_t address, int w, int h, int x, int y)
+{
+    // colour + set-bitmap (5 list words) + begin, vertex, end
+    if (!room(9))
+        return;
+    if (s_inRects)
+    {
+        API_END();
+        s_inRects = false;
+        s_used += 1;
+    }
+    API_COLOR(0xFFFFFF); // no tint
+    API_CMD_SETBITMAP(address, RGB565, (uint16_t)w, (uint16_t)h);
+    API_BEGIN(BITMAPS);
+    API_VERTEX2F((int16_t)x, (int16_t)y);
+    API_END();
+    s_haveColor = false;
+    s_used += 9;
+}
+
 void end()
 {
     if (s_inRects)

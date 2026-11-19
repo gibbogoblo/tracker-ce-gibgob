@@ -66,6 +66,7 @@ class cGibGobHome : public ModuleBase
     uint8_t param = kParamVelocity;
     bool paramHeld = false; // a coloured button is held: +/- change `param`
     bool patternHeld = false; // button 1 is held: +/- change the pattern
+    void openVision();        // Gibbon vision
     ShiftParam shiftParam = ShiftParam::None;
     bool lastShift = false;
     uint32_t blinkAt = 0;
