@@ -55,15 +55,68 @@ static const char* bitmapFile(uint32_t a)
 }
 void API_COLOR(uint32_t col) { words++; lastColor = col; }
 void API_COLOR_A(uint8_t a) { words++; g_alpha = a; }
-void API_BEGIN(int prim) { words++; inBegin = true; beginPrim = prim; }
-void API_END() { words++; inBegin = false; }
-void API_LINE_WIDTH(int) { words++; }
+// strips (lines, filled edges) and the scissor box, for the SVG picture
+static int g_lineW = 16;
+static int g_scX = 0, g_scY = 0, g_scW = 2048, g_scH = 2048;
+struct Ctx { int scX, scY, scW, scH, lineW, alpha; uint32_t color; };
+static Ctx g_ctxStack[8]; static int g_ctxN = 0;
+static int g_strip[2 * 256]; static int g_stripN = 0; static int g_clipId = 0;
+static void flushStrip()
+{
+    if (!g_svg || g_stripN < 2) { g_stripN = 0; return; }
+    const int n = g_stripN;
+    if (beginPrim == LINE_STRIP)
+    {
+        fprintf(g_svg, "<polyline fill='none' stroke='#%06X' stroke-opacity='%.2f' stroke-width='%.1f' stroke-linejoin='round' points='", lastColor & 0xFFFFFF,
+                g_alpha / 255.0, g_lineW / 16.0 * 2);
+        for (int i = 0; i < n; i++) fprintf(g_svg, "%d,%d ", g_strip[2 * i], g_strip[2 * i + 1]);
+        fprintf(g_svg, "'/>\n");
+    }
+    else if (beginPrim == EDGE_STRIP_R || beginPrim == EDGE_STRIP_L || beginPrim == EDGE_STRIP_B)
+    {
+        const int x2 = g_scX + g_scW, y2 = g_scY + g_scH;
+        fprintf(g_svg, "<clipPath id='c%d'><rect x='%d' y='%d' width='%d' height='%d'/></clipPath>", g_clipId, g_scX, g_scY, g_scW, g_scH);
+        fprintf(g_svg, "<polygon clip-path='url(#c%d)' fill='#%06X' fill-opacity='%.2f' points='", g_clipId++, lastColor & 0xFFFFFF, g_alpha / 255.0);
+        for (int i = 0; i < n; i++) fprintf(g_svg, "%d,%d ", g_strip[2 * i], g_strip[2 * i + 1]);
+        const int xa = g_strip[0], ya = g_strip[1], xb = g_strip[2 * n - 2], yb = g_strip[2 * n - 1];
+        if (beginPrim == EDGE_STRIP_R) fprintf(g_svg, "%d,%d %d,%d", x2 + 900, yb, x2 + 900, ya);
+        else if (beginPrim == EDGE_STRIP_L) fprintf(g_svg, "%d,%d %d,%d", -900, yb, -900, ya);
+        else fprintf(g_svg, "%d,%d %d,%d", xb, y2 + 900, xa, y2 + 900);
+        fprintf(g_svg, "'/>\n");
+    }
+    g_stripN = 0;
+}
+void API_BEGIN(int prim) { words++; inBegin = true; beginPrim = prim; g_stripN = 0; }
+void API_END() { words++; flushStrip(); inBegin = false; }
+void API_LINE_WIDTH(int w) { words++; g_lineW = w; }
+void API_SAVE_CONTEXT() { words++; if (g_ctxN < 8) g_ctxStack[g_ctxN++] = { g_scX, g_scY, g_scW, g_scH, g_lineW, g_alpha, lastColor }; }
+void API_RESTORE_CONTEXT()
+{
+    words++;
+    if (g_ctxN <= 0) { printf("restore without save\n"); fails++; return; }
+    Ctx c = g_ctxStack[--g_ctxN]; g_scX = c.scX; g_scY = c.scY; g_scW = c.scW; g_scH = c.scH; g_lineW = c.lineW; g_alpha = c.alpha; lastColor = c.color;
+}
+void API_SCISSOR_XY(uint16_t x, uint16_t y) { words++; g_scX = x; g_scY = y; }
+void API_SCISSOR_SIZE(uint16_t w, uint16_t h) { words++; g_scW = w; g_scH = h; }
+void API_CMD_GRADIENT(int16_t x0, int16_t y0, uint32_t c0, int16_t x1, int16_t y1, uint32_t c1)
+{
+    words += 27; // the most the firmware's capture writes for one
+    if (inBegin) { printf("gradient inside BEGIN\n"); fails++; }
+    if (g_svg)
+    {
+        fprintf(g_svg, "<linearGradient id='g%d' gradientUnits='userSpaceOnUse' x1='%d' y1='%d' x2='%d' y2='%d'><stop offset='0' stop-color='#%06X'/><stop offset='1' stop-color='#%06X'/></linearGradient>",
+                g_clipId, x0, y0, x1, y1, c0 & 0xFFFFFF, c1 & 0xFFFFFF);
+        fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' fill='url(#g%d)'/>\n", g_scX, g_scY, g_scW, g_scH, g_clipId++);
+    }
+}
 void API_CMD_SETBITMAP(uint32_t a, uint16_t, uint16_t w, uint16_t h) { words += 5; g_bmpAddr = a; g_bmpW = w; g_bmpH = h; }
 void API_BLEND_FUNC(int, int) { words++; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
     words++;
     if (beginPrim == RECTS) verts++; // rectangles take vertices in pairs (a bitmap takes one)
+    if (beginPrim == LINE_STRIP || beginPrim == EDGE_STRIP_R || beginPrim == EDGE_STRIP_L || beginPrim == EDGE_STRIP_B)
+        if (g_stripN < 256) { g_strip[2 * g_stripN] = x; g_strip[2 * g_stripN + 1] = y; g_stripN++; }
     if (g_svg && beginPrim == RECTS)
     {
         if (g_vn == 0) { g_vx = x; g_vy = y; g_vn = 1; }
@@ -87,8 +140,11 @@ void API_CMD_TEXT(int16_t x, int16_t y, int16_t font, uint16_t options, const ch
     {
         const char* anchor = (options & OPT_CENTERX) ? "middle" : ((options & OPT_RIGHTX) ? "end" : "start");
         const int fy = (options & OPT_CENTERY) ? y + 5 : y + 12;
-        fprintf(g_svg, "<text x='%d' y='%d' fill='#%06X' font-family='Liberation Sans, Arial' font-size='%d' font-weight='%s' text-anchor='%s'>%s</text>\n",
-                x, fy, lastColor & 0xFFFFFF, font == 29 ? 15 : 13, font == 29 ? "bold" : "normal", anchor, s);
+        static const int kSize[5] = { 14, 17, 14, 17, 12 };
+        const int fi = (font >= 26 && font <= 30) ? font - 26 : 1;
+        fprintf(g_svg, "<text x='%d' y='%d' fill='#%06X' fill-opacity='%.2f' font-family='Liberation Sans, Arial' font-size='%d' font-weight='%s' text-anchor='%s'>%s</text>\n",
+                x, (options & OPT_CENTERY) ? y + kSize[fi] * 3 / 8 : y + kSize[fi], lastColor & 0xFFFFFF, g_alpha / 255.0, kSize[fi], (fi == 2 || fi == 3) ? "bold" : "normal", anchor, s);
+        (void)fy;
     }
     int len = (int)strlen(s);
     const int cw = 9; // wide glyph, worst case
@@ -123,6 +179,8 @@ static int render(cDisplayControl& c, const char* name, int limit, bool expectBo
     if (draw::skipped() > 0) printf("  (%d note details dropped to stay inside the limit)\n", draw::skipped());
     return words;
 }
+
+#include "synth_screen.inc"
 
 int main()
 {
@@ -393,7 +451,8 @@ int main()
                                 { "help: track page", kHelpTrackPage, (int)(sizeof(kHelpTrackPage) / sizeof(kHelpTrackPage[0])) },
                                 { "help: palette", kHelpPalette, (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0])) },
                                 { "help: gibbon vision", kHelpVision, (int)(sizeof(kHelpVision) / sizeof(kHelpVision[0])) },
-                                { "help: master fx", kHelpMasterFx, (int)(sizeof(kHelpMasterFx) / sizeof(kHelpMasterFx[0])) } };
+                                { "help: master fx", kHelpMasterFx, (int)(sizeof(kHelpMasterFx) / sizeof(kHelpMasterFx[0])) },
+                                { "help: synth editor", kHelpSynth, (int)(sizeof(kHelpSynth) / sizeof(kHelpSynth[0])) } };
             for (const H& h : lists)
             {
                 dv.help.lines = h.lines; dv.help.count = h.count;
@@ -405,6 +464,7 @@ int main()
         if ((int)(sizeof(kHelpMain) / sizeof(kHelpMain[0])) > 32 || (int)(sizeof(kHelpPianoRoll) / sizeof(kHelpPianoRoll[0])) > 32) { printf("  help list longer than 32 lines\n"); fails++; }
     }
 
+    synthTests(kLimit);
     printf(fails ? "UI TEST FAILED: %d\n" : "ALL SCREEN TESTS PASSED\n", fails);
     return fails ? 1 : 0;
 }

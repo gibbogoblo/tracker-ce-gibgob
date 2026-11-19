@@ -313,6 +313,7 @@ bool s_inRects = false;
 bool s_haveColor = false;
 uint32_t s_color = 0;
 int s_alpha = 255;
+int s_lineWidth = 16;
 } // namespace
 
 void begin(int budgetWords)
@@ -324,6 +325,7 @@ void begin(int budgetWords)
     s_inRects = false;
     s_haveColor = false;
     s_alpha = 255;
+    s_lineWidth = 16;
     API_LINE_WIDTH(16);
     API_BLEND_FUNC(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
 }
@@ -383,10 +385,15 @@ void alpha(int a)
     s_used += 1;
 }
 
+void lineWidth(int sixteenths);
+
 void rect(int x1, int y1, int x2, int y2)
 {
     if (!room(3))
         return;
+    // rectangles are rounded by the line width: keep them at 1 pixel
+    if (s_lineWidth != 16)
+        lineWidth(16);
     if (x2 < x1)
     {
         int t = x1;
@@ -464,6 +471,205 @@ void bitmap(uint32_t address, int w, int h, int x, int y)
     API_END();
     s_haveColor = false;
     s_used += 9;
+}
+
+namespace
+{
+void endRects()
+{
+    if (s_inRects)
+    {
+        API_END();
+        s_inRects = false;
+        s_used += 1;
+    }
+}
+
+// the scissor box, inside a saved context (restored by unclip)
+void clip(int x1, int y1, int x2, int y2)
+{
+    if (x1 < 0)
+        x1 = 0;
+    if (y1 < 0)
+        y1 = 0;
+    API_SAVE_CONTEXT();
+    API_SCISSOR_XY((uint16_t)x1, (uint16_t)y1);
+    API_SCISSOR_SIZE((uint16_t)(x2 - x1 + 1), (uint16_t)(y2 - y1 + 1));
+    s_used += 3;
+}
+
+void unclip(uint32_t savedColor, bool hadColor, int savedAlpha, int savedLine)
+{
+    API_RESTORE_CONTEXT();
+    s_used += 1;
+    // the chip is back to what it had at the save
+    s_color = savedColor;
+    s_haveColor = hadColor;
+    s_alpha = savedAlpha;
+    s_lineWidth = savedLine;
+}
+
+// a filled edge strip between two points, filling to the given side
+void edge(int prim, int xa, int ya, int xb, int yb)
+{
+    API_BEGIN((uint8_t)prim);
+    API_VERTEX2F((int16_t)xa, (int16_t)ya);
+    API_VERTEX2F((int16_t)xb, (int16_t)yb);
+    API_END();
+    s_used += 4;
+}
+} // namespace
+
+void lineWidth(int sixteenths)
+{
+    if (sixteenths == s_lineWidth || !room(1))
+        return;
+    endRects();
+    API_LINE_WIDTH((uint16_t)sixteenths);
+    s_lineWidth = sixteenths;
+    s_used += 1;
+}
+
+void lineStrip(const int16_t* xy, int n)
+{
+    if (n < 2 || !room(n + 3))
+        return;
+    endRects();
+    API_BEGIN(LINE_STRIP);
+    for (int i = 0; i < n; i++)
+        API_VERTEX2F(xy[2 * i], xy[2 * i + 1]);
+    API_END();
+    s_used += n + 2;
+}
+
+void fillUnder(const int16_t* xy, int n, int clipX1, int clipY1, int clipX2, int clipY2)
+{
+    if (n < 2 || !room(n + 9))
+        return;
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    clip(clipX1, clipY1, clipX2, clipY2);
+    API_BEGIN(EDGE_STRIP_B);
+    for (int i = 0; i < n; i++)
+        API_VERTEX2F(xy[2 * i], xy[2 * i + 1]);
+    API_END();
+    s_used += n + 2;
+    unclip(c, hc, a, lw);
+}
+
+void slant(int x1, int y1, int x2, int y2, int slantPx, uint32_t fill, uint32_t under)
+{
+    if (!room(17))
+        return;
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    clip(x1, y1, x2, y2);
+    color(fill);
+    // everything right of the left edge
+    edge(EDGE_STRIP_R, x1 + slantPx, y1, x1, y2 + 1);
+    // the corner right of the right edge goes back to the colour around
+    color(under);
+    edge(EDGE_STRIP_R, x2 + 1, y1, x2 + 1 - slantPx, y2 + 1);
+    unclip(c, hc, a, lw);
+}
+
+void slantFade(int x1, int y1, int x2, int y2, int slantPx, uint32_t c0, uint32_t c1, uint32_t under)
+{
+    if (!room(17 + kFadeWords))
+        return;
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    clip(x1, y1, x2, y2);
+    if (s_lighten)
+    {
+        // the same lightening as color()
+        auto lift = [](uint32_t v)
+        {
+            uint32_t r = (v >> 16) & 0xFF, g = (v >> 8) & 0xFF, b = v & 0xFF;
+            r += (255 - r) / 4;
+            g += (255 - g) / 4;
+            b += (255 - b) / 4;
+            return (r << 16) | (g << 8) | b;
+        };
+        c0 = lift(c0);
+        c1 = lift(c1);
+    }
+    API_CMD_GRADIENT((int16_t)x1, (int16_t)y1, c0, (int16_t)x2, (int16_t)y1, c1);
+    s_used += kFadeWords;
+    s_haveColor = false; // the fade sets its own colours
+    color(under);
+    edge(EDGE_STRIP_L, x1 + slantPx, y1, x1, y2 + 1);
+    edge(EDGE_STRIP_R, x2 + 1, y1, x2 + 1 - slantPx, y2 + 1);
+    unclip(c, hc, a, lw);
+}
+
+void slantEnd(int x1, int y1, int x2, int y2, uint32_t under)
+{
+    if (!room(11))
+        return;
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    clip(x1, y1, x2, y2);
+    color(under);
+    edge(EDGE_STRIP_R, x2 + 1, y1, x1, y2 + 1);
+    unclip(c, hc, a, lw);
+}
+
+void slantOutline(int x1, int y1, int x2, int y2, int slantPx, uint32_t c, int sixteenths)
+{
+    if (!room(10))
+        return;
+    color(c);
+    lineWidth(sixteenths);
+    const int16_t pts[10] = { (int16_t)(x1 + slantPx), (int16_t)y1, (int16_t)x2, (int16_t)y1,
+                              (int16_t)(x2 - slantPx), (int16_t)y2, (int16_t)x1, (int16_t)y2,
+                              (int16_t)(x1 + slantPx), (int16_t)y1 };
+    lineStrip(pts, 5);
+}
+
+void fadeRect(int x1, int y1, int x2, int y2, uint32_t c0, uint32_t c1, bool vertical)
+{
+    if (!room(5 + kFadeWords))
+        return;
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    clip(x1, y1, x2, y2);
+    if (vertical)
+        API_CMD_GRADIENT((int16_t)x1, (int16_t)y1, c0, (int16_t)x1, (int16_t)y2, c1);
+    else
+        API_CMD_GRADIENT((int16_t)x1, (int16_t)y1, c0, (int16_t)x2, (int16_t)y1, c1);
+    s_used += kFadeWords;
+    unclip(c, hc, a, lw);
+}
+
+void cutBox(int x1, int y1, int x2, int y2, int cut, uint32_t fill, uint32_t under)
+{
+    if (!room(26))
+        return;
+    color(fill);
+    rect(x1, y1, x2, y2);
+    endRects();
+    const uint32_t c = s_color;
+    const bool hc = s_haveColor;
+    const int a = s_alpha, lw = s_lineWidth;
+    color(under);
+    clip(x1, y1, x1 + cut, y1 + cut);
+    edge(EDGE_STRIP_L, x1 + cut, y1, x1, y1 + cut);
+    unclip(c, hc, a, lw);
+    color(under);
+    clip(x2 - cut, y2 - cut, x2, y2);
+    edge(EDGE_STRIP_R, x2 + 1, y2 - cut, x2 - cut, y2 + 1);
+    unclip(c, hc, a, lw);
 }
 
 void end()

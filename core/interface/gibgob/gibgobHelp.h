@@ -173,6 +173,30 @@ static const char* const kHelpMasterFx[] = {
     "Button 1: main sequencer   Play: play/stop",
 };
 
+static const char* const kHelpSynth[] = {
+    "Top 1-8: Main Osc Filter Amp LFO Env FX Patch",
+    "Same top button again: the page's next columns",
+    "D-pad: pick a box   +/-: change it",
+    "Big +/-: bigger steps   Delete: start value",
+    "Hold Middle: play a note",
+    "Note/Instr/FX1/FX2: jump to the 4 top boxes",
+    "  (press again: back where you were)",
+    "Shift+1: Init pg   page back to start values",
+    "Shift+2: Ape pg    shake up this page",
+    "Shift+3/4: Copy pg / Paste pg",
+    "  (paste: same page, same engine)",
+    "Shift+5: Compare   saved sound / your edits",
+    "Shift+6: Undo   Shift+7: Latch (note holds)",
+    "Shift+8: Save",
+    "Patch page: Middle on Load / Save / Save as /",
+    "  Init / GO APE! runs it",
+    "Ape amount: how far Go Ape shakes it",
+    "Engine: +/- picks, Middle changes it",
+    "  (the patch starts clean)",
+    "Button 2: chord palette   Button 1: main seq",
+    "Play: play / stop",
+};
+
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))
 
 } // namespace gibgob

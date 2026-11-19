@@ -150,6 +150,29 @@ void setLighten(bool on); // Shift on: everything a little lighter
 void text(int x, int y, int fontHandle, uint16_t options, const char* str);
 // an RGB565 picture already in the display chip's memory, top left at x, y
 void bitmap(uint32_t address, int w, int h, int x, int y);
+
+// ---- lines and shapes (the Y2K synth editor) ----
+void lineWidth(int sixteenths); // 16 = 1 pixel
+// a line through n points (xy: x0, y0, x1, y1, ...)
+void lineStrip(const int16_t* xy, int n);
+// the area under a line through n points, down to the bottom of the clip box
+void fillUnder(const int16_t* xy, int n, int clipX1, int clipY1, int clipX2, int clipY2);
+// A slanted box: the top edge is moved right by `slant` pixels, the bottom
+// edge starts `slant` pixels in from the left ( /____/ ). `under` is the
+// colour around it (the corners are painted with it).
+void slant(int x1, int y1, int x2, int y2, int slantPx, uint32_t fill, uint32_t under);
+// the same with a colour fade from left (c0) to right (c1)
+void slantFade(int x1, int y1, int x2, int y2, int slantPx, uint32_t c0, uint32_t c1, uint32_t under);
+// paints the corner right of the line from (x2, y1) to (x1, y2) with `under`
+void slantEnd(int x1, int y1, int x2, int y2, uint32_t under);
+// outline of a slanted box
+void slantOutline(int x1, int y1, int x2, int y2, int slantPx, uint32_t c, int sixteenths);
+// a box with a fade (vertical: top to bottom, else left to right)
+void fadeRect(int x1, int y1, int x2, int y2, uint32_t c0, uint32_t c1, bool vertical);
+// box with its top-left and bottom-right corners cut off by `cut` pixels
+void cutBox(int x1, int y1, int x2, int y2, int cut, uint32_t fill, uint32_t under);
+// display list words one fade costs (the chip's ramp bitmap, up to 27)
+constexpr int kFadeWords = 27;
 void end();
 } // namespace draw
 

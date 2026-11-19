@@ -634,13 +634,20 @@ void MorphangutanVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
     ADD_FLOAT(kReverbMix, reverbMix, .displayName = "Rev mix", .defaultValue = 0.3f, .minValue = 0,
               .maxValue = 1, .midiCC = *MidiCCs::kReverbSend, .valueFormatter = createPercentFormatter());
 
-    // ---- layouts (the stock editor; GibGob OS gets its own editor next)
+    // ---- layouts: layout33 drives the GibGob OS editor, the flat one the stock editor
     using E = EditorElement;
     auto el = [](MorphParamId id) { return E{ .type = E::Type::kParam, .id = *id }; };
     const E empty{ .type = E::Type::kEmpty };
 
     metadata.layout33 = Patch::Metadata::EditorLayout{
         .sections = {
+          // GibGob OS editor: the Main page (and the sign that this synth has
+          // the GibGob layout; the other sections fill the pages by short name)
+          { .name = "Main", .shortName = "GibGob",
+            .elements = { el(MorphParamId::kCutoff), el(MorphParamId::kResonance), el(MorphParamId::kAmpAttack),
+                          el(MorphParamId::kAmpRelease), el(MorphParamId::kMamaMorph), el(MorphParamId::kBabyMorph),
+                          el(MorphParamId::kPapaLevel), el(MorphParamId::kDrift), el(MorphParamId::kEnv1AmtA),
+                          el(MorphParamId::kDrive), el(MorphParamId::kDelayMix), el(MorphParamId::kReverbMix) } },
           { .name = "Oscillators", .shortName = "Osc",
             .subsections = {
               { .name = "MAMA", .elements = { el(MorphParamId::kMamaMorph), el(MorphParamId::kMamaTune),
@@ -702,6 +709,8 @@ void MorphangutanVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
     Patch::Metadata::EditorLayout flat;
     for (const auto& section : metadata.layout33.sections)
     {
+        if (section.shortName == "GibGob")
+            continue; // the GibGob editor's Main page repeats parameters from the others
         EditorSection s{ .name = section.name, .shortName = section.shortName };
         for (const auto& sub : section.subsections)
         {

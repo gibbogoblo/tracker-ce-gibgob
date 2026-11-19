@@ -1,6 +1,7 @@
 #include "instrumentEditor/instrumentEditor.h"
 #include "core/interface.h"
 #include "gibgob/gibgobPages.h"
+#include "gibgob/gibgobSynth.h"
 #include "gibgob/pianoRoll.h"
 #include "gibgob/gibgobUi.h"
 #include "mtWavetableEnvelopes.h"
@@ -186,6 +187,18 @@ void cInstrumentEditor::start(uint32_t options)
             break;
         }
     }
+
+#if GUI_HANDLE_SYNTH
+    // GibGob OS: a synth with the GibGob layout has its own pages (Y2K editor)
+    if ((mode == mtInstEditModeSynth || mode == mtInstEditModeSynthMacros || mode == mtInstEditModeSynthPatchEdit) &&
+        cGibGobSynth::handles(mtProject.values.lastUsedInstrument))
+    {
+        mode = mtInstEditModeSynth;
+        mtInterface.deactivateModule(this);
+        mtInterface.activateModule(&gibgobSynth, 0);
+        return;
+    }
+#endif
 
     if (mtProject.values.lastUsedInstrument < kSampleInstrumentsCount)
     {

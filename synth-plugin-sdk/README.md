@@ -94,3 +94,44 @@ Copy the compiled `.psyn` file and any patches/samples onto your microSD card:
   Plugins can also use `host->read_file()`, `host->write_file()`, `host->load_wav_file()` (decodes 8/16/24/32-bit PCM & 32-bit float WAVs into an arena buffer), and `host->free_wav_file()` during **non-audio-thread** setup/teardown. Never call FatFs/SD I/O from `renderVoiceAudio()` or `voice_render_audio()`.
 
 For the full step-by-step tutorial, API tables, and firmware workflow details, see [`docs/custom_synth_sdk.md`](../docs/custom_synth_sdk.md).
+
+## GibGob OS synth editor (8 pages, Y2K)
+
+On GibGob OS a synth gets the 8-page editor instead of the stock pages when
+its **3x3 layout (`layout33`)** has a section with the short name `GibGob`.
+The Tracker's stock editor only uses the flat layout (`layoutFlat`), so
+`layout33` is free for this. Leave the `GibGob` section out of `layoutFlat`.
+
+| `layout33` section short name | Page (top button) |
+|---|---|
+| `GibGob` | 1 Main: its parameters (up to 12) as boxes with light bars |
+| `Osc` | 2 Osc |
+| `Filter` | 3 Filter |
+| `Amp` | 4 Amp |
+| `LFO` | 5 LFO |
+| `Env` | 6 Env |
+| `FX` | 7 FX |
+| (none) | 8 Patch: load / save / init / Go Ape, engine, voices, gain, pan, sends |
+
+Each subsection of a section is one column on its page (up to 3 side by side;
+more columns: pressing the page's button again shows the next ones). The
+section's own elements, if any, come first as one more column. A column
+holds about 8 rows with a picture, 11 without; longer ones are split.
+
+The pictures come from the parameter names (any letter case):
+
+- **Envelope** (any page): a column with `...attack`, `...decay`, `...sustain`
+  and `...release`. Shown as a curve with A / D / S / R boxes. On a page with
+  one envelope column and one plain column (like Amp: Envelope + Voice), the
+  envelope gets the big picture and the coloured buttons pick A / D / S / R.
+- **Osc**: `...shape` (or `wave`, `morph`): a number 0..3 morphs sine,
+  triangle, saw, square; an enum is drawn by its label (Sine, Tri, Saw,
+  Square, Pulse, S&H, Random ...).
+- **Filter**: `...cutoff`, `...reso...`, and an enum with `type` in its name
+  (labels with Low / High / Band / Comb pick the curve).
+- **LFO**: `...shape` and `...rate`.
+- **FX**: a column named `Delay...` (or with `...feedback`/`fdbk`) shows
+  echoes; one named `...Reverb...` shows a tail (`...decay`).
+
+Pictures use the parameters' edit curves (as the stock editor's knobs do).
+Sample slots stay in the stock editor. See `engines/morphangutan.cpp`.
