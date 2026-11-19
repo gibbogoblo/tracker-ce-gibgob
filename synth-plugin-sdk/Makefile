@@ -96,10 +96,13 @@ MORPH_TEST_FLAGS_TA := -DMORPH_MONO -DMORPH_NO_FX
 MORPH_TEST_FLAGS_TB := -DMORPH_NO_FX
 MORPH_TEST_FLAGS_TC := -DMORPH_MONO -DMORPH_NO_FX -DMORPH_TEST_SINE
 MORPH_TEST_FLAGS_TD :=
+# TE: the real engine, stereo, no FX, beeps a code when it stays silent (see MORPH_DIAG)
+MORPH_TEST_FLAGS_TE := -DMORPH_NO_FX -DMORPH_DIAG
 MORPH_TEST_CH_TA := 1
 MORPH_TEST_CH_TB := 2
 MORPH_TEST_CH_TC := 1
 MORPH_TEST_CH_TD := 2
+MORPH_TEST_CH_TE := 2
 
 $(BUILD_DIR)/MR%.elf: $(SDK_DIR)/engines/morphangutan.cpp $(SDK_DIR)/engines/morphangutan/morph_dsp.h
 	@mkdir -p $(BUILD_DIR)
@@ -112,7 +115,7 @@ $(BUILD_DIR)/MR%.psyn: $(BUILD_DIR)/MR%.elf $(SDK_DIR)/tools/psyn_builder.py
 		--output-channels $(MORPH_TEST_CH_$*) --renders-aux 0 --has-sample-slots 0 \
 		--supports-idle-sleep 1 --has-voice-tick-idle 1
 
-morph-hwtest: $(BUILD_DIR)/MRTA.psyn $(BUILD_DIR)/MRTB.psyn $(BUILD_DIR)/MRTC.psyn $(BUILD_DIR)/MRTD.psyn
+morph-hwtest: $(BUILD_DIR)/MRTA.psyn $(BUILD_DIR)/MRTB.psyn $(BUILD_DIR)/MRTC.psyn $(BUILD_DIR)/MRTD.psyn $(BUILD_DIR)/MRTE.psyn
 
 # host tests + WAV previews (runs on the computer, not the Tracker)
 HOSTCXX ?= g++

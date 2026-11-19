@@ -778,6 +778,11 @@ class Voice
                 s += gNoise * rng.bipolar();
             }
             s *= 0.5f;
+#ifdef MORPH_DIAG
+            dbgS = absf(s) > dbgS ? absf(s) : dbgS;
+            if (!(s == s))
+                dbgNan = true;
+#endif
 
             // filter
             if (driveGain > 1.01f)
@@ -814,6 +819,14 @@ class Voice
 
             const float e = amp.process();
             const float out = y * e * gAmp;
+#ifdef MORPH_DIAG
+            dbgY = absf(y) > dbgY ? absf(y) : dbgY;
+            dbgE = e > dbgE ? e : dbgE;
+            dbgAmp = gAmp > dbgAmp ? gAmp : dbgAmp;
+            dbgPan = panL + panR > dbgPan ? panL + panR : dbgPan;
+            if (!(y == y) || !(e == e) || !(gAmp == gAmp))
+                dbgNan = true;
+#endif
             outL[i] = out * panL;
             outR[i] = out * panR;
         }
@@ -824,6 +837,13 @@ class Voice
 
     // for the editor scope / graphs
     float ampLevel() const { return amp.level; }
+
+#ifdef MORPH_DIAG
+    // hardware diagnosis: the largest values seen inside the voice
+    float dbgS = 0.0f, dbgY = 0.0f, dbgE = 0.0f, dbgAmp = 0.0f, dbgPan = 0.0f;
+    bool dbgNan = false;
+    void dbgReset() { dbgS = dbgY = dbgE = dbgAmp = dbgPan = 0.0f; dbgNan = false; }
+#endif
 
   private:
     void controlUpdate(const Params& p, float tempo, float pitchBend)

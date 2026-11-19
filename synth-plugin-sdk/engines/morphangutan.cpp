@@ -202,7 +202,13 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
         delete[] fxMemory;
     }
 
-#ifdef MORPH_TEST_SINE
+#if defined(MORPH_DIAG)
+    // diagnosis build: stays active while the key is held, so a code can be beeped
+    bool isActive() final { return diagGate || dsp.active() || diagLevel > 0.0001f; }
+    bool diagGate = false;
+    float diagLevel = 0.0f, diagPhase = 0.0f;
+    uint32_t diagSamples = 0;
+#elif defined(MORPH_TEST_SINE)
     bool isActive() final { return sineGate || sineLevel > 0.0001f; }
     bool sineGate = false;
     float sineLevel = 0.0f, sinePhase = 0.0f, sineHz = 440.0f;
@@ -221,6 +227,11 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     {
         params.glideMode = static_cast<uint8_t>(playMode);
         dsp.noteOn(params, static_cast<float>(note), velocity, isLegatoStep);
+#ifdef MORPH_DIAG
+        diagGate = true;
+        diagSamples = 0;
+        dsp.dbgReset();
+#endif
 #ifdef MORPH_TEST_SINE
         sineGate = true;
         sineHz = 440.0f * sdk::fastPow2((static_cast<float>(note) - 69.0f) / 12.0f);
@@ -230,6 +241,9 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
     void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final
     {
         dsp.noteOff();
+#ifdef MORPH_DIAG
+        diagGate = false;
+#endif
 #ifdef MORPH_TEST_SINE
         sineGate = false;
 #endif
@@ -262,6 +276,64 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
         }
 #else
         dsp.render(params, ctx.tempo, pitchBendSemitones, left.data(), right.data(), n);
+#endif
+#ifdef MORPH_DIAG
+        {
+            // the engine's own sound when it makes one; otherwise a beep code:
+            // 1 beep: the envelope never opens   2: the oscillators are silent
+            // 3: the filter kills it             4: volume / velocity is zero
+            // 5: broken numbers (NaN)            6: the pan is zero
+            // 7 (a steady tone): every stage works but the output is zero
+            float peak = 0.0f;
+            bool finite = true;
+            for (int i = 0; i < n; ++i)
+            {
+                const float a = left[i] < 0 ? -left[i] : left[i];
+                peak = a > peak ? a : peak;
+                if (!(left[i] == left[i]) || !(right[i] == right[i]))
+                    finite = false;
+            }
+            int code = 0;
+            if (!finite || dsp.dbgNan)
+                code = 5;
+            else if (peak < 1e-5f)
+            {
+                if (dsp.dbgE < 1e-6f)
+                    code = 1;
+                else if (dsp.dbgS < 1e-7f)
+                    code = 2;
+                else if (dsp.dbgY < 1e-7f)
+                    code = 3;
+                else if (dsp.dbgAmp < 1e-6f)
+                    code = 4;
+                else if (dsp.dbgPan < 1e-6f)
+                    code = 6;
+                else
+                    code = 7;
+            }
+            if (code != 0 || diagLevel > 0.0001f)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    const uint32_t t = diagSamples % 52920u; // 1.2 s cycle
+                    const uint32_t pulse = t / 8820u;         // 0.2 s slots
+                    bool on = diagGate && code != 0 &&
+                              (code == 7 || (pulse < (uint32_t)code && (t % 8820u) < 4410u));
+                    diagLevel += ((on ? 0.35f : 0.0f) - diagLevel) * 0.01f;
+                    diagPhase += 880.0f * (1.0f / 44100.0f);
+                    if (diagPhase >= 1.0f)
+                        diagPhase -= 1.0f;
+                    const float b = sdk::fastSine(diagPhase) * diagLevel;
+                    left[i] = (code != 0 ? 0.0f : left[i]) + b;
+                    right[i] = (code != 0 ? 0.0f : right[i]) + b;
+                    ++diagSamples;
+                }
+            }
+            else
+            {
+                diagSamples += (uint32_t)n;
+            }
+        }
 #endif
 #ifdef MORPH_MONO
         for (int i = 0; i < n; ++i)
