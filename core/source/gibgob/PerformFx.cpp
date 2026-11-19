@@ -64,7 +64,52 @@ const char* const kBassFreq[] = { "80", "120", "160", "250", "400" };
 const float kBassHz[] = { 80.0f, 120.0f, 160.0f, 250.0f, 400.0f };
 const char* const kRiserLen[] = { "1 bar", "2 bars", "4 bars" };
 const float kRiserLen16[] = { 16, 32, 64 };
-const char* const kScratchPattern[] = { "Baby", "Chirp", "Trans", "Stab" };
+const char* const kScratchPattern[] = { "Baby",    "Chirp",   "Trans",   "Stab",     "Tears",   "Flare",
+                                        "Flare 2", "Crab",    "Orbit",   "Scribble", "Drag",    "Hydro",
+                                        "Combo 1", "Combo 2", "Combo 3", "Transf 2" };
+// Scratch patterns 5-16: two beats (16 x 1/32) of hand moves. Each point is
+// (time, record position) in 1/32 notes; the record moves smoothly between
+// points (slowing to a stop at each, like a hand). The fader mask has one
+// bit per 1/64 (bit 0 first): 0 = fader closed.
+struct ScratchKey
+{
+    float u, r;
+};
+struct ScratchPattern
+{
+    uint8_t count;
+    uint32_t fader;
+    ScratchKey key[33];
+};
+// 12 patterns, up to 33 points
+constexpr int kScratchKeysMax = 33;
+const ScratchPattern kScratch[12] = {
+    // Tears
+    { 9, 0xFFFFFFFFu, { { 0.0f, 0.0f }, { 2.0f, 3.0f }, { 4.0f, 6.0f }, { 8.0f, 0.0f }, { 10.0f, 4.0f }, { 11.0f, 2.0f }, { 12.0f, 0.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Flare
+    { 5, 0xEFEFEFEFu, { { 0.0f, 0.0f }, { 4.0f, 6.0f }, { 8.0f, 0.0f }, { 12.0f, 6.0f }, { 16.0f, 0.0f } } },
+    // Flare 2
+    { 5, 0xDBDBDBDBu, { { 0.0f, 0.0f }, { 4.0f, 6.0f }, { 8.0f, 0.0f }, { 12.0f, 6.0f }, { 16.0f, 0.0f } } },
+    // Crab
+    { 11, 0xF5FFF5F5u, { { 0.0f, 0.0f }, { 2.0f, 4.0f }, { 4.0f, 0.0f }, { 6.0f, 4.0f }, { 8.0f, 0.0f }, { 9.0f, 2.0f }, { 10.0f, 0.0f }, { 11.0f, 2.0f }, { 12.0f, 0.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Orbit
+    { 9, 0x77777777u, { { 0.0f, 0.0f }, { 2.0f, 4.0f }, { 4.0f, 0.0f }, { 6.0f, 4.0f }, { 8.0f, 0.0f }, { 10.0f, 4.0f }, { 12.0f, 0.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Scribble
+    { 33, 0xFFFFFFFFu, { { 0.0f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 0.45f }, { 1.5f, 1.3f }, { 2.0f, 0.75f }, { 2.5f, 1.6f }, { 3.0f, 1.05f }, { 3.5f, 1.9f }, { 4.0f, 1.35f }, { 4.5f, 2.2f }, { 5.0f, 1.65f }, { 5.5f, 2.5f }, { 6.0f, 1.95f }, { 6.5f, 2.8f }, { 7.0f, 2.25f }, { 7.5f, 3.1f }, { 8.0f, 2.55f }, { 8.5f, 3.1f }, { 9.0f, 2.25f }, { 9.5f, 2.8f }, { 10.0f, 1.95f }, { 10.5f, 2.5f }, { 11.0f, 1.65f }, { 11.5f, 2.2f }, { 12.0f, 1.35f }, { 12.5f, 1.9f }, { 13.0f, 1.05f }, { 13.5f, 1.6f }, { 14.0f, 0.75f }, { 14.5f, 1.3f }, { 15.0f, 0.45f }, { 15.5f, 1.0f }, { 16.0f, 0.0f } } },
+    // Drag
+    { 3, 0xFFFFFFFFu, { { 0.0f, 0.0f }, { 8.0f, 3.0f }, { 16.0f, 0.0f } } },
+    // Hydro
+    { 20, 0xFFFFFFFFu, { { 0.0f, 0.0f }, { 0.5f, 0.8f }, { 1.0f, 0.85f }, { 1.5f, 1.8f }, { 2.0f, 1.85f }, { 2.5f, 2.8f }, { 3.0f, 2.85f }, { 3.5f, 3.8f }, { 4.0f, 3.85f }, { 4.5f, 4.8f }, { 5.0f, 4.85f }, { 5.5f, 5.8f }, { 6.0f, 5.85f }, { 6.5f, 6.8f }, { 7.0f, 6.85f }, { 7.5f, 7.8f }, { 8.0f, 8.0f }, { 12.0f, 0.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Combo 1
+    { 10, 0xBBFF0FFFu, { { 0.0f, 0.0f }, { 2.0f, 3.0f }, { 4.0f, 0.0f }, { 6.0f, 4.0f }, { 8.0f, 0.0f }, { 9.0f, 2.0f }, { 10.0f, 4.0f }, { 12.0f, 0.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Combo 2
+    { 13, 0xDF55FFFFu, { { 0.0f, 0.0f }, { 4.0f, 2.0f }, { 5.0f, 0.0f }, { 6.0f, 2.0f }, { 7.0f, 0.0f }, { 8.0f, 2.0f }, { 10.0f, 0.0f }, { 11.0f, 2.0f }, { 12.0f, 0.0f }, { 13.0f, 2.0f }, { 14.0f, 0.0f }, { 15.0f, 2.0f }, { 16.0f, 0.0f } } },
+    // Combo 3
+    { 10, 0x5FF5FB0Fu, { { 0.0f, 0.0f }, { 2.0f, 4.0f }, { 4.0f, 0.0f }, { 6.0f, 4.0f }, { 8.0f, 0.0f }, { 10.0f, 4.0f }, { 12.0f, 0.0f }, { 13.0f, 2.0f }, { 14.0f, 4.0f }, { 16.0f, 0.0f } } },
+    // Transf 2
+    { 3, 0x45294529u, { { 0.0f, 0.0f }, { 8.0f, 8.0f }, { 16.0f, 0.0f } } },
+};
+
 const char* const kScratchSpeed[] = { "1/8", "1/16" };
 const char* const kPumpRate[] = { "1/4", "1/8", "1/2" };
 const float kPumpLen16[] = { 4, 2, 8 };
@@ -461,10 +506,13 @@ void Engine::setHeld(uint8_t mask)
 
 void Engine::twist(int i, int dir)
 {
+    // A twist lasts while + / Up (dir > 0) or - / Down (dir < 0) is held:
+    // the held button plays one of two variants of its saved settings, and
+    // dir == 0 (let go) brings the saved settings back.
     i &= 7;
     if (!((held >> i) & 1))
         return;
-    Cell c = live[i];
+    Cell c = cells[i];
     const FxInfo& in = fxInfo(c.fx);
     auto clampP = [&](int k, int v)
     {
@@ -473,73 +521,51 @@ void Engine::twist(int i, int dir)
         const int hi = in.params[k].count - 1;
         return v < 0 ? 0 : (v > hi ? hi : v);
     };
-    const bool up = dir > 0;
-    uint8_t f = flags[i];
-    switch (c.fx)
+    uint8_t f = 0;
+    if (dir != 0)
     {
-        case kFxRoll: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 2 : -2)); break; // 1/16 > 1/32 > 1/64
-        case kFxStutter: c.p[0] = (uint8_t)((c.p[0] + (up ? 1 : 15)) % 16); break; // on the next beat
-        case kFxFilter:
-            if (up)
-                c.p[2] = (uint8_t)clampP(2, c.p[2] + 2);
-            else
-                c.p[0] ^= 2; // LP <-> HP
-            break;
-        case kFxComb: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
-        case kFxCut:
-            if (up)
-                c.p[0] = c.p[0] == 0 ? 2 : 0; // noise on / off
-            else
-                c.p[0] = (uint8_t)(c.p[0] % 3 + 1); // next noise
-            break;
-        case kFxDelay:
-            if (up)
-                f ^= kTwistDryCut;
-            else
-                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
-            break;
-        case kFxReverb: f ^= up ? kTwistDryCut : kTwistFreeze; break;
-        case kFxReverse: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 12 : -12)); break;
-        case kFxTalkbox:
-            if (up)
-                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
-            else
-                c.p[1] = (uint8_t)(c.p[1] == 0 ? in.params[1].count - 1 : c.p[1] - 1);
-            break;
-        case kFxVinyl:
-            if (up)
-                f |= kTwistSpinUp;
-            else if ((f & kTwistBrakeMask) != kTwistBrakeMask)
-                f = (uint8_t)(f + kTwistBrake1);
-            break;
-        case kFxGate:
-            if (up)
-                c.p[0] = (uint8_t)clampP(0, c.p[0] + 1);
-            else
-                c.p[1] = (uint8_t)((c.p[1] + 1) % in.params[1].count);
-            break;
-        case kFxHalftime: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
-        case kFxBassKill: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
-        case kFxRiser: c.p[1] = (uint8_t)clampP(1, c.p[1] + (up ? 1 : -1)); break;
-        case kFxScratch:
-            if (up)
-                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
-            else
-                c.p[1] ^= 1;
-            break;
-        case kFxDrumCut:
-        case kFxMelodicCut:
-            // holding does nothing: Up mutes the drum (and slice) tracks,
-            // Down the melodic tracks; again to bring them back
-            f ^= up ? kTwistCutDrums : kTwistCutMelodic;
-            break;
-        case kFxPump:
-            if (up)
-                c.p[1] = (uint8_t)clampP(1, c.p[1] + 2);
-            else
-                c.p[0] = (uint8_t)((c.p[0] + 1) % in.params[0].count);
-            break;
-        default: break;
+        const bool up = dir > 0;
+        f = up ? kTwistUp : kTwistDown;
+        switch (c.fx)
+        {
+            // rates: Up twice as fast, Down half as fast
+            case kFxRoll: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 2 : -2)); break; // 1/16 <> 1/32, 1/8
+            case kFxStutter: break; // the engine runs the pattern at 1/32 or 1/8 steps
+            case kFxFilter: c.p[1] = (uint8_t)clampP(1, c.p[1] + (up ? -1 : 1)); break;
+            case kFxComb: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 3 : -3)); break; // an octave
+            case kFxCut:
+                if (up)
+                    c.p[0] = c.p[0] == 0 ? 1 : 0; // noise on / off
+                else
+                    c.p[0] = (uint8_t)(c.p[0] % 3 + 1); // the next noise
+                break;
+            case kFxDelay:
+                if (up)
+                    f |= kTwistDryCut; // only the echoes
+                else
+                {
+                    // half the time
+                    static const uint8_t kHalf[] = { 0, 0, 0, 1, 2, 3, 4 };
+                    c.p[0] = kHalf[c.p[0] < 7 ? c.p[0] : 4];
+                }
+                break;
+            case kFxReverb: f |= up ? kTwistDryCut : kTwistFreeze; break;
+            case kFxReverse: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 12 : -12)); break; // an octave
+            case kFxTalkbox: c.p[1] = (uint8_t)clampP(1, c.p[1] + (up ? -1 : 1)); break;
+            case kFxVinyl: f |= up ? kTwistSpinUp : kTwistBrake1; break; // spin back up / brake twice as hard
+            case kFxGate: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
+            case kFxHalftime: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 1 : -1)); break;
+            case kFxBassKill: c.p[0] = (uint8_t)clampP(0, c.p[0] + (up ? 2 : -2)); break; // an octave
+            case kFxRiser: c.p[1] = (uint8_t)clampP(1, c.p[1] + (up ? 3 : -3)); break;
+            case kFxScratch: break; // the engine scratches twice as fast / half as fast
+            case kFxDrumCut:
+            case kFxMelodicCut:
+                // Up mutes the drum (and slice) tracks, Down the melodic tracks
+                f |= up ? kTwistCutDrums : kTwistCutMelodic;
+                break;
+            case kFxPump: c.p[0] = (uint8_t)(up ? 1 : 2); break; // 1/8 or 1/2
+            default: break;
+        }
     }
     live[i] = c;
     flags[i] = f;
@@ -654,10 +680,9 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
         }
         if (fx == kFxStutter)
         {
-            s.waiting = false; // the pattern follows the bar, it can start anywhere
+            // the pattern starts from its beginning on the nearest 1/16
             s.stutPattern = s.timeFx.p[0] & 15;
             s.stutLastStep = -1;
-            return;
         }
         // nearest grid line: a little late still counts as on the line
         const float pos = (float)(s.step % grid) + s.frac; // position inside the grid cell
@@ -898,33 +923,31 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 }
                 else if (fx == kFxStutter)
                 {
-                    // the pattern switches kPreRoll early, like the notes arrive late
-                    int32_t vStep = s.step;
-                    float into = (float)(s.now - s.stepStart) + kPreRoll;
-                    if (into >= S)
+                    // The pattern runs from the press (its first step on the grid
+                    // line nearest the press), so every press stutters from the top.
+                    // Its steps are 1/16 long; held Up makes them 1/32, Down 1/8.
+                    const uint8_t sf = flags[s.timeCell];
+                    const float U = (sf & kTwistUp) ? 0.5f * S : ((sf & kTwistDown) ? 2.0f * S : S);
+                    const uint32_t scaleId = (sf & kTwistUp) ? 1u : ((sf & kTwistDown) ? 2u : 0u);
+                    const int32_t pos = (int32_t)(e / U);
+                    const float into = e - (float)pos * U;
+                    if (pos != s.stutLastStep)
                     {
-                        vStep++;
-                        into -= S;
+                        s.stutLastStep = pos;
+                        s.stutPattern = s.timeFx.p[0] & 15;
                     }
-                    // a twisted pattern takes over on the next beat
-                    if (vStep != s.stutLastStep)
-                    {
-                        s.stutLastStep = vStep;
-                        if ((vStep & 3) == 0)
-                            s.stutPattern = s.timeFx.p[0] & 15;
-                    }
-                    const StutStep& st = kStutter[s.stutPattern][vStep & 15];
-                    int d = (vStep & 15) - st.src;
+                    const StutStep& st = kStutter[s.stutPattern][pos & 15];
+                    int d = (pos & 15) - st.src;
                     if (d < 0)
                         d += 16;
-                    float back = (float)d * S;
-                    uint32_t seg = (uint32_t)d << 12;
+                    float back = (float)d * U;
+                    uint32_t seg = ((uint32_t)d << 12) | (scaleId << 26) | (1u << 28);
                     if (st.roll)
                     {
-                        const float R = S / (float)st.roll;
+                        const float R = U / (float)st.roll;
                         const uint32_t k = (uint32_t)(into / R);
                         back += (float)k * R;
-                        seg = ((uint32_t)d << 12) | (uint32_t)((vStep & 0xFF) << 4) | (k + 1);
+                        seg |= (uint32_t)((pos & 0xFF) << 4) | (k + 1);
                     }
                     t.back = back;
                     t.seg = seg;
@@ -980,12 +1003,42 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                     t.back = ee * (1.0f - rate);
                     t.seg = 20 + k + ((uint32_t)s.timeFx.p[0] << 16);
                 }
+                else if (fx == kFxScratch && (s.timeFx.p[0] & 15) >= 4)
+                {
+                    // hand-made patterns over two beats of the latest beat
+                    const ScratchPattern& sp = kScratch[(s.timeFx.p[0] & 15) - 4];
+                    const uint8_t xf = flags[s.timeCell];
+                    const float unit = 0.5f * S * (s.timeFx.p[1] ? 0.5f : 1.0f) *
+                                       ((xf & kTwistUp) ? 0.5f : ((xf & kTwistDown) ? 2.0f : 1.0f));
+                    const float repLen = 16.0f * unit;
+                    const uint32_t k = (uint32_t)(e / repLen);
+                    const float ee = e - (float)k * repLen;
+                    float u = ee / unit;
+                    if (u > 15.999f)
+                        u = 15.999f;
+                    int i = 0;
+                    while (i + 2 < sp.count && sp.key[i + 1].u <= u)
+                        i++;
+                    const ScratchKey& k0 = sp.key[i];
+                    const ScratchKey& k1 = sp.key[i + 1];
+                    const float x = (u - k0.u) / (k1.u - k0.u);
+                    const float ease = 0.5f - 0.5f * morph::sinTurns(x * 0.5f + 0.25f);
+                    const float r = (k0.r + (k1.r - k0.r) * ease) * unit;
+                    float back = 4.0f * S + ee - r;
+                    t.back = back < 0.0f ? 0.0f : back;
+                    t.seg = 30 + k + ((uint32_t)(s.timeFx.p[0] & 15) << 20);
+                    const int bit = (int)(u * 2.0f);
+                    t.gain = ((sp.fader >> (bit & 31)) & 1u) ? 1.0f : 0.0f;
+                }
                 else if (fx == kFxScratch)
                 {
                     // the beat before is scratched back and forth; every beat takes
                     // the latest beat again
                     const int pat = s.timeFx.p[0] & 3;
-                    const float P = (s.timeFx.p[1] ? 1.0f : 2.0f) * S; // stroke length
+                    // stroke length; held Up scratches twice as fast, Down half as fast
+                    const uint8_t xf = flags[s.timeCell];
+                    const float P = (s.timeFx.p[1] ? 1.0f : 2.0f) * S *
+                                    ((xf & kTwistUp) ? 0.5f : ((xf & kTwistDown) ? 2.0f : 1.0f));
                     const float beat = 4.0f * S;
                     const uint32_t k = (uint32_t)(e / beat);
                     const float ee = e - (float)k * beat;

@@ -238,12 +238,20 @@ int main()
     {
         // drum sequencer, every cell busy
         DrumSeqView dv; dv.firstRow = 2; dv.cursorStep = 23; dv.playStep = 20; dv.steps = 128; dv.shift = true;
+        dv.rows = 4;
         for (int k = 0; k < 32; k++) { DrumCell& cl = dv.cell[k]; cl.exists = true; cl.on = true; cl.velocity = 30 + k * 3; cl.chance = 55; cl.nudge = (k % 5) - 2; snprintf(cl.pitch, 6, "G#10"); }
         snprintf(dv.title, sizeof(dv.title), "Step 128/128   (empty)"); snprintf(dv.mode, 12, "REC");
         memcpy(dv.params, pb, sizeof(pb)); dv.bar = bar;
         strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &dv;
         DrumSeqControl dc(&prop);
         render(dc, "drum sequencer", kLimit);
+        // zoomed out: 8 rows of 8, every step on with all its marks
+        dv.rows = 8; dv.firstRow = 0;
+        for (int k = 0; k < 64; k++) { DrumCell& cl = dv.cell[k]; cl.exists = true; cl.on = true; cl.velocity = 30 + k; cl.chance = 55; cl.nudge = (k % 5) - 2; snprintf(cl.pitch, 6, "G#10"); }
+        render(dc, "drum sequencer, 8 rows", kLimit);
+        dv.rows = 2;
+        render(dc, "drum sequencer, 2 rows", kLimit);
+        dv.rows = 4;
         // help windows
         dv.help.active = true; dv.help.title = "Main sequencer - shortcuts";
         dv.help.lines = kHelpMain; dv.help.count = (int)(sizeof(kHelpMain) / sizeof(kHelpMain[0]));

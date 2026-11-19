@@ -78,6 +78,7 @@ void cDrumSeq::start(uint32_t options)
     track = (int)(options % kTracks);
     lastPlayStep = -2;
     s_auditionOffAt = 0;
+    paramHeld = false;
     view.help.active = false;
     view.help.title = "Drum sequencer - shortcuts";
     view.help.lines = kHelpDrum;
@@ -148,6 +149,16 @@ int cDrumSeq::stepNotes(int step, int* out, int maxOut)
     return n;
 }
 
+void cDrumSeq::changeZoom(int dir)
+{
+    // 2, 4 or 8 rows of 8 steps
+    if (dir > 0)
+        view.rows = view.rows > 4 ? 4 : 2;
+    else
+        view.rows = view.rows < 4 ? 4 : DrumSeqView::kMaxRows;
+    refresh();
+}
+
 void cDrumSeq::refresh()
 {
     const Sequencer::strPattern* p = current();
@@ -156,7 +167,7 @@ void cDrumSeq::refresh()
     TrackSettings settings = getSettings(p, track);
 
     // keep the cursor's row on screen
-    int rows = DrumSeqView::kRows, cols = DrumSeqView::kCols;
+    int rows = view.rows, cols = DrumSeqView::kCols;
     int cursorRow = cursorStep / cols;
     if (cursorRow < view.firstRow)
         view.firstRow = cursorRow;
@@ -230,7 +241,7 @@ void cDrumSeq::refresh()
     snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
     snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
     view.params[3].color = color::kFx2Btn;
-    view.selectedParam = param;
+    view.selectedParam = paramHeld ? param : -1; // lit while its button is held
 
     // bottom bar: the 8 steps of the cursor's row
     int rowStart = cursorRow * cols;
@@ -527,6 +538,16 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functParamButton(uint8_t button, uint8_t state)
 {
+    // the coloured buttons work while held: hold one + press +/- to change it
+    if (state == buttonRelease)
+    {
+        if (DS->paramHeld)
+        {
+            DS->paramHeld = false;
+            DS->refresh();
+        }
+        return;
+    }
     if (state != buttonPress)
         return;
     if (button == interfaceButtonNote)
@@ -537,6 +558,9 @@ static void functParamButton(uint8_t button, uint8_t state)
         DS->param = cDrumSeq::kParamNudge;
     else if (button == physFx2Button())
         DS->param = cDrumSeq::kParamPitch;
+    else
+        return;
+    DS->paramHeld = true;
     DS->refresh();
 }
 
@@ -544,10 +568,12 @@ static void functEncoder(int16_t value)
 {
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
-    if (big)
-        DS->changeLength(dir);
+    if (DS->paramHeld)
+        DS->changeParam(dir); // the held coloured button's value
+    else if (big)
+        DS->changeZoom(dir); // big + = fewer rows (bigger), big - = more rows
     else
-        DS->changeParam(dir);
+        DS->changeLength(dir); // small +/-: the step's length
 }
 
 static void functPattern(uint8_t state)

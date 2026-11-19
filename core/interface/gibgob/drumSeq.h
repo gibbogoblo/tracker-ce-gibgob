@@ -36,6 +36,8 @@ class cDrumSeq : public ModuleBase
     int track = 0;
     int cursorStep = 0;
     uint8_t param = kParamVelocity;
+    bool paramHeld = false; // a coloured button is held: +/- change `param`
+    void changeZoom(int dir);
     int velocity = 100;
     int chance = 100;
     int nudge = 0;

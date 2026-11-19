@@ -20,14 +20,15 @@ struct DrumCell
 // Everything the drum step sequencer needs to draw one frame.
 struct DrumSeqView
 {
-    static constexpr int kRows = 4;
+    static constexpr int kMaxRows = 8; // zoom: 2, 4 or 8 rows of 8 steps
     static constexpr int kCols = 8;
 
+    int rows = 4;
     int firstRow = 0;
     int cursorStep = 0;
     int playStep = -1;
     int steps = 16;
-    DrumCell cell[kRows * kCols];
+    DrumCell cell[kMaxRows * kCols];
     bool shift = false;
 
     char title[56] = { 0 };

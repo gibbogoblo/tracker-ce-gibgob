@@ -59,6 +59,7 @@ void cGibGobPerform::start(uint32_t /*options*/)
     moduleRefresh = 1;
     screenOpened();
     pf::loadSaved();
+    fieldHeld = false;
     view.help.active = false;
     view.help.title = "CHIMP OUT FX - shortcuts";
     view.help.lines = kHelpPerform;
@@ -196,7 +197,7 @@ void cGibGobPerform::refresh()
         view.params[k].color = boxColor[k];
     if (field > kFieldEffect && (int)field - 1 >= info.paramCount)
         field = kFieldEffect;
-    view.selectedParam = field;
+    view.selectedParam = fieldHeld ? field : -1; // lit while its button is held
 
     snprintf(view.title, sizeof(view.title), "CHIMP OUT  -  button %d", cursor + 1);
 
@@ -219,13 +220,17 @@ void cGibGobPerform::changeValue(int delta, bool big)
     pf::Cell c = pf::getCell(cursor);
     if (field == kFieldEffect)
     {
-        int fx = (int)c.fx + delta;
-        if (fx < 0)
-            fx = pf::kFxCount - 1;
-        if (fx >= pf::kFxCount)
-            fx = 0;
-        if (fx == pf::kFxMelodicCut) // the same as Track cut: skip it
-            fx = delta > 0 ? 0 : pf::kFxDrumCut;
+        // Pump is retired and Melodic cut is the same as Track cut: skip them
+        const int step = delta > 0 ? 1 : -1;
+        int fx = (int)c.fx;
+        do
+        {
+            fx += step;
+            if (fx < 0)
+                fx = pf::kFxCount - 1;
+            if (fx >= pf::kFxCount)
+                fx = 0;
+        } while (fx == pf::kFxMelodicCut || fx == pf::kFxPump);
         c = pf::defaultCell(fx);
     }
     else
@@ -343,6 +348,16 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functFieldButton(uint8_t button, uint8_t state)
 {
+    // the coloured buttons work while held: hold one + press +/- to change it
+    if (state == buttonRelease)
+    {
+        if (GPF->fieldHeld)
+        {
+            GPF->fieldHeld = false;
+            GPF->refresh();
+        }
+        return;
+    }
     if (state != buttonPress)
         return;
     if (button == interfaceButtonNote)
@@ -353,6 +368,9 @@ static void functFieldButton(uint8_t button, uint8_t state)
         GPF->field = cGibGobPerform::kFieldParam2;
     else if (button == physFx2Button())
         GPF->field = cGibGobPerform::kFieldParam3;
+    else
+        return;
+    GPF->fieldHeld = true;
     GPF->refresh();
 }
 
@@ -365,6 +383,9 @@ static void functEncoder(int16_t value)
             GPF->refresh();
         return;
     }
+    // only while a coloured button is held, so nothing changes by accident
+    if (!GPF->fieldHeld)
+        return;
     const bool big = value >= 10 || value <= -10;
     GPF->changeValue(value > 0 ? 1 : -1, big);
 }

@@ -94,6 +94,8 @@ static constexpr uint8_t kTwistBrake1 = 0x10;    // vinyl: brake harder (x2 per 
 static constexpr uint8_t kTwistBrakeMask = 0x30;
 static constexpr uint8_t kTwistCutDrums = 0x01;   // track cut: drum + slice tracks
 static constexpr uint8_t kTwistCutMelodic = 0x02; // track cut: melodic tracks
+static constexpr uint8_t kTwistUp = 0x40;   // + / Up is held (any effect)
+static constexpr uint8_t kTwistDown = 0x80; // - / Down is held (any effect)
 
 struct Clock
 {
@@ -119,7 +121,8 @@ class Engine
     // holding: a held button plays from a copy of its settings, which the
     // twists change; letting go forgets the twists
     void setHeld(uint8_t mask);
-    // + / Up (dir > 0) or - / Down (dir < 0) while button i is held
+    // while + / Up (dir > 0) or - / Down (dir < 0) is held with button i:
+    // one of two variants of its settings; dir == 0 goes back to the settings
     void twist(int i, int dir);
     uint8_t heldMask() const { return held; }
     void releaseAll() { held = 0; }

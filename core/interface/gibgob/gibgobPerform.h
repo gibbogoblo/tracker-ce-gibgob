@@ -35,6 +35,7 @@ class cGibGobPerform : public ModuleBase
 
     int cursor = 0;
     uint8_t field = kFieldEffect;
+    bool fieldHeld = false; // a coloured button is held: +/- change `field`
     bool changed = false;
     bool held[8] = { false };
     uint8_t lastActive = 0;

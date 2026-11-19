@@ -64,6 +64,8 @@ class cGibGobHome : public ModuleBase
     int cursorStep = 0; // -1 = on the track name column
     int stepsVisible = 16;
     uint8_t param = kParamVelocity;
+    bool paramHeld = false; // a coloured button is held: +/- change `param`
+    bool patternHeld = false; // button 1 is held: +/- change the pattern
     ShiftParam shiftParam = ShiftParam::None;
     bool lastShift = false;
     uint32_t blinkAt = 0;

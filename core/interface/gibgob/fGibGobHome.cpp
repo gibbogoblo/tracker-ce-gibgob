@@ -7,6 +7,7 @@
 #include "core/interfaceMenuPopup.h"
 #include "core/interfacePopups.h"
 #include "core/songTimer.h"
+#include "Platform.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/Perform.h"
@@ -56,6 +57,7 @@ static void functEncoder(int16_t value);
 static void functSwitchModule(uint8_t button);
 static void functMenu(uint8_t state);
 static void functParams(uint8_t state);
+static void functPattern(uint8_t state);
 
 static int clampInt(int v, int lo, int hi)
 {
@@ -131,6 +133,9 @@ void cGibGobHome::start(uint32_t options)
         cursorTrack = (int)(options & 7); // opened for a given track
     // otherwise stay on the track you were on
     shiftParam = ShiftParam::None;
+    paramHeld = false;
+    // button 1 may still be held from the press that opened this screen
+    patternHeld = mtInterface.getPlatform()->getButtons()->isButtonPressed(interfaceButtonPattern);
     for (int i = 0; i < 8; i++)
     {
         held[i] = false;
@@ -234,6 +239,7 @@ void cGibGobHome::setDefaultScreenFunct()
 
     bindModuleSwitchButtons(ip, functSwitchModule);
     ip->setButtonObj(interfaceButtonParams, functParams);
+    ip->setButtonObj(interfaceButtonPattern, functPattern);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
@@ -375,7 +381,7 @@ void cGibGobHome::refresh()
         snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
         snprintf(view.params[3].label, sizeof(view.params[3].label), "Pitch");
         snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", mtNotes[clampInt(pitch, 0, 127)]);
-        view.selectedParam = param;
+        view.selectedParam = paramHeld ? param : -1; // lit while its button is held
     }
 
     // bottom bar: the 8 track buttons, named after their tracks.
@@ -969,13 +975,7 @@ static void functUp(uint8_t s)
             GH->refresh();
         return;
     }
-    if (shiftActive())
-    {
-        if (s == buttonPress)
-            GH->changePattern(-1);
-        return;
-    }
-    GH->moveCursor(0, -1);
+    GH->moveCursor(0, -1); // with or without Shift (hold 1 + +/- change pattern)
 }
 
 static void functDown(uint8_t s)
@@ -986,12 +986,6 @@ static void functDown(uint8_t s)
     {
         if (s == buttonPress && perform::twist(-1))
             GH->refresh();
-        return;
-    }
-    if (shiftActive())
-    {
-        if (s == buttonPress)
-            GH->changePattern(1);
         return;
     }
     GH->moveCursor(0, 1);
@@ -1048,13 +1042,21 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functParamButton(uint8_t button, uint8_t state)
 {
+    // the coloured buttons work while held: hold one and press +/- to change
+    // its value; let go and +/- zoom / change the step length again
+    if (state == buttonRelease)
+    {
+        GH->paramHeld = false;
+        GH->shiftParam = cGibGobHome::ShiftParam::None;
+        GH->refresh();
+        return;
+    }
     if (state != buttonPress)
         return;
     if (GH->cursorStep < 0)
         return; // on the track name the coloured buttons do nothing
     if (shiftActive())
     {
-        // Shift stays on; +/- now edit the chosen value until Shift goes off
         if (button == interfaceButtonNote)
             GH->shiftParam = cGibGobHome::ShiftParam::GlobalLen;
         else if (button == physFx1Button())
@@ -1074,6 +1076,9 @@ static void functParamButton(uint8_t button, uint8_t state)
         GH->param = cGibGobHome::kParamNudge;
     else if (button == physFx2Button())
         GH->param = cGibGobHome::kParamPitch;
+    else
+        return;
+    GH->paramHeld = true;
     GH->refresh();
 }
 
@@ -1089,34 +1094,43 @@ static void functEncoder(int16_t value)
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
+    // holding button 1: small +/- = next / previous pattern
+    if (GH->patternHeld)
+    {
+        if (!big)
+            GH->changePattern(dir);
+        return;
+    }
+    // big +/- always zoom (big + = fewer steps on screen)
+    if (big && GH->shiftParam == cGibGobHome::ShiftParam::None && !GH->paramHeld)
+    {
+        GH->changeZoom(-dir);
+        return;
+    }
     if (GH->cursorStep < 0)
     {
-        // on the track name: small +/- choose the sound. Big +/- is kept free
-        // for now (the track type is changed in the track settings only).
-        if (!big)
+        // on the track name: small +/- choose the sound (not with Shift on,
+        // so CHIMP OUT can't change sounds by accident)
+        if (!big && !shiftActive())
             GH->changeSound(dir);
         return;
     }
     if (shiftActive())
     {
+        // only while Shift + a coloured button is held
         switch (GH->shiftParam)
         {
             case cGibGobHome::ShiftParam::GlobalLen: GH->changeGlobalLength(dir, big); break;
             case cGibGobHome::ShiftParam::Tempo: GH->changeTempo((float)(big ? dir * 10 : dir)); break;
             case cGibGobHome::ShiftParam::Swing: GH->changeSwing(big ? dir * 5 : dir); break;
-            default:
-                if (big)
-                    GH->changeZoom(-dir); // big + = zoom in (fewer steps on screen)
-                else
-                    GH->changeSound(dir);
-                break;
+            default: break;
         }
         return;
     }
-    if (big && GH->param != cGibGobHome::kParamLength)
-        GH->changeLength(dir);
+    if (GH->paramHeld)
+        GH->changeParam(dir, big); // the held coloured button's value
     else
-        GH->changeParam(dir, big);
+        GH->changeLength(dir); // small +/- alone: the step's length
 }
 
 static void functSwitchModule(uint8_t button)
@@ -1138,6 +1152,15 @@ static void functMenu(uint8_t state)
         mtMenuPopup.showModulePopup(GH);
     else if (state == buttonRelease)
         mtMenuPopup.hideModulePopup(GH);
+}
+
+// button 1: already here; held, +/- change the pattern
+static void functPattern(uint8_t state)
+{
+    if (state == buttonPress)
+        GH->patternHeld = true;
+    else if (state == buttonRelease)
+        GH->patternHeld = false;
 }
 
 static void functParams(uint8_t state)

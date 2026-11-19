@@ -304,6 +304,11 @@ static void testNoClicks()
             const float limit = (fx == kFxGate || fx == kFxCut || fx == kFxComb || fx == kFxTalkbox || fx == kFxPump)
                                   ? dryMax * 6.0f
                                   : ((fx == kFxDelay || fx == kFxReverb) ? dryMax * 4.0f : dryMax * 2.2f);
+            // scratch patterns 5-16: hand moves play up to ~3x speed (pitch, not clicks),
+            // and the ones with fader cuts chop like the gate
+            float scratchLimit = 0.0f;
+            if (fx == kFxScratch && v >= 4)
+                scratchLimit = (v == 4 || v == 9 || v == 10 || v == 11) ? dryMax * 3.6f : dryMax * 6.0f;
             const float md = std::max(maxDiff(L, 0, pad.frames), maxDiff(R, 0, pad.frames));
             if (getenv("PERF_DEBUG") && md >= limit)
             {
@@ -313,7 +318,7 @@ static void testNoClicks()
                         at = i;
                 printf("   worst jump at sample %d = step %.3f\n", at, at / S);
             }
-            CHECK(md < limit, "%s (%s): click, jump %.4f (pad %.4f)", in.name,
+            CHECK(md < (scratchLimit > 0.0f ? scratchLimit : limit), "%s (%s): click, jump %.4f (pad %.4f)", in.name,
                   in.paramCount ? in.params[0].labels ? in.params[0].labels[v] : "n" : "-", md, dryMax);
         }
     }
@@ -449,29 +454,62 @@ static void testTwists()
         const double early = rms(36, 44), late = rms(76, 84);
         CHECK(early > 0.005 && late > early * 0.5, "frozen reverb decayed (%.4f -> %.4f)", early, late);
     }
-    // stutter twisted to the next pattern switches exactly on a beat
+    // a twist lasts only while held: let go and the roll is back on 1/16
+    {
+        Music m;
+        m.bpm = bpm;
+        m.frames = (int)(S * 40);
+        m.l.assign(m.frames, 0.0f);
+        m.r.assign(m.frames, 0.0f);
+        const int mark = (int)(16 * S);
+        for (int i = 0; i < 40; i++)
+            m.l[mark + i] = m.r[mark + i] = 0.8f * (1.0f - i / 40.0f);
+        Cell cells[8];
+        cells[0] = defaultCell(kFxRoll);
+        g_twists = { { 0, 18.0f, +1 }, { 0, 21.9f, 0 } };
+        std::vector<float> L, R;
+        run(m, cells, { { 0, 16.0f, 30.0f } }, L, R);
+        g_twists.clear();
+        int on16 = 0, on32 = 0;
+        for (int k = 23; k < 28; k++)
+        {
+            auto peakNear = [&](int at)
+            {
+                float pk = 0;
+                for (int i = at - 60; i < at + 60; i++)
+                    pk = std::max(pk, std::fabs(L[i]));
+                return pk;
+            };
+            if (peakNear((int)(k * S)) > 0.5f)
+                on16++;
+            if (peakNear((int)((k + 0.5f) * S)) > 0.5f)
+                on32++;
+        }
+        CHECK(on16 == 5 && on32 == 0, "roll not back on 1/16 after the twist was let go (%d, %d)", on16, on32);
+    }
+    // stutter starts its pattern from the press, wherever in the bar
+    for (int dir : { 0, -1 })
     {
         const Music m = makeJungle(bpm, 4);
-        Cell a[8], b[8];
-        a[0] = defaultCell(kFxStutter);
-        b[0] = defaultCell(kFxStutter);
-        b[0].p[0] = 1;
-        g_twists = { { 0, 21.5f, +1 } }; // mid beat: pattern 2 must start at step 24
-        std::vector<float> L, R, L2, R2;
-        run(m, a, { { 0, 16.0f, 32.0f } }, L, R);
+        Cell cells[8];
+        cells[0] = defaultCell(kFxStutter); // pattern 1: steps 4-7 replay steps 0-3
+        if (dir)
+            g_twists = { { 0, 22.2f, dir } }; // held Down: 1/8 steps
+        std::vector<float> L, R;
+        run(m, cells, { { 0, 22.0f, 44.0f } }, L, R);
         g_twists.clear();
-        run(m, b, { { 0, 16.0f, 32.0f } }, L2, R2);
+        const float U = dir ? 2.0f : 1.0f;
         double d = 0;
-        for (int i = (int)(24.3f * S); i < (int)(31.5f * S); i++)
-            d = std::max(d, (double)std::fabs(L[i] - L2[i]));
-        double before = 0, ref = 0;
-        std::vector<float> L3, R3;
-        run(m, a, { { 0, 16.0f, 32.0f } }, L3, R3);
-        for (int i = (int)(16.5f * S); i < (int)(23.5f * S); i++)
-            before = std::max(before, (double)std::fabs(L[i] - L3[i]));
-        (void)ref;
-        CHECK(d < 0.002, "twisted stutter not on pattern 2 from the next beat (%.4f)", d);
-        CHECK(before < 0.002, "twisted stutter changed before the beat (%.4f)", before);
+        for (int i = (int)((22.0f + 4.0f * U + 0.3f) * S); i < (int)((22.0f + 8.0f * U - 0.3f) * S); i++)
+        {
+            // the engine reads the recording between samples: compare the same way
+            const double src = i - 4.0 * U * S;
+            const int i0 = (int)src;
+            const double fr = src - i0;
+            const double want = m.l[i0] + (m.l[i0 + 1] - m.l[i0]) * fr;
+            d = std::max(d, std::fabs(L[i] - want));
+        }
+        CHECK(d < 0.002, "stutter (twist %d) not replaying from the press (%.4f)", dir, d);
     }
 }
 
@@ -527,7 +565,7 @@ static void demos(const std::string& dir)
         { "25_scratch_transformer.wav", C(kFxScratch, 2, 0), { { 0, 16, 32 } } },
         { "26_pump_quarter.wav", C(kFxPump, 0, 7), { { 0, 16, 48 } } },
         { "27_delay_held_then_cut_twist.wav", C(kFxDelay, 3, 0, 6), { { 0, 16, 32 } } },
-        { "28_roll_twisted_16_32_64.wav", C(kFxRoll, 3), { { 0, 24, 32 } } },
+        { "28_roll_twist_up_then_down.wav", C(kFxRoll, 3), { { 0, 24, 36 } } },
         { "29_reverb_freeze_twist.wav", C(kFxReverb, 2, 6, 7), { { 0, 16, 48 } } },
         { "30_vinyl_stop_and_spin_up.wav", C(kFxVinyl, 1), { { 0, 16, 48 } } },
     };
@@ -551,9 +589,9 @@ static void demos(const std::string& dir)
         if (f.rfind("27_", 0) == 0)
             g_twists = { { 0, 24.0f, +1 } }; // the mix cut, echoes go on
         else if (f.rfind("28_", 0) == 0)
-            g_twists = { { 0, 26.0f, +1 }, { 0, 28.0f, +1 } }; // 1/16 > 1/32 > 1/64
+            g_twists = { { 0, 26.0f, +1 }, { 0, 29.0f, 0 }, { 0, 31.0f, -1 }, { 0, 34.0f, 0 } }; // 1/32, 1/16, 1/8
         else if (f.rfind("29_", 0) == 0)
-            g_twists = { { 0, 24.0f, -1 }, { 0, 25.0f, +1 } }; // freeze + cut the mix
+            g_twists = { { 0, 24.0f, -1 } }; // freeze
         else if (f.rfind("30_", 0) == 0)
             g_twists = { { 0, 28.0f, +1 } }; // spin back up
         run(m, cells, pr, L, R, (int)(kSr * 2));
@@ -585,6 +623,23 @@ static void demos(const std::string& dir)
         std::vector<float> L, R;
         run(m, cells, pr, L, R, (int)(kSr * 2));
         writeWav(dir + (half ? "/04d_stutter_patterns_13-16.wav" : "/04c_stutter_patterns_9-12.wav"), L, R);
+    }
+    // the new scratch patterns, four to a file, each held for a bar
+    for (int part = 0; part < 3; part++)
+    {
+        Cell cells[8];
+        std::vector<Press> pr;
+        for (int p = 0; p < 4; p++)
+        {
+            cells[p] = C(kFxScratch, 4 + part * 4 + p, 0);
+            pr.push_back({ p, 16.0f + 32.0f * p, 32.0f + 32.0f * p });
+        }
+        std::vector<float> L, R;
+        run(m, cells, pr, L, R, (int)(kSr * 2));
+        static const char* const kNames[3] = { "/31_scratch_tears_flare_flare2_crab.wav",
+                                               "/32_scratch_orbit_scribble_drag_hydro.wav",
+                                               "/33_scratch_combo1_combo2_combo3_transf2.wav" };
+        writeWav(dir + kNames[part], L, R);
     }
 }
 

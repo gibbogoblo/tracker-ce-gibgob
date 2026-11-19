@@ -99,6 +99,7 @@ class cPianoRoll : public ModuleBase
     int lengthTicks = 48;
     int zoom = 0;
     uint8_t param = kParamProb;
+    bool paramHeld = false; // a coloured button is held: +/- change `param`
     Mode mode = Mode::Idle;
     bool autoAudition = false;
     uint32_t auditionOffAt = 0;

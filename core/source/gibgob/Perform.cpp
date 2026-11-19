@@ -5,6 +5,7 @@
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
+#include "core/interfaceDefs.h"
 #include <string.h>
 #if __has_include("cr_section_macros.h")
 #include "cr_section_macros.h"
@@ -178,6 +179,24 @@ bool anyHeld()
     return s_engine.heldMask() != 0;
 }
 
+// the twist being held: which button, which way
+static int s_twistCell = -1;
+static int s_twistDir = 0;
+
+// + / - (small or big) or Up / Down still pressed
+static bool twistButtonsDown()
+{
+    SwitchGroup* b = TrackerImpl::getInstance()->getPlatform()->getButtons();
+    if (b == nullptr)
+        return false;
+    static const int kButtons[] = { interfaceButtonUp,        interfaceButtonDown,      interfaceButtonMiniPlus1,
+                                    interfaceButtonMiniPlus10, interfaceButtonMiniMinus1, interfaceButtonMiniMinus10 };
+    for (int id : kButtons)
+        if (b->isButtonPressed(id))
+            return true;
+    return false;
+}
+
 bool twist(int dir)
 {
     int best = -1;
@@ -186,13 +205,26 @@ bool twist(int dir)
             best = i;
     if (best < 0)
         return false;
+    if (s_twistCell >= 0 && s_twistCell != best)
+        s_engine.twist(s_twistCell, 0);
     s_engine.twist(best, dir);
+    s_twistCell = best;
+    s_twistDir = dir;
     updateTrackCutFlags();
     return true;
 }
 
 void uiTick()
 {
+    // a twist lasts while its button is held
+    if (s_twistDir != 0 && (s_twistCell < 0 || !isHeld(s_twistCell) || !twistButtonsDown()))
+    {
+        if (s_twistCell >= 0)
+            s_engine.twist(s_twistCell, 0);
+        s_twistCell = -1;
+        s_twistDir = 0;
+        updateTrackCutFlags();
+    }
     if (s_cutDrums || s_cutMelodic || s_cutVoices || s_cutSynths)
         updateTrackCutFlags();
 }

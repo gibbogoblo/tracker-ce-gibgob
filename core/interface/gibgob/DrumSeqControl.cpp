@@ -37,7 +37,7 @@ void DrumSeqControl::update()
 
     const int fRegular = fonts[1].handle;
     const int fBold = fonts[3].handle;
-    const int rows = DrumSeqView::kRows;
+    const int rows = view->rows < 1 ? 1 : (view->rows > DrumSeqView::kMaxRows ? DrumSeqView::kMaxRows : view->rows);
     const int cols = DrumSeqView::kCols;
     const int rowH = (kBottom - kTop) / rows;
     const int cellW = (kScreenW - kLabelW - 8) / cols;
@@ -151,9 +151,10 @@ void DrumSeqControl::update()
                 continue;
             int x1 = kLabelW + c * cellW + 3;
             int y1 = kTop + r * rowH + 2;
-            if (cell.pitch[0])
+            // zoomed out to 8 rows the steps show no text (pitch from 4 rows, chance from 2)
+            if (cell.pitch[0] && rowH >= 50)
                 draw::text(x1 + 6, y1 + 12, fBold, OPT_CENTERY, cell.pitch);
-            if (cell.chance < 100)
+            if (cell.chance < 100 && rowH >= 60)
             {
                 snprintf(buf, sizeof(buf), "%d%%", cell.chance);
                 draw::text(x1 + 6, y1 + rowH - 22, fRegular, OPT_CENTERY, buf);

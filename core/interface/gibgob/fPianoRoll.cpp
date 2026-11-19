@@ -98,6 +98,7 @@ void cPianoRoll::start(uint32_t options)
     clearSelection();
     mode = Mode::Idle;
     menu = Menu::None;
+    paramHeld = false;
     view.menu.active = false;
     view.picker.active = false;
     view.boxActive = false;
@@ -334,7 +335,7 @@ void cPianoRoll::refreshView()
     snprintf(view.params[3].label, sizeof(view.params[3].label), "Inv");
     snprintf(view.params[3].value, sizeof(view.params[3].value), "%d", inversion);
     view.params[3].color = color::kFx2Btn;
-    view.selectedParam = param;
+    view.selectedParam = paramHeld ? param : -1; // lit while its button is held
 
     if (view.shift)
     {
@@ -1700,12 +1701,12 @@ static void functEncoder(int16_t value)
         PR->menuChange(dir, big);
         return;
     }
-    if (big && shiftActive())
-        PR->changeZoom(-dir); // big + = zoom in (fewer squares), big - = zoom out
+    if (PR->paramHeld)
+        PR->changeParam(value); // the held coloured button's value
     else if (big)
-        PR->changeLength(dir);
+        PR->changeZoom(-dir); // big + = zoom in (fewer squares), big - = zoom out
     else
-        PR->changeParam(value);
+        PR->changeLength(dir); // small +/-: note length
 }
 
 static void functTopRow(uint8_t button, uint8_t state)
@@ -1725,6 +1726,16 @@ static void functTopRow(uint8_t button, uint8_t state)
 
 static void functParamButton(uint8_t button, uint8_t state)
 {
+    // the coloured buttons work while held: hold one + press +/- to change it
+    if (state == buttonRelease)
+    {
+        if (PR->paramHeld)
+        {
+            PR->paramHeld = false;
+            PR->refreshView();
+        }
+        return;
+    }
     if (state != buttonPress || inMenu())
         return;
     if (shiftActive())
@@ -1745,6 +1756,9 @@ static void functParamButton(uint8_t button, uint8_t state)
         PR->param = cPianoRoll::kParamNudge;
     else if (button == physFx2Button())
         PR->param = cPianoRoll::kParamInversion;
+    else
+        return;
+    PR->paramHeld = true;
     PR->refreshView();
 }
 
