@@ -1,6 +1,7 @@
 #include "gibgob/Perform.h"
 
 #include "TrackerImpl.h"
+#include "gibgob/Master.h"
 #include "gibgob/MelodicTrack.h"
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
@@ -76,6 +77,7 @@ void loadSaved()
     load();
     // until now the effects stage passed audio through untouched
     s_engine.attach(s_memory);
+    gibgob::master::init(); // the master effects start with it
 }
 
 // ---- Drum cut / Melodic cut: mute the tracks of a type, sounds keep playing

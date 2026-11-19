@@ -95,11 +95,56 @@ class AudioMixer : public AUDIO_MIXER_PARENT
     }
 #endif
 
-  private:
+  protected:
     SaturationType saturationType;
     int32_t multiplier[mixerSize];
     int32_t previousMultiplier[mixerSize];
+
+  private:
     audio_block_t* inputQueueArray[mixerSize];
 };
+
+#ifdef AUDIO_NULL_IS_SILENCE
+// GibGob OS: the tracks mixer with the kick duck. Every input not in the
+// exempt mask is scaled by the duck gain (on top of its own gain, which holds
+// the panning), ramped over the block like any gain change.
+extern volatile int32_t g_gibgobDuckQ16;   // 65536 = no duck
+extern volatile uint32_t g_gibgobDuckExempt; // inputs left alone (the kick track's)
+
+template<int mixerSize>
+class AudioMixerDuck : public AudioMixer<mixerSize>
+{
+  public:
+    AudioMixerDuck()
+    {
+        for (int i = 0; i < mixerSize; i++)
+            effPrev[i] = (int32_t)AudioMixer<mixerSize>::kUnityGain;
+    }
+    AUDIO_CORE_RAM virtual void update(void)
+    {
+        const int32_t duck = g_gibgobDuckQ16;
+        const uint32_t exempt = g_gibgobDuckExempt;
+        for (int i = 0; i < mixerSize; i++)
+        {
+            const int32_t base = this->multiplier[i];
+            eff[i] = (((exempt >> i) & 1) || duck >= 65536) ? base : (int32_t)(((int64_t)base * duck) >> 16);
+        }
+        this->mix(mixerSize, eff, effPrev, this->saturationType);
+        // the mixer's own gains have been reached (the ramp ran on eff)
+        for (int i = 0; i < mixerSize; i++)
+            this->previousMultiplier[i] = this->multiplier[i];
+    }
+#ifdef AUDIO_NULL_IS_SILENCE
+    bool isInputSilenced(unsigned int channel) const override
+    {
+        return channel < mixerSize && this->multiplier[channel] == 0 && effPrev[channel] == 0;
+    }
+#endif
+
+  private:
+    int32_t eff[mixerSize];
+    int32_t effPrev[mixerSize];
+};
+#endif
 
 #endif

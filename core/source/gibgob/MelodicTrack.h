@@ -237,6 +237,8 @@ bool isMelodic(int track);
 // tickInPattern counts from the pattern start; each track loops at its own length
 void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
+// called (audio context) whenever the sequencer starts a note on a track
+extern void (*g_noteStartHook)(int track);
 void stopTrack(int track);
 void markLegacyPlayed(int track); // an old tracker step sounded on this track
 int playheadTick(int track);      // micro steps inside the track, -1 when stopped

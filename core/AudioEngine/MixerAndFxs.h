@@ -56,7 +56,8 @@ class MixerAndFxs
 
   private:
     AudioMixer<kSendsInputsCount> preFxMixer[FxType::kFxCount];
-    AudioMixer<kTracksAndSynthVoices>
+    // with the GibGob OS kick duck
+    AudioMixerDuck<kTracksAndSynthVoices>
       tracksAndSynthMixer[(int)MixerAndFxChannelType::kChannelCount];
     AudioMixer<kTrackAndSendsMixerInputs>
       tracksAndSendsMixer[(int)MixerAndFxChannelType::kChannelCount];

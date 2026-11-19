@@ -1,5 +1,6 @@
 #include "GibGobPerformNode.h"
 
+#include "gibgob/Master.h"
 #include "gibgob/Perform.h"
 #include "config.h"
 #include <string.h>
@@ -67,6 +68,8 @@ AUDIO_CORE_RAM void AudioEffectGibGobPerform::update(void)
         r[i] = (float)right->data[i] * (1.0f / 32768.0f);
     }
     engine.process(l, r, AUDIO_BLOCK_SAMPLES, gibgob::perform::currentClock());
+    // then the master effects (colour, glue) and the duck for the next block
+    gibgob::master::audioBlock(l, r, AUDIO_BLOCK_SAMPLES);
     for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
     {
         float a = l[i] * 32768.0f, b = r[i] * 32768.0f;

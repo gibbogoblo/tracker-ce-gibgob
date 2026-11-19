@@ -13,7 +13,9 @@ g++ $FLAGS chord_test.cpp -o build/chord_test
 g++ $FLAGS screen_test.cpp $G/LaneControl.cpp $G/PianoRollControl.cpp $G/TableControl.cpp $G/DrumSeqControl.cpp $G/PerformControl.cpp $G/VisionControl.cpp $G/gibgobUi.cpp \
     $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/PerformFx.cpp -o build/screen_test
 g++ $FLAGS -std=c++20 perform_test.cpp $CORE/source/gibgob/PerformFx.cpp -o build/perform_test
+g++ $FLAGS master_test.cpp $CORE/source/gibgob/MasterFx.cpp -o build/master_test
 ./build/engine_test
 ./build/chord_test
 ./build/screen_test
 ./build/perform_test
+./build/master_test

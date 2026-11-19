@@ -17,6 +17,10 @@
 namespace gibgob
 {
 
+// told about every note the sequencer starts (the master duck listens)
+void (*g_noteStartHook)(int track) = nullptr;
+
+
 const uint8_t kArpRateTicks[kArpRateCount] = { 192, 96, 64, 48, 32, 24 };
 const char* const kArpRateNames[kArpRateCount] = { "1/4", "1/8", "1/8 T", "1/16", "1/16 T", "1/32" };
 const char* const kArpModeNames[kArpModeCount] = { "Off",     "Up",     "Down",
@@ -556,6 +560,8 @@ void startNote(int track,
                bool oneShot,
                uint8_t noteFlags = 0)
 {
+    if (g_noteStartHook != nullptr)
+        g_noteStartHook(track);
     bool sample = isSampleInstrument(instrument);
 
     if (noteFlags & kNoteFlagAccent)
