@@ -587,6 +587,9 @@ bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
 {
     if (!help.active || help.lines == nullptr)
         return false;
+    // the help window is all there is on the screen: it may use more of the
+    // display list than a normal screen (still under the test limit of 1500)
+    draw::begin(1480);
     draw::color(color::kBg);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
     draw::color(color::kPanel);

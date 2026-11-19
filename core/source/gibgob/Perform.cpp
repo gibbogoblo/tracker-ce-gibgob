@@ -81,7 +81,7 @@ void loadSaved()
 // ---- Drum cut / Melodic cut: mute the tracks of a type, sounds keep playing
 // silently (a long sample comes back where it would be). Done on the voices
 // (sample tracks) and on the synth parts the tracks use.
-static bool s_cutDrums = false, s_cutMelodic = false;
+static bool s_cutDrums = false, s_cutMelodic = false, s_cutSlices = false;
 static uint8_t s_cutVoices = 0;  // voices this is muting now
 static uint8_t s_cutSynths = 0;  // synth parts this is muting now
 static uint8_t s_order[kCells] = { 0 };
@@ -92,11 +92,12 @@ static void applyTrackCut()
     const Sequencer::strPattern* p = gibgob::current();
     auto typeCut = [&](int track)
     {
-        const bool melodic = gibgob::isMelodic(p, track) && !gibgob::isSliceTrack(p, track);
-        return melodic ? s_cutMelodic : s_cutDrums;
+        if (gibgob::isSliceTrack(p, track))
+            return s_cutDrums || s_cutSlices; // slices count as drums
+        return gibgob::isMelodic(p, track) ? s_cutMelodic : s_cutDrums;
     };
     uint8_t voices = 0, synths = 0;
-    if (s_cutDrums || s_cutMelodic)
+    if (s_cutDrums || s_cutMelodic || s_cutSlices)
     {
         for (int v = 0; v < gibgob::kTracks; v++)
             if (typeCut(gibgob::voiceOwner(v)))
@@ -132,7 +133,7 @@ static void applyTrackCut()
 
 static void updateTrackCutFlags()
 {
-    bool drums = false, melodic = false;
+    bool drums = false, melodic = false, slices = false;
     for (int i = 0; i < kCells; i++)
     {
         if (!isHeld(i))
@@ -142,11 +143,13 @@ static void updateTrackCutFlags()
             continue;
         drums |= (s_engine.cellFlags(i) & kTwistCutDrums) != 0;
         melodic |= (s_engine.cellFlags(i) & kTwistCutMelodic) != 0;
+        slices |= (s_engine.cellFlags(i) & kTwistCutSlices) != 0;
     }
-    if (drums != s_cutDrums || melodic != s_cutMelodic || drums || melodic)
+    if (drums != s_cutDrums || melodic != s_cutMelodic || slices != s_cutSlices || drums || melodic || slices)
     {
         s_cutDrums = drums;
         s_cutMelodic = melodic;
+        s_cutSlices = slices;
         applyTrackCut();
     }
 }
@@ -189,8 +192,9 @@ static bool twistButtonsDown()
     SwitchGroup* b = TrackerImpl::getInstance()->getPlatform()->getButtons();
     if (b == nullptr)
         return false;
-    static const int kButtons[] = { interfaceButtonUp,        interfaceButtonDown,      interfaceButtonMiniPlus1,
-                                    interfaceButtonMiniPlus10, interfaceButtonMiniMinus1, interfaceButtonMiniMinus10 };
+    static const int kButtons[] = { interfaceButtonUp,         interfaceButtonDown,       interfaceButtonLeft,
+                                    interfaceButtonRight,      interfaceButtonMiniPlus1,  interfaceButtonMiniPlus10,
+                                    interfaceButtonMiniMinus1, interfaceButtonMiniMinus10 };
     for (int id : kButtons)
         if (b->isButtonPressed(id))
             return true;
@@ -225,7 +229,7 @@ void uiTick()
         s_twistDir = 0;
         updateTrackCutFlags();
     }
-    if (s_cutDrums || s_cutMelodic || s_cutVoices || s_cutSynths)
+    if (s_cutDrums || s_cutMelodic || s_cutSlices || s_cutVoices || s_cutSynths)
         updateTrackCutFlags();
 }
 

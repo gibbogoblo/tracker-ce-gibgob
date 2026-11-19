@@ -1001,12 +1001,25 @@ static void functDown(uint8_t s)
 
 static void functLeft(uint8_t s)
 {
+    // holding a CHIMP OUT effect: Left is its far twist (like big -)
+    if (perform::anyHeld())
+    {
+        if (s == buttonPress && perform::twist(-2))
+            GH->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GH->moveCursor(shiftActive() ? -4 : -1, 0);
 }
 
 static void functRight(uint8_t s)
 {
+    if (perform::anyHeld())
+    {
+        if (s == buttonPress && perform::twist(2))
+            GH->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GH->moveCursor(shiftActive() ? 4 : 1, 0);
 }
@@ -1095,7 +1108,7 @@ static void functEncoder(int16_t value)
     // holding a CHIMP OUT effect: +/- twist it, one step per press
     if (perform::anyHeld())
     {
-        if (perform::twist(value > 0 ? 1 : -1))
+        if (perform::twist(perform::twistDir(value)))
             GH->refresh();
         return;
     }

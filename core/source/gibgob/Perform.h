@@ -25,6 +25,11 @@ bool anyHeld();
 // + / Up (dir > 0) or - / Down (dir < 0) while a button is held: changes the
 // latest held button's effect until it is let go. Returns false if none held.
 bool twist(int dir);
+// the twist of a +/- press: small = 1 step, big = the far twist (2)
+inline int twistDir(int16_t value)
+{
+    return value >= 10 ? 2 : (value <= -10 ? -2 : (value > 0 ? 1 : -1));
+}
 // call from the screens' update(): keeps Drum cut / Melodic cut on the right
 // voices while they are held (chords borrow voices of other tracks)
 void uiTick();

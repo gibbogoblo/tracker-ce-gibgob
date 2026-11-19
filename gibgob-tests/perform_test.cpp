@@ -487,6 +487,45 @@ static void testTwists()
         }
         CHECK(on16 == 5 && on32 == 0, "roll not back on 1/16 after the twist was let go (%d, %d)", on16, on32);
     }
+    // the far twists change the held button's settings, and letting go restores them
+    {
+        Engine e;
+        e.setCell(0, defaultCell(kFxRoll)); // 1/16
+        e.setHeld(1);
+        e.twist(0, 2);
+        CHECK(e.liveCell(0).p[0] == 7, "roll far twist right not 4x faster (%d)", e.liveCell(0).p[0]);
+        e.twist(0, -2);
+        CHECK(e.liveCell(0).p[0] == 4, "roll far twist left not triplets (%d)", e.liveCell(0).p[0]);
+        e.twist(0, 0);
+        CHECK(e.liveCell(0).p[0] == 3, "roll not back to 1/16 (%d)", e.liveCell(0).p[0]);
+        e.setCell(1, defaultCell(kFxStutter));
+        e.setHeld(3);
+        e.twist(1, 2);
+        CHECK(e.liveCell(1).p[0] == 1 && !(e.cellFlags(1) & (kTwistUp | kTwistDown)), "stutter far twist");
+        e.twist(1, -2);
+        CHECK(e.liveCell(1).p[0] == 15, "stutter far twist left");
+        e.setCell(2, defaultCell(kFxDrumCut));
+        e.setHeld(7);
+        e.twist(2, -2);
+        CHECK(e.cellFlags(2) == kTwistCutSlices, "track cut left: slices only");
+        e.twist(2, 2);
+        CHECK((e.cellFlags(2) & (kTwistCutDrums | kTwistCutMelodic)) == (kTwistCutDrums | kTwistCutMelodic), "track cut right: all");
+    }
+    // every effect survives every far twist without clicks or bad values
+    {
+        const Music pad = makePad(140.0f, 6);
+        for (int fx = 1; fx < kFxCount; fx++)
+            for (int dir : { 2, -2 })
+            {
+                Cell cells[8];
+                cells[3] = defaultCell(fx);
+                g_twists = { { 3, 20.0f, dir }, { 3, 30.0f, 0 } };
+                std::vector<float> L, R;
+                run(pad, cells, { { 3, 16.3f, 42.55f } }, L, R);
+                g_twists.clear();
+                CHECK(finite(L) && finite(R), "%s far twist %d: bad values", fxInfo(fx).name, dir);
+            }
+    }
     // stutter starts its pattern from the press, wherever in the bar
     for (int dir : { 0, -1 })
     {

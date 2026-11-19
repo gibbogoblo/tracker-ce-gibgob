@@ -205,14 +205,11 @@ void VisionControl::update()
     const int fBold = fonts[3].handle;
 
     draw::begin(kDrawBudget);
-    if (view->help.active)
+    if (drawHelp(view->help, fRegular, fBold))
     {
         // the help window starts below where the title bar would be
         draw::color(color::kBg);
         draw::rect(0, 0, kScreenW - 1, kScreenTop - 1);
-    }
-    if (drawHelp(view->help, fRegular, fBold))
-    {
         draw::end();
         return;
     }

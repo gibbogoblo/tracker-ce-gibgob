@@ -314,11 +314,24 @@ static void functDown(uint8_t s)
 }
 static void functLeft(uint8_t s)
 {
+    // holding a button: Left is its far twist (like big -)
+    if (pf::anyHeld())
+    {
+        if (s == buttonPress && pf::twist(-2))
+            GPF->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GPF->moveCursor(-1, 0);
 }
 static void functRight(uint8_t s)
 {
+    if (pf::anyHeld())
+    {
+        if (s == buttonPress && pf::twist(2))
+            GPF->refresh();
+        return;
+    }
     if (pressOrRepeat(s))
         GPF->moveCursor(1, 0);
 }
@@ -379,7 +392,7 @@ static void functEncoder(int16_t value)
     // holding a button: +/- twist its effect (until it is let go)
     if (pf::anyHeld())
     {
-        if (pf::twist(value > 0 ? 1 : -1))
+        if (pf::twist(pf::twistDir(value)))
             GPF->refresh();
         return;
     }

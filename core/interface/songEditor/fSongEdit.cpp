@@ -659,7 +659,7 @@ static void functEncoder(int16_t value)
 {
     if (gibgob::perform::anyHeld())
     {
-        gibgob::perform::twist(value > 0 ? 1 : -1);
+        gibgob::perform::twist(gibgob::perform::twistDir(value));
         return;
     }
     if (SE->isBusy)
@@ -772,6 +772,12 @@ static void functDown()
 
 static void functLeft()
 {
+    // GibGob OS: holding a CHIMP OUT effect, Left is its far twist
+    if (gibgob::perform::anyHeld())
+    {
+        gibgob::perform::twist(-2);
+        return;
+    }
     if (SE->isBusy)
     {
         return;
@@ -814,6 +820,11 @@ static void functLeft()
 
 static void functRight()
 {
+    if (gibgob::perform::anyHeld())
+    {
+        gibgob::perform::twist(2);
+        return;
+    }
     if (SE->isBusy)
     {
         return;

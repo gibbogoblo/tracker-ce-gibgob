@@ -522,7 +522,74 @@ void Engine::twist(int i, int dir)
         return v < 0 ? 0 : (v > hi ? hi : v);
     };
     uint8_t f = 0;
-    if (dir != 0)
+    if (dir == 2 || dir == -2)
+    {
+        // the far twists: big + / Right (dir 2) and big - / Left (dir -2)
+        const bool right = dir > 0;
+        switch (c.fx)
+        {
+            case kFxRoll:
+                if (right)
+                    c.p[0] = (uint8_t)clampP(0, c.p[0] + 4); // 4x faster
+                else
+                {
+                    // triplets: 1/8 <> 1/8T, 1/16 <> 1/16T, 1/32 <> 1/32T
+                    static const uint8_t kTrip[8] = { 2, 2, 1, 4, 3, 6, 5, 6 };
+                    c.p[0] = kTrip[c.p[0] & 7];
+                }
+                break;
+            case kFxStutter: c.p[0] = (uint8_t)((c.p[0] + (right ? 1 : 15)) % 16); break; // next / previous pattern
+            case kFxScratch: c.p[0] = (uint8_t)((c.p[0] + (right ? 1 : 15)) % 16); break;
+            case kFxGate:
+            {
+                const int n = in.params[1].count;
+                c.p[1] = (uint8_t)((c.p[1] + (right ? 1 : n - 1)) % n); // next / previous pattern
+                break;
+            }
+            case kFxFilter:
+                if (right)
+                    c.p[2] = (uint8_t)clampP(2, c.p[2] + 4); // more resonance
+                else
+                    c.p[0] ^= 2; // LP <> HP
+                break;
+            case kFxComb: c.p[1] = (uint8_t)clampP(1, c.p[1] + (right ? 3 : -3)); break; // amount
+            case kFxCut: c.p[1] = (uint8_t)clampP(1, c.p[1] + (right ? 3 : -3)); break;  // noise level
+            case kFxDelay:
+                if (right)
+                    c.p[2] = (uint8_t)clampP(2, 9); // feedback up: the echoes hang on
+                else
+                {
+                    // double the time
+                    static const uint8_t kDouble[] = { 2, 4, 4, 5, 6, 6, 6 };
+                    c.p[0] = kDouble[c.p[0] < 7 ? c.p[0] : 4];
+                }
+                break;
+            case kFxReverb: c.p[1] = (uint8_t)clampP(1, c.p[1] + (right ? 4 : -4)); break; // longer / shorter
+            case kFxReverse: c.p[0] = (uint8_t)clampP(0, c.p[0] + (right ? 7 : -7)); break; // a fifth up / down
+            case kFxTalkbox:
+            {
+                const int n = in.params[0].count;
+                c.p[0] = (uint8_t)((c.p[0] + (right ? 1 : n - 1)) % n); // next / previous vowels
+                break;
+            }
+            case kFxVinyl: f |= right ? kTwistBrakeMask : kTwistBrakeSoft; break; // stop now / a long slow stop
+            case kFxHalftime: c.p[0] = (uint8_t)(right ? in.params[0].count - 1 : 0); break; // 3/4 / 1/2
+            case kFxBassKill:
+                if (right)
+                    c.p[0] = (uint8_t)clampP(0, 99); // everything under 400 Hz
+                else
+                    c.p[1] = (uint8_t)(c.p[1] / 2); // half the cut: a dip, not a kill
+                break;
+            case kFxRiser: c.p[1] = (uint8_t)(right ? in.params[1].count - 1 : 0); break; // loudest / quietest
+            case kFxDrumCut:
+            case kFxMelodicCut:
+                // Right: drums and melodic tracks (everything); Left: slice tracks only
+                f |= right ? (uint8_t)(kTwistCutDrums | kTwistCutMelodic) : kTwistCutSlices;
+                break;
+            default: break;
+        }
+    }
+    else if (dir != 0)
     {
         const bool up = dir > 0;
         f = up ? kTwistUp : kTwistDown;
@@ -975,7 +1042,9 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                     }
                     else
                     {
-                        const float brake = (float)(1 << ((vf & kTwistBrakeMask) >> 4));
+                        float brake = (float)(1 << ((vf & kTwistBrakeMask) >> 4));
+                        if (vf & kTwistBrakeSoft)
+                            brake *= 0.5f; // a long, slow stop
                         s.vinylSpeed -= brake / D;
                         if (s.vinylSpeed < 0.0f)
                             s.vinylSpeed = 0.0f;

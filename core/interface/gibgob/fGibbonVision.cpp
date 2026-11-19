@@ -545,14 +545,28 @@ static void functDown(uint8_t state)
 
 static void functLeft(uint8_t state)
 {
-    if (state == buttonPress)
-        GV->moveCursor(-1, 0);
+    if (state != buttonPress)
+        return;
+    if (perform::anyHeld())
+    {
+        if (perform::twist(-2)) // far twist (like big -)
+            GV->refresh();
+        return;
+    }
+    GV->moveCursor(-1, 0);
 }
 
 static void functRight(uint8_t state)
 {
-    if (state == buttonPress)
-        GV->moveCursor(1, 0);
+    if (state != buttonPress)
+        return;
+    if (perform::anyHeld())
+    {
+        if (perform::twist(2)) // far twist (like big +)
+            GV->refresh();
+        return;
+    }
+    GV->moveCursor(1, 0);
 }
 
 static void functMiddle(uint8_t state)
@@ -599,7 +613,7 @@ static void functEncoder(int16_t value)
     // holding a CHIMP OUT effect: +/- twist it while held
     if (perform::anyHeld())
     {
-        if (perform::twist(value > 0 ? 1 : -1))
+        if (perform::twist(perform::twistDir(value)))
             GV->refresh();
         return;
     }

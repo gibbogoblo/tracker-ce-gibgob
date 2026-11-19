@@ -94,6 +94,8 @@ static constexpr uint8_t kTwistBrake1 = 0x10;    // vinyl: brake harder (x2 per 
 static constexpr uint8_t kTwistBrakeMask = 0x30;
 static constexpr uint8_t kTwistCutDrums = 0x01;   // track cut: drum + slice tracks
 static constexpr uint8_t kTwistCutMelodic = 0x02; // track cut: melodic tracks
+static constexpr uint8_t kTwistCutSlices = 0x04;  // track cut: slice tracks only
+static constexpr uint8_t kTwistBrakeSoft = 0x08;  // vinyl: brake half as hard
 static constexpr uint8_t kTwistUp = 0x40;   // + / Up is held (any effect)
 static constexpr uint8_t kTwistDown = 0x80; // - / Down is held (any effect)
 
@@ -121,8 +123,9 @@ class Engine
     // holding: a held button plays from a copy of its settings, which the
     // twists change; letting go forgets the twists
     void setHeld(uint8_t mask);
-    // while + / Up (dir > 0) or - / Down (dir < 0) is held with button i:
-    // one of two variants of its settings; dir == 0 goes back to the settings
+    // while a twist button is held with button i: small + / Up (dir 1),
+    // small - / Down (-1), big + / Right (2) or big - / Left (-2) play a variant
+    // of its settings; dir == 0 goes back to the settings
     void twist(int i, int dir);
     uint8_t heldMask() const { return held; }
     void releaseAll() { held = 0; }
