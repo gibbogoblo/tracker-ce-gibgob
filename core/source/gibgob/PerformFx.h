@@ -49,6 +49,7 @@ enum Fx : uint8_t
     kFxPump,
     kFxDrumCut,    // "Track cut": its twists mute drum / melodic tracks (outside the engine)
     kFxMelodicCut, // old name of the same effect (shown and played as Track cut)
+    kFxBackspin,   // DJ backspin: yanked back, spins down to a stop
     kFxCount
 };
 static constexpr int kFxDelay = kFxDelayCut; // the delay (was "Delay cut")

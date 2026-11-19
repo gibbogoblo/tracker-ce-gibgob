@@ -307,6 +307,8 @@ static void testNoClicks()
             // scratch patterns 5-16: hand moves play up to ~3x speed (pitch, not clicks),
             // and the ones with fader cuts chop like the gate
             float scratchLimit = 0.0f;
+            if (fx == kFxBackspin)
+                scratchLimit = dryMax * 3.6f; // spins back at up to 2.5x speed: pitch, not clicks
             if (fx == kFxScratch && v >= 4)
                 scratchLimit = (v == 4 || v == 9 || v == 10 || v == 11) ? dryMax * 3.6f : dryMax * 6.0f;
             const float md = std::max(maxDiff(L, 0, pad.frames), maxDiff(R, 0, pad.frames));
@@ -526,6 +528,25 @@ static void testTwists()
                 CHECK(finite(L) && finite(R), "%s far twist %d: bad values", fxInfo(fx).name, dir);
             }
     }
+    // backspin: plays backwards (the recording read further and further back),
+    // then silent until let go, then the song again
+    {
+        const Music m = makeJungle(bpm, 4);
+        Cell cells[8];
+        cells[0] = defaultCell(kFxBackspin); // 1/2 bar
+        std::vector<float> L, R;
+        run(m, cells, { { 0, 16.0f, 40.0f } }, L, R);
+        double during = 0, after = 0, back = 0;
+        for (int i = (int)(27.0f * S); i < (int)(39.0f * S); i++)
+            during = std::max(during, (double)std::fabs(L[i]));
+        for (int i = (int)(41.0f * S); i < (int)(47.0f * S); i++)
+            back = std::max(back, (double)std::fabs(L[i] - m.l[i]));
+        for (int i = (int)(17.0f * S); i < (int)(23.0f * S); i++)
+            after += std::fabs(L[i] - m.l[i]);
+        CHECK(during < 0.01, "backspin not silent after spinning down (%.4f)", during);
+        CHECK(back < 0.01, "backspin: not back on the song after letting go (%.4f)", back);
+        CHECK(after > 1.0, "backspin did not change the sound while spinning");
+    }
     // stutter starts its pattern from the press, wherever in the bar
     for (int dir : { 0, -1 })
     {
@@ -607,6 +628,8 @@ static void demos(const std::string& dir)
         { "28_roll_twist_up_then_down.wav", C(kFxRoll, 3), { { 0, 24, 36 } } },
         { "29_reverb_freeze_twist.wav", C(kFxReverb, 2, 6, 7), { { 0, 16, 48 } } },
         { "30_vinyl_stop_and_spin_up.wav", C(kFxVinyl, 1), { { 0, 16, 48 } } },
+        { "34_backspin_half_bar.wav", C(kFxBackspin, 1, 0), { { 0, 30, 44 } } },
+        { "35_backspin_fast_1bar.wav", C(kFxBackspin, 2, 1), { { 0, 30, 52 } } },
     };
     for (Demo& d : list)
     {

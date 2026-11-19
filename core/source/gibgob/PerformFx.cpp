@@ -10,6 +10,7 @@
 #define AUDIO_CORE_RAM
 #endif
 
+#include <math.h>
 #include <new>
 #include <stdio.h>
 #include <string.h>
@@ -111,6 +112,9 @@ const ScratchPattern kScratch[12] = {
 };
 
 const char* const kScratchSpeed[] = { "1/8", "1/16" };
+const char* const kSpinLen[] = { "1/4", "1/2", "1 bar" };
+const float kSpinLen16[] = { 4, 8, 16 };
+const char* const kSpinSpeed[] = { "Normal", "Fast" };
 const char* const kPumpRate[] = { "1/4", "1/8", "1/2" };
 const float kPumpLen16[] = { 4, 2, 8 };
 const char* const kGatePattern[] = { "Straight", "Trance 1", "Trance 2", "Trance 3",
@@ -174,6 +178,8 @@ const FxInfo kInfo[kFxCount] = {
       { { "Rate", N(kPumpRate), 0, kPumpRate, 0 }, { "Depth", 10, 6, nullptr, 1 } } },
     { "Track cut", "TRKCUT", 0, {} },
     { "Track cut", "TRKCUT", 0, {} }, // old "Melodic cut" buttons: the same effect
+    { "Backspin", "BKSPIN", 2,
+      { { "Length", N(kSpinLen), 1, kSpinLen, 0 }, { "Speed", N(kSpinSpeed), 0, kSpinSpeed, 0 } } },
 };
 
 // Stutter patterns: for each 1/16 of the bar, which 1/16 it plays
@@ -245,7 +251,7 @@ inline float lerp(float a, float b, float t)
 inline bool isTimeFx(int fx)
 {
     return fx == kFxRoll || fx == kFxStutter || fx == kFxReverse || fx == kFxVinyl || fx == kFxHalftime ||
-           fx == kFxScratch;
+           fx == kFxScratch || fx == kFxBackspin;
 }
 inline bool isTrackCut(int fx)
 {
@@ -431,6 +437,8 @@ struct Engine::Impl
     int dlyState = 0;
     float dlySend = 0.0f;
     float dryCut = 0.0f; // delay / reverb twist: the mix is muted
+    float revCut = 0.0f; // reverb twist: the mix stops going into the reverb (only the tail)
+    float dlyHpL = 0.0f, dlyHpR = 0.0f; // the delay's low cut (echoes leave the bass alone)
     uint32_t dlyPos = 0;
     float dlySamples = 0.0f;
     float dlyLp[2] = { 0, 0 };
@@ -573,6 +581,15 @@ void Engine::twist(int i, int dir)
                 break;
             }
             case kFxVinyl: f |= right ? kTwistBrakeMask : kTwistBrakeSoft; break; // stop now / a long slow stop
+            case kFxBackspin:
+                if (right)
+                {
+                    c.p[1] = 1; // fast, and faster still
+                    f |= kTwistUp;
+                }
+                else
+                    c.p[0] = (uint8_t)clampP(0, c.p[0] - 1); // shorter
+                break;
             case kFxHalftime: c.p[0] = (uint8_t)(right ? in.params[0].count - 1 : 0); break; // 3/4 / 1/2
             case kFxBassKill:
                 if (right)
@@ -735,6 +752,15 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
         }
         if (fx == kFxHalftime)
             grid = 4; // from the beat
+        if (fx == kFxBackspin)
+        {
+            // a backspin starts right away, from where the record is
+            s.waiting = false;
+            s.anchor = s.now;
+            s.vinylSpeed = 1.0f;
+            s.vinylBack = 0.0f;
+            return;
+        }
         if (fx == kFxVinyl)
         {
             // a vinyl drop starts right away
@@ -1027,6 +1053,43 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                     if (t.back < 0.0f)
                         t.back = 0.0f, t.seg = 0;
                     t.seg = 2;
+                }
+                else if (fx == kFxBackspin)
+                {
+                    // the hand yanks the record back (12 ms), it spins backwards and
+                    // slows to a stop over the length, then stays stopped (silent)
+                    // until let go. Up: faster, Down: twice as long.
+                    const uint8_t bf = flags[s.timeCell];
+                    float L = kSpinLen16[s.timeFx.p[0] < 3 ? s.timeFx.p[0] : 1] * S * ((bf & kTwistDown) ? 2.0f : 1.0f);
+                    if (L < 1.0f)
+                        L = 1.0f;
+                    const float peak = (s.timeFx.p[1] ? 4.0f : 2.5f) * ((bf & kTwistUp) ? 1.6f : 1.0f);
+                    const float el = (float)(s.now - s.anchor);
+                    const float yank = 0.012f * kSr;
+                    float v, g;
+                    if (el < yank)
+                    {
+                        v = 1.0f - (1.0f + peak) * (el / yank);
+                        g = 1.0f;
+                    }
+                    else
+                    {
+                        const float x = (el - yank) / L;
+                        if (x < 1.0f)
+                        {
+                            const float u = 1.0f - x;
+                            v = -peak * u * sqrtf(u);
+                        }
+                        else
+                            v = 0.0f;
+                        const float av = v < 0.0f ? -v : v;
+                        g = av > 0.35f ? 1.0f : av / 0.35f;
+                    }
+                    s.vinylSpeed = v;
+                    s.vinylBack += 1.0f - v;
+                    t.back = s.vinylBack;
+                    t.seg = 4;
+                    t.gain = g;
                 }
                 else if (fx == kFxVinyl)
                 {
@@ -1447,6 +1510,12 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
                 echoL = morph::softClip(echoL * 1.2f) * 0.85f;
                 echoR = morph::softClip(echoR * 1.2f) * 0.85f;
             }
+            // the mix goes in without its lows (about 250 Hz), so on a whole track
+            // the echoes do not muddy the kick and bass
+            s.dlyHpL += (recL - s.dlyHpL) * 0.0350f;
+            s.dlyHpR += (recR - s.dlyHpR) * 0.0350f;
+            recL -= s.dlyHpL;
+            recR -= s.dlyHpR;
             const float inL = recL * s.dlySend + echoL;
             const float inR = recR * s.dlySend + echoR;
             if (s.dlyState != 0 || s.dlyWet > 0.0005f)
@@ -1469,9 +1538,12 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n, const Clock& cloc
             s.dlyPos++;
         }
 
-        // reverb input: the mix while held (also while the mix itself is cut)
-        revInL[i] = own[kKindReverb] ? sendL * s.mix[kKindReverb] : 0.0f;
-        revInR[i] = own[kKindReverb] ? sendR * s.mix[kKindReverb] : 0.0f;
+        // reverb input: the mix while held. Its Up twist cuts the mix AND stops
+        // feeding the reverb, so only the tail rings on (like the delay cut)
+        s.revCut += ((((revFlags & kTwistDryCut) != 0) ? 1.0f : 0.0f) - s.revCut) * 0.01f;
+        const float revFeed = own[kKindReverb] ? s.mix[kKindReverb] * (1.0f - s.revCut) : 0.0f;
+        revInL[i] = sendL * revFeed;
+        revInR[i] = sendR * revFeed;
 
         outL *= 1.0f - s.dryCut;
         outR *= 1.0f - s.dryCut;

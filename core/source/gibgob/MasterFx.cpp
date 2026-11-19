@@ -37,9 +37,9 @@ const float kMonoBassHz[] = { 0.0f, 80.0f, 120.0f, 200.0f };
 
 const ColourInfo kColours[kColourCount] = {
     { "Off", 0, {}, { 0, 0, 0, 0 } },
-    { "Cassette", 4, { { "Tape", 11, nullptr }, { "Hiss", 11, nullptr }, { "Wobble", 11, nullptr }, { "Dropouts", 11, nullptr } },
-      { 5, 3, 4, 1 } },
-    { "Vinyl", 4, { { "Crackle", 11, nullptr }, { "Noise", 11, nullptr }, { "Wow", 11, nullptr }, { "Wear", 11, nullptr } },
+    { "Cassette", 4, { { "Tape", 11, nullptr }, { "Hiss", 11, nullptr }, { "Wobble", 6, nullptr }, { "Dropouts", 6, nullptr } },
+      { 5, 3, 2, 1 } },
+    { "Vinyl", 4, { { "Crackle", 11, nullptr }, { "Noise", 11, nullptr }, { "Wow", 6, nullptr }, { "Wear", 11, nullptr } },
       { 4, 3, 2, 3 } },
     { "Lo-fi", 3, { { "Rate", N(kRates), kRates }, { "Bits", N(kBits), kBits }, { "Filter", N(kLofiFilter), kLofiFilter } },
       { 2, 3, 1, 0 } },
@@ -74,6 +74,28 @@ inline uint32_t xorshift(uint32_t& s)
 inline float noise(uint32_t& s) // -1..1
 {
     return (float)(int32_t)xorshift(s) * (1.0f / 2147483648.0f);
+}
+// a slow random wander in -1..1: a new target every so often, glided to
+struct Wander
+{
+    float v = 0.0f, target = 0.0f;
+    int left = 0;
+    inline float step(uint32_t& rng, int holdSamples)
+    {
+        if (--left <= 0)
+        {
+            target = noise(rng);
+            left = holdSamples / 2 + (int)(xorshift(rng) % (uint32_t)holdSamples);
+        }
+        v += (target - v) * 0.00012f; // about 0.2 s to get there
+        return v;
+    }
+};
+// 0..5 setting: gentle at 1, drastic at 5
+inline float shaped(int p)
+{
+    const float w = (float)p / 5.0f;
+    return w * (0.35f + 0.65f * w);
 }
 inline float lfo(float& phase, float hz)
 {
@@ -215,6 +237,7 @@ struct SlotState
     float* delay = nullptr; // 2 x kDelayFrames
     int write = 0;
     float phase1 = 0.0f, phase2 = 0.0f, drift = 0.0f;
+    Wander wanderA, wanderB; // random wow / wobble
     // cassette dropouts
     float dropEnv = 0.0f, dropTarget = 0.0f;
     int dropLeft = 0;
@@ -331,8 +354,8 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
         {
             case kColourCassette:
             {
-                const float tape = sl.p[0] / 10.0f, hiss = sl.p[1] / 10.0f, wob = sl.p[2] / 10.0f,
-                            drop = sl.p[3] / 10.0f;
+                const float tape = sl.p[0] / 10.0f, hiss = sl.p[1] / 10.0f, wob = shaped(sl.p[2]),
+                            drop = (float)sl.p[3] / 5.0f;
                 const float drive = 1.0f + tape * 0.9f;      // up to about +5.6 dB into the tape
                 const float makeup = 1.0f + tape * 0.12f;    // tape keeps its loudness
                 const float tone = onePole(16000.0f - tape * 11000.0f);
@@ -345,10 +368,10 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
                     {
                         st.delay[st.write] = xl;
                         st.delay[kDelayFrames + st.write] = xr;
-                        st.drift += (noise(st.rng) * 0.02f - st.drift) * 0.0005f;
-                        const float d = 140.0f + wob * (60.0f * lfo(st.phase1, 0.55f + st.drift) +
-                                                        5.0f * lfo(st.phase2, 6.5f)) +
-                                        wob * 30.0f * st.drift;
+                        // wow that wanders in speed and depth, flutter on top, a slow drift
+                        const float wa = st.wanderA.step(st.rng, 30000), wb = st.wanderB.step(st.rng, 22000);
+                        const float d = 300.0f + wob * (180.0f * (0.6f + 0.4f * wb) * lfo(st.phase1, 0.5f * (1.0f + 0.5f * wa)) +
+                                                         8.0f * (0.7f + 0.3f * wb) * lfo(st.phase2, 6.5f) + 60.0f * wa);
                         const float pos = (float)st.write - d;
                         int i0 = (int)floorf(pos);
                         const float fr = pos - (float)i0;
@@ -366,10 +389,12 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
                     // dropouts: now and then the level dips for a moment
                     if (drop > 0.0f)
                     {
-                        if (st.dropLeft <= 0 && (xorshift(st.rng) & 0xFFFFFF) < (uint32_t)(drop * 0.5f * 16777216.0f / kSr))
+                        // more often, deeper and longer as the setting goes up (5: about 2 a second)
+                        const float perSecond = 0.15f + 1.8f * drop * drop;
+                        if (st.dropLeft <= 0 && (xorshift(st.rng) & 0xFFFFFF) < (uint32_t)(perSecond * 16777216.0f / kSr))
                         {
-                            st.dropLeft = (int)(kSr * (0.04f + 0.11f * ((xorshift(st.rng) & 0xFFFF) / 65536.0f)));
-                            st.dropTarget = 0.3f + 0.4f * drop;
+                            st.dropLeft = (int)(kSr * (0.04f + 0.08f * ((xorshift(st.rng) & 0xFFFF) / 65536.0f) + 0.15f * drop));
+                            st.dropTarget = 0.3f + 0.6f * drop;
                         }
                         const float target = st.dropLeft > 0 ? st.dropTarget : 0.0f;
                         st.dropEnv += (target - st.dropEnv) * 0.005f;
@@ -397,7 +422,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
             }
             case kColourVinyl:
             {
-                const float crackle = sl.p[0] / 10.0f, nz = sl.p[1] / 10.0f, wow = sl.p[2] / 10.0f,
+                const float crackle = sl.p[0] / 10.0f, nz = sl.p[1] / 10.0f, wow = shaped(sl.p[2]),
                             wear = sl.p[3] / 10.0f;
                 const float tone = onePole(18000.0f - wear * 12000.0f);
                 const float hp = onePole(15.0f + wear * 45.0f); // up to 60 Hz at full wear
@@ -412,8 +437,10 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
                     {
                         st.delay[st.write] = xl;
                         st.delay[kDelayFrames + st.write] = xr;
-                        // 33 rpm: a slow wobble, a little off-centre
-                        const float d = 160.0f + wow * (90.0f * lfo(st.phase1, 0.55f) + 25.0f * sinf(4.0f * kPi * st.phase1));
+                        // 33 rpm, off-centre and warped: the speed and depth wander
+                        const float wa = st.wanderA.step(st.rng, 26000), wb = st.wanderB.step(st.rng, 40000);
+                        const float d = 340.0f + wow * (220.0f * (0.7f + 0.3f * wb) * lfo(st.phase1, 0.55f * (1.0f + 0.25f * wa)) +
+                                                         40.0f * sinf(4.0f * kPi * st.phase1) + 50.0f * wa);
                         const float pos = (float)st.write - d;
                         int i0 = (int)floorf(pos);
                         const float fr = pos - (float)i0;
@@ -501,16 +528,29 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
                 const float width = (float)(sl.p[0] < 11 ? sl.p[0] : 5) * 0.2f;
                 const float c = onePole(kMonoBassHz[sl.p[1] < 4 ? sl.p[1] : 0]);
                 const bool mono = sl.p[1] > 0;
+                // wider than 100%: most Mini samples are mono (no sides to widen), so
+                // the sides also get a short, bass-free echo of the middle (14 ms)
+                const float spread = width > 1.0f ? (width - 1.0f) * 0.7f : 0.0f;
+                const float hp = onePole(350.0f);
+                const int haas = 617;
                 for (int i = 0; i < n; i++)
                 {
                     const float m = 0.5f * (l[i] + r[i]);
                     float sd = 0.5f * (l[i] - r[i]);
+                    sd *= width;
+                    if (st.delay && spread > 0.0f)
+                    {
+                        st.delay[st.write] = m;
+                        const float late = st.delay[(st.write - haas) & kDelayMask];
+                        st.write = (st.write + 1) & kDelayMask;
+                        st.noiseLp += (late - st.noiseLp) * hp;
+                        sd += (late - st.noiseLp) * spread;
+                    }
                     if (mono)
                     {
                         st.sideLp += (sd - st.sideLp) * c;
                         sd -= st.sideLp; // the bass in the middle
                     }
-                    sd *= width;
                     l[i] = m + sd;
                     r[i] = m - sd;
                 }

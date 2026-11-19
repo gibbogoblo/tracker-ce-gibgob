@@ -32,6 +32,7 @@ uint32_t performFxColor(int fx)
         case kFxPump: return 0x6FD69A;
         case kFxDrumCut: return 0xB85548;
         case kFxMelodicCut: return 0xB85548;
+        case kFxBackspin: return 0xC94FD6;
         default: return 0x3C3C42;
     }
 }

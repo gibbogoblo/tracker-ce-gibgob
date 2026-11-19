@@ -292,6 +292,49 @@ int main(int argc, char** argv)
         CHECK(side < 0.2, "mono bass left 50 Hz in the sides (%.3f)", side);
     }
 
+    // 4b. width over 100% widens a mono mix too
+    {
+        Music mono = loop;
+        for (size_t i = 0; i < mono.l.size(); i++)
+            mono.r[i] = mono.l[i];
+        std::vector<float> L, R;
+        run(mono, colour(kColourWidth, 10, 0), L, R); // 200%
+        double side = 0;
+        for (size_t i = 0; i < L.size(); i++)
+            side += 0.25 * (L[i] - R[i]) * (L[i] - R[i]);
+        side = std::sqrt(side / L.size());
+        CHECK(side > 0.02, "width 200%% did nothing to a mono mix (side %.4f)", side);
+    }
+    // 4c. wow, wobble at 5: the pitch really moves, and never jumps
+    for (int type : { (int)kColourVinyl, (int)kColourCassette })
+    {
+        Music tone;
+        tone.bpm = 120;
+        const int n = 4 * 44100;
+        tone.l.resize(n);
+        tone.r.resize(n);
+        for (int i = 0; i < n; i++)
+            tone.l[i] = tone.r[i] = 0.5f * sinf(2 * kPi * 1000.0f * i / kSr);
+        Settings s = type == kColourVinyl ? colour(kColourVinyl, 0, 0, 5, 0) : colour(kColourCassette, 0, 0, 5, 0);
+        std::vector<float> L, R;
+        run(tone, s, L, R);
+        // zero crossings per 0.1 s: the pitch moves by more than 1%
+        double lo = 1e9, hi = 0, maxJump = 0;
+        for (int w = 5; w < 39; w++)
+        {
+            int z = 0;
+            for (int i = w * 4410 + 1; i < (w + 1) * 4410; i++)
+                if ((L[i - 1] < 0) != (L[i] < 0))
+                    z++;
+            lo = std::min(lo, (double)z);
+            hi = std::max(hi, (double)z);
+        }
+        for (int i = 44100; i < n; i++)
+            maxJump = std::max(maxJump, (double)std::fabs(L[i] - L[i - 1]));
+        CHECK(hi / lo > 1.01, "%s at 5: pitch barely moves (%.0f..%.0f)", colourInfo(type).name, lo, hi);
+        CHECK(maxJump < 0.12, "%s at 5: jumps (%.3f)", colourInfo(type).name, maxJump);
+    }
+
     // 5. lo-fi at 4 bits: only 16 levels (before its filter)
     {
         std::vector<float> L, R;
@@ -450,9 +493,9 @@ int main(int argc, char** argv)
         std::vector<Demo> demos;
         demos.push_back({ "m00_dry.wav", Settings() });
         demos.push_back({ "m01_cassette.wav", colour(kColourCassette) });
-        demos.push_back({ "m02_cassette_worn.wav", colour(kColourCassette, 9, 7, 9, 6) });
+        demos.push_back({ "m02_cassette_worn.wav", colour(kColourCassette, 9, 7, 5, 4) });
         demos.push_back({ "m03_vinyl.wav", colour(kColourVinyl) });
-        demos.push_back({ "m04_vinyl_old.wav", colour(kColourVinyl, 9, 8, 6, 9) });
+        demos.push_back({ "m04_vinyl_old.wav", colour(kColourVinyl, 9, 8, 5, 9) });
         demos.push_back({ "m05_lofi_12bit_22k.wav", colour(kColourLofi, 2, 1, 1) });
         demos.push_back({ "m06_lofi_8bit_11k.wav", colour(kColourLofi, 4, 3, 2) });
         demos.push_back({ "m07_width_wide_monobass.wav", colour(kColourWidth, 9, 2) });
@@ -473,7 +516,7 @@ int main(int argc, char** argv)
         duck.duckDepth = 8;
         duck.duckRelease = 2;
         demos.push_back({ "m09_duck_quarter.wav", duck });
-        Settings combo = colour(kColourCassette, 6, 4, 4, 1);
+        Settings combo = colour(kColourCassette, 6, 4, 2, 1);
         combo.slot[1] = defaultSlot(kColourLofi);
         combo.duckOn = true;
         combo.duckDepth = 7;
