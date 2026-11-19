@@ -27,6 +27,21 @@ enum Colour : uint8_t
     kColourCount
 };
 
+enum GlueStyle : uint8_t
+{
+    kGlueHipHop = 0, // slow attack, long release, 4:1: the hits punch through, the loop thickens
+    kGlueGarage,     // medium attack, fast release, 2:1: light, keeps the swing bouncing
+    kGlueJungle,     // fast attack, very fast release, 6:1: slammed breaks
+    kGlueClean,      // all-round, 2:1
+    kGlueStyleCount
+};
+struct GlueStyleInfo
+{
+    const char* name;
+    float attackMs, releaseMs, ratio, detectorHpHz;
+};
+const GlueStyleInfo& glueStyleInfo(int style);
+
 static constexpr int kSlots = 2;
 static constexpr int kSlotParams = 4;
 
@@ -47,8 +62,7 @@ struct Settings
     bool duckNoise = false;  // the colour effects' noise pumps too
     // glue compressor
     uint8_t glue = 0;        // 0 off .. 10
-    uint8_t glueAttack = 0;  // 0 fast, 1 slow (lets the hits through: punch)
-    uint8_t glueRelease = 1; // 0 fast, 1 auto (slow)
+    uint8_t glueStyle = 0;   // GlueStyle: the preset (attack, release, ratio, detector high-pass)
     Slot slot[kSlots];
 
     bool operator==(const Settings& o) const;

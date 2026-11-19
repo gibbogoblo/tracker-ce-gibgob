@@ -9,6 +9,7 @@
 #include "core/songTimer.h"
 #include "Platform.h"
 #include "fileManager.h"
+#include "gibgob/Master.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/Perform.h"
 #include "gibgob/PerformControl.h"
@@ -200,6 +201,14 @@ void cGibGobHome::welcomeMove(int d)
 void cGibGobHome::welcomeChoose()
 {
     mtProject.values.globalTempo = (float)kWelcomeBpm[view.welcome.choice];
+    // the glue preset follows the genre (Hip hop / Garage / Jungle); the glue stays off
+    {
+        master::Settings ms = master::songSettings();
+        ms.glueStyle = (uint8_t)(view.welcome.choice == 0   ? master::kGlueHipHop
+                                 : view.welcome.choice == 1 ? master::kGlueGarage
+                                                            : master::kGlueJungle);
+        master::setSongSettings(ms);
+    }
     newFileManager.setProjectStructChanged();
     view.welcome.active = false;
     setDefaultScreenFunct();

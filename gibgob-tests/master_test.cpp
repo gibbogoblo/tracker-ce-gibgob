@@ -202,8 +202,7 @@ int main(int argc, char** argv)
             s.duckShape = (uint8_t)rnd(2);
             s.duckNoise = rnd(2);
             s.glue = (uint8_t)rnd(11);
-            s.glueAttack = (uint8_t)rnd(2);
-            s.glueRelease = (uint8_t)rnd(2);
+            s.glueStyle = (uint8_t)rnd(kGlueStyleCount);
             for (int k = 0; k < kSlots; k++)
             {
                 s.slot[k] = defaultSlot(rnd(kColourCount));
@@ -353,6 +352,7 @@ int main(int argc, char** argv)
         }
         Settings s;
         s.glue = 10;
+        s.glueStyle = kGlueGarage; // fast release: back up within the quiet half
         std::vector<float> L, R;
         run(m, s, L, R);
         double loud = 0, quiet = 0;
@@ -363,6 +363,58 @@ int main(int argc, char** argv)
         CHECK(loud < 0.7 && loud > 0.2, "glue did not bring the loud part down (%.3f)", loud);
         CHECK(quiet > 0.05, "glue lost the quiet part (%.3f)", quiet);
         CHECK(finite(L), "glue bad values");
+    }
+
+    // 8. glue presets: Jungle squashes hardest, Hip hop lets the hit's front through
+    {
+        Music m;
+        m.bpm = 120;
+        const int gap = 66150; // 1.5 s: every preset has let go before the next hit
+        const int n = 4 * gap;
+        m.l.assign(n, 0.0f);
+        m.r.assign(n, 0.0f);
+        // a loud 1 kHz hit decaying over 100 ms
+        for (int at = 0; at < n; at += gap)
+            for (int i = 0; i < 4410 && at + i < n; i++)
+                m.l[at + i] = m.r[at + i] = 0.9f * sinf(2 * kPi * 1000.0f * i / kSr) * expf(-i / 2000.0f);
+        double front[kGlueStyleCount], body[kGlueStyleCount];
+        for (int st = 0; st < kGlueStyleCount; st++)
+        {
+            Settings s;
+            s.glue = 8;
+            s.glueStyle = (uint8_t)st;
+            std::vector<float> L, R;
+            run(m, s, L, R);
+            CHECK(finite(L), "glue %s bad values", glueStyleInfo(st).name);
+            // the last hit: its first 2 ms, and 20-60 ms in
+            const int at = 3 * gap;
+            front[st] = 0;
+            body[st] = 0;
+            for (int i = 0; i < 88; i++)
+                front[st] = std::max(front[st], (double)std::fabs(L[at + i]));
+            for (int i = 882; i < 2646; i++)
+                body[st] = std::max(body[st], (double)std::fabs(L[at + i]) / (0.9 * std::exp(-i / 2000.0)));
+        }
+        CHECK(body[kGlueJungle] < body[kGlueGarage], "jungle not squashing harder than garage (%.2f %.2f)", body[kGlueJungle], body[kGlueGarage]);
+        // (jungle even gets more make-up gain, so a louder front is the slow attack at work)
+        CHECK(front[kGlueHipHop] > front[kGlueJungle] * 1.1, "hip hop does not keep more of the hit's front than jungle (%.2f %.2f)",
+              front[kGlueHipHop], front[kGlueJungle]);
+        // the detector's high-pass: a deep sub alone barely moves the hip hop glue
+        Music sub;
+        sub.bpm = 120;
+        sub.l.resize(n);
+        sub.r.resize(n);
+        for (int i = 0; i < n; i++)
+            sub.l[i] = sub.r[i] = 0.8f * sinf(2 * kPi * 40.0f * i / kSr);
+        Settings hh;
+        hh.glue = 8;
+        hh.glueStyle = kGlueHipHop;
+        Settings cl = hh;
+        cl.glueStyle = kGlueClean;
+        std::vector<float> L1, R1, L2, R2;
+        run(sub, hh, L1, R1);
+        run(sub, cl, L2, R2);
+        CHECK(rms(L1) > rms(L2) * 1.2, "hip hop glue pumps on the sub (%.3f vs clean %.3f)", rms(L1), rms(L2));
     }
 
     // demos
@@ -407,6 +459,15 @@ int main(int argc, char** argv)
         Settings glue;
         glue.glue = 7;
         demos.push_back({ "m08_glue.wav", glue });
+        for (int st = 0; st < kGlueStyleCount; st++)
+        {
+            static const char* const kFiles[kGlueStyleCount] = { "m08a_glue_hiphop.wav", "m08b_glue_garage.wav",
+                                                                 "m08c_glue_jungle.wav", "m08d_glue_clean.wav" };
+            Settings g;
+            g.glue = 7;
+            g.glueStyle = (uint8_t)st;
+            demos.push_back({ kFiles[st], g });
+        }
         Settings duck;
         duck.duckOn = true;
         duck.duckDepth = 8;

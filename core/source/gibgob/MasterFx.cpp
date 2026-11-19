@@ -84,6 +84,18 @@ inline float lfo(float& phase, float hz)
 }
 } // namespace
 
+const GlueStyleInfo& glueStyleInfo(int style)
+{
+    // attack, release (ms), ratio, the detector's high-pass (so the bass does not pump the mix)
+    static const GlueStyleInfo kStyles[kGlueStyleCount] = {
+        { "Hip hop", 30.0f, 400.0f, 4.0f, 90.0f },
+        { "Garage", 10.0f, 100.0f, 2.0f, 60.0f },
+        { "Jungle", 1.0f, 60.0f, 6.0f, 120.0f },
+        { "Clean", 10.0f, 300.0f, 2.0f, 0.0f },
+    };
+    return kStyles[(style >= 0 && style < kGlueStyleCount) ? style : 0];
+}
+
 const ColourInfo& colourInfo(int type)
 {
     return kColours[(type >= 0 && type < kColourCount) ? type : 0];
@@ -156,8 +168,7 @@ void pack(const Settings& s, uint8_t out[kPackedBytes])
     w.put(s.duckShape & 1, 1);
     w.put(s.duckNoise ? 1 : 0, 1);
     w.put(s.glue & 15, 4);
-    w.put(s.glueAttack & 1, 1);
-    w.put(s.glueRelease & 1, 1);
+    w.put(s.glueStyle & 3, 2);
     for (int i = 0; i < kSlots; i++)
     {
         w.put(s.slot[i].type & 7, 3);
@@ -177,8 +188,7 @@ Settings unpack(const uint8_t in[kPackedBytes])
     s.duckShape = (uint8_t)r.get(1);
     s.duckNoise = r.get(1) != 0;
     s.glue = limit(r.get(4), 11, 0);
-    s.glueAttack = (uint8_t)r.get(1);
-    s.glueRelease = (uint8_t)r.get(1);
+    s.glueStyle = (uint8_t)r.get(2);
     for (int i = 0; i < kSlots; i++)
     {
         const uint32_t type = r.get(3);
@@ -230,6 +240,7 @@ struct Engine::Impl
     SlotState slot[kSlots];
     uint8_t lastType[kSlots] = { 0xFF, 0xFF };
     float glueEnv = 0.0f; // detector (linear)
+    float glueLpL = 0.0f, glueLpR = 0.0f; // the detector's high-pass
     float glueGain = 1.0f;
 };
 
@@ -509,13 +520,16 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
         }
     }
 
-    // glue: a gentle bus compressor (3:1), the limiter after it catches the rest
+    // glue: a bus compressor with a genre preset; the limiter after it catches the rest
     if (cfg.glue > 0)
     {
+        const GlueStyleInfo& gs = glueStyleInfo(cfg.glueStyle);
         const float thresholdDb = -2.4f * (float)cfg.glue;
-        const float makeupDb = -thresholdDb * 0.35f;
-        const float att = 1.0f - expf(-1.0f / (kSr * (cfg.glueAttack ? 0.015f : 0.001f)));
-        const float rel = 1.0f - expf(-1.0f / (kSr * (cfg.glueRelease ? 0.30f : 0.08f)));
+        const float slope = 1.0f - 1.0f / gs.ratio;
+        const float makeupDb = -thresholdDb * slope * 0.4f;
+        const float att = 1.0f - expf(-1.0f / (kSr * gs.attackMs * 0.001f));
+        const float rel = 1.0f - expf(-1.0f / (kSr * gs.releaseMs * 0.001f));
+        const float hp = onePole(gs.detectorHpHz);
         float grMax = 0.0f;
         // the detector runs every sample; the gain is worked out every 16
         // samples and slides there (log and pow are too slow per sample)
@@ -524,7 +538,16 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
             const int i1 = i0 + 16 < n ? i0 + 16 : n;
             for (int i = i0; i < i1; i++)
             {
-                const float x = fabsf(l[i]) > fabsf(r[i]) ? fabsf(l[i]) : fabsf(r[i]);
+                // the detector hears the mix without its lowest bass
+                float dl = l[i], dr = r[i];
+                if (hp < 1.0f)
+                {
+                    s.glueLpL += (dl - s.glueLpL) * hp;
+                    s.glueLpR += (dr - s.glueLpR) * hp;
+                    dl -= s.glueLpL;
+                    dr -= s.glueLpR;
+                }
+                const float x = fabsf(dl) > fabsf(dr) ? fabsf(dl) : fabsf(dr);
                 s.glueEnv += (x - s.glueEnv) * (x > s.glueEnv ? att : rel);
             }
             const float envDb = 20.0f * log10f(s.glueEnv + 1e-9f);
@@ -534,7 +557,7 @@ AUDIO_CORE_RAM void Engine::process(float* l, float* r, int n)
             {
                 // 6 dB soft knee
                 over = over < 3.0f ? (over + 3.0f) * (over + 3.0f) / 12.0f : over;
-                grDb = over * (1.0f - 1.0f / 3.0f);
+                grDb = over * slope;
             }
             const float target = powf(10.0f, (makeupDb - grDb) / 20.0f);
             const float step = (target - s.glueGain) / (float)(i1 - i0);

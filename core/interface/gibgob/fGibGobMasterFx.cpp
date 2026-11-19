@@ -155,7 +155,7 @@ int cGibGobMasterFx::rowsIn(int column) const
     if (column == kColDuck)
         return 6;
     if (column == kColGlue)
-        return 3;
+        return 2;
     const ms::Settings s = editedSettings(editPattern);
     const ms::Slot& sl = s.slot[column == kColSlot1 ? 0 : 1];
     return 1 + ms::colourInfo(sl.type).paramCount;
@@ -204,8 +204,7 @@ void cGibGobMasterFx::refresh()
     else
         snprintf(num, sizeof(num), "%d", s.glue);
     put(0, kColGlue, "Amount", num);
-    put(1, kColGlue, "Attack", s.glueAttack ? "Punch" : "Fast");
-    put(2, kColGlue, "Release", s.glueRelease ? "Auto" : "Fast");
+    put(1, kColGlue, "Preset", ms::glueStyleInfo(s.glueStyle).name);
     // colour slots
     for (int k = 0; k < ms::kSlots; k++)
     {
@@ -293,8 +292,7 @@ void cGibGobMasterFx::changeValue(int delta, bool big)
         switch (row)
         {
             case 0: num(s.glue, 10); break;
-            case 1: s.glueAttack ^= 1; break;
-            case 2: s.glueRelease ^= 1; break;
+            case 1: cycle(s.glueStyle, ms::kGlueStyleCount); break;
         }
     }
     else
