@@ -6,7 +6,7 @@
 //
 // A synth opts in by having, in its 3x3 editor layout (layout33, not used by
 // the Tracker's stock editor), a section whose short name is "GibGob". Its
-// parameters are the Main page. The other sections fill the pages by short
+// parameters are not shown (Main is the engine list). The other sections fill the pages by short
 // name: "Osc", "Filter", "Amp", "LFO", "Env", "FX". Each subsection is one
 // column on its page; parameter names give the pictures:
 //   Attack + Decay + Sustain + Release : an envelope (any page)
@@ -113,6 +113,9 @@ struct SynthModel
 {
     bool valid; // the synth has the GibGob layout
     PageModel page[kPageCount];
+    // Main page (set by the screen, not from the synth): the engine list
+    uint8_t engineCount;
+    uint8_t engineFirst; // first row shown
 };
 
 void clearModel(SynthModel& m);
@@ -199,11 +202,11 @@ bool buildModel(const Meta& meta, SynthModel& out)
 // ---- where things go on the screen ----
 enum Style : uint8_t
 {
-    kStyleMain = 0, // output picture, signal path, 12 boxes
+    kStyleMain = 0, // the engine list | the track's sound settings
     kStyleGraphList, // one column with a picture: big picture left, list right
     kStyleEnvList,   // an envelope + a list: big envelope left, A D S R under it
     kStyleColumns,   // up to 3 columns side by side
-    kStylePatch,     // patch actions | the track's sound settings
+    kStylePatch,     // load / save | init / Go Ape
 };
 
 enum CellKind : uint8_t
@@ -230,8 +233,18 @@ enum PatchItem : int16_t
     kItemReverb,
     kItemDelay,
 };
-static constexpr int kPatchActions = 6;  // Load .. Ape amount (left column)
-static constexpr int kPatchSettings = 6; // Engine .. Delay send (right column)
+// Main page: the engines on the card, one row each (kItemEngineFirst + its index)
+static constexpr int16_t kItemEngineFirst = -200;
+static constexpr int kMaxEngines = 64;
+static constexpr int kEngineRows = 7; // rows shown at once (the list scrolls)
+inline bool isEngineItem(int id)
+{
+    return id >= kItemEngineFirst && id < kItemEngineFirst + kMaxEngines;
+}
+inline bool isPatchItem(int id)
+{
+    return (id >= kItemLoad && id <= kItemDelay) || isEngineItem(id);
+}
 
 struct CellPos
 {

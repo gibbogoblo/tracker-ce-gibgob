@@ -17,6 +17,7 @@ struct SynthCellText
     char value[16];
     int8_t fill; // 0..100 how full the bar is, -1: no bar
     bool bipolar;  // the bar grows from the middle
+    bool lit;      // shown lit (the engine in use)
 };
 
 // what a panel's picture shows (all 0..1 unless noted)
@@ -49,8 +50,9 @@ struct SynthView
     char headerInfo[40];  // "// TRK 05 // HAIRY LEAD"
     char pageText[20];    // "01/08 MAIN"
     char title[28];       // left of the quick boxes
-    char pathText[48];    // Main page: "MAMA + BABY + PAPA > LP 24 > ADSR > FX"
-    char hint[64];        // a line of help under the content (Main / Amp)
+    char pathText[48];    // Main page: the first status line
+    char hint[64];        // Main page: the second status line; others: a line of help
+    bool warn = false;    // the status / hint is a warning (pink)
     ParamBox quick[4];
     bool quickActive[4];
 

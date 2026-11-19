@@ -303,17 +303,12 @@ void setQuick(ViewLayout& l)
     for (int k = 0; k < 4; k++)
         l.quick[k] = -1;
     int n = 0;
-    if (l.style == kStyleMain)
+    if (l.style == kStyleMain || l.style == kStylePatch)
     {
-        for (int i = 0; i < l.cellCount && n < 4; i++)
-            l.quick[n++] = (int8_t)i;
-        return;
-    }
-    if (l.style == kStylePatch)
-    {
-        const int16_t want[4] = { kItemGain, kItemPan, kItemReverb, kItemDelay };
+        const int16_t mainWant[4] = { kItemGain, kItemPan, kItemReverb, kItemDelay };
+        const int16_t patchWant[4] = { kItemLoad, kItemSave, kItemInit, kItemGoApe };
         for (int k = 0; k < 4; k++)
-            l.quick[k] = (int8_t)cellOf(l, want[k]);
+            l.quick[k] = (int8_t)cellOf(l, l.style == kStyleMain ? mainWant[k] : patchWant[k]);
         return;
     }
     // an envelope on the page: its A / D / S / R
@@ -368,36 +363,34 @@ void layoutPage(const SynthModel& m, int page, int view, ViewLayout& out)
         out.style = kStylePatch;
         const int p0 = b.panel(10, top, 385, bottom - top, kGraphNone, -1);
         const int p1 = b.panel(405, top, 385, bottom - top, kGraphNone, -1);
-        const int16_t left[kPatchActions] = { kItemLoad, kItemSave, kItemSaveAs, kItemInit, kItemGoApe, kItemApeAmount };
-        const int16_t right[kPatchSettings] = { kItemEngine, kItemVoices, kItemGain, kItemPan, kItemReverb, kItemDelay };
-        for (int k = 0; k < kPatchActions; k++)
-            b.cell(20, top + 34 + k * 50, 365, 42, left[k] == kItemApeAmount ? kCellRow : kCellAction, p0, left[k],
+        const int16_t left[3] = { kItemLoad, kItemSave, kItemSaveAs };
+        const int16_t right[3] = { kItemInit, kItemGoApe, kItemApeAmount };
+        for (int k = 0; k < 3; k++)
+            b.cell(20, top + 40 + k * 60, 365, 48, kCellAction, p0, left[k], kRoleNone, false);
+        for (int k = 0; k < 3; k++)
+            b.cell(415, top + 40 + k * 60, 365, 48, right[k] == kItemApeAmount ? kCellRow : kCellAction, p1, right[k],
                    kRoleNone, false);
-        for (int k = 0; k < kPatchSettings; k++)
-            b.cell(415, top + 34 + k * 50, 365, 42, kCellRow, p1, right[k], kRoleNone, false);
+        setQuick(out);
+        return;
+    }
+
+    if (page == kPageMain)
+    {
+        // the engines on the card | voices, gain, pan, sends
+        out.style = kStyleMain;
+        const int p0 = b.panel(10, top, 385, bottom - top, kGraphNone, -1);
+        const int p1 = b.panel(405, top, 385, bottom - top, kGraphNone, -1);
+        const int first = m.engineFirst;
+        for (int k = 0; k < kEngineRows && first + k < m.engineCount && first + k < kMaxEngines; k++)
+            b.cell(20, top + 34 + k * 44, 365, 38, kCellAction, p0, kItemEngineFirst + first + k, kRoleNone, false);
+        const int16_t right[5] = { kItemVoices, kItemGain, kItemPan, kItemReverb, kItemDelay };
+        for (int k = 0; k < 5; k++)
+            b.cell(415, top + 34 + k * 46, 365, 38, kCellRow, p1, right[k], kRoleNone, false);
         setQuick(out);
         return;
     }
 
     const PageModel& p = m.page[page];
-    if (page == kPageMain)
-    {
-        out.style = kStyleMain;
-        // the boxes on the left (text left of x = 512 costs the display half),
-        // the output picture and the signal path on the right
-        const int p0 = b.panel(490, top, 300, 148, kGraphOsc, -1);
-        b.graphArea(p0, 500, top + 26, 280, 112);
-        b.panel(490, top + 158, 300, 104, kGraphNone, -1);
-        if (p.groupCount > 0)
-        {
-            const Group& g = p.groups[0];
-            for (int i = 0; i < g.count && i < kMaxMain; i++)
-                b.cell(10 + (i % 3) * 158, top + (i / 3) * 60, 150, 52, kCellGrid, 0, g.id[i], g.role[i], g.isEnum[i]);
-        }
-        setQuick(out);
-        return;
-    }
-
     if (p.viewCount == 0)
     {
         out.style = kStyleColumns;

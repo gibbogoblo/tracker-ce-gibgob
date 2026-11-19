@@ -442,20 +442,22 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
         }
         case kCellAction:
         {
-            if (sel)
-            {
+            // lit: the engine in use (lime)
+            if (t.lit)
+                draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kLime, under);
+            else if (sel)
                 draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kRowSel, under);
-                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
-            }
             else
             {
                 draw::color(y2k::kRow);
                 draw::rect(c.x, c.y, x2, y2);
             }
-            draw::color(sel ? y2k::kCyan : y2k::kText);
+            if (sel)
+                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
+            draw::color(t.lit ? y2k::kDark : (sel ? y2k::kCyan : y2k::kText));
             fit(label, sizeof(label), t.label, 18);
             draw::text(c.x + 14, c.y + c.h / 2, f.bold, OPT_CENTERY, label);
-            draw::color(y2k::kDim);
+            draw::color(t.lit ? y2k::kDark : y2k::kDim);
             fit(value, sizeof(value), t.value, 15);
             draw::text(x2 - 12, c.y + c.h / 2, f.small, OPT_CENTERY | OPT_RIGHTX, value);
             break;
@@ -493,27 +495,14 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
 
 void drawMainExtras(const SynthView& v, const Fonts& f)
 {
-    // the signal path panel: four blocks in a row, then the path in words
+    // two lines of status under the sound settings (voices free, memory)
     const PanelPos& p = v.layout.panel[1];
-    static const char* const kBlock[4] = { "OSC", "FILTER", "AMP", "FX" };
-    for (int k = 0; k < 4; k++)
-    {
-        const int x = p.x + 12 + k * 72;
-        draw::color(y2k::kAccent[k]);
-        draw::rect(x, p.y + 32, x + 60, p.y + 64);
-        if (k < 3)
-        {
-            draw::color(y2k::kDim);
-            draw::rect(x + 61, p.y + 48, x + 71, p.y + 49);
-        }
-    }
-    draw::color(y2k::kDark);
-    for (int k = 0; k < 4; k++)
-        draw::text(p.x + 42 + k * 72, p.y + 48, f.small, OPT_CENTER, kBlock[k]);
-    draw::color(y2k::kDim);
-    char path[36];
-    fit(path, sizeof(path), v.pathText, (p.w - 24) / 9);
-    draw::text(p.x + 12, p.y + 84, f.small, OPT_CENTERY, path);
+    char line[40];
+    draw::color(v.warn ? y2k::kPink : y2k::kDim);
+    fit(line, sizeof(line), v.pathText, (p.w - 24) / 9);
+    draw::text(p.x + 14, p.y + p.h - 52, f.small, OPT_CENTERY, line);
+    fit(line, sizeof(line), v.hint, (p.w - 24) / 9);
+    draw::text(p.x + 14, p.y + p.h - 28, f.small, OPT_CENTERY, line);
 }
 
 void drawQuickBoxes(const SynthView& v, const Fonts& f)
@@ -631,10 +620,10 @@ void SynthEditControl::update()
         drawMainExtras(v, f);
     for (int i = 0; i < v.layout.cellCount; i++)
         drawCell(v, i, f);
-    if (v.hint[0])
+    if (v.hint[0] && v.layout.style != kStyleMain)
     {
-        draw::color(y2k::kDim);
-        draw::text(v.layout.style == kStyleMain ? 12 : 24, v.layout.style == kStyleMain ? 330 : 352, f.small, OPT_CENTERY, v.hint);
+        draw::color(v.warn ? y2k::kPink : y2k::kDim);
+        draw::text(24, 352, f.small, OPT_CENTERY, v.hint);
     }
 
     if (v.message[0])

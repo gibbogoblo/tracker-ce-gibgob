@@ -16,6 +16,7 @@
 
 #if GUI_HANDLE_SYNTH
 #include "PolySynth/Patch.h"
+#include "PolySynth/PsynStatus.h"
 #include "elapsedMillis.h"
 #include "fileBrowser/GlobalFileBrowser.h"
 #include "fileManager.h"
@@ -110,7 +111,8 @@ int s_view[kPageCount];     // which set of columns each page shows
 int s_cursor[kPageCount];   // the cursor of each page
 int s_quickBack[kPageCount]; // where a colour button jumped from (-1: none)
 int s_apeAmount = 30;       // percent
-int s_pendingEngine = -1;   // Engine row: picked, not yet applied
+int s_pendingEngine = -1;   // Main page: the engine picked, not yet applied
+int s_engineFirst = 0;      // Main page: the first engine row shown
 bool s_latched = false;
 bool s_middleDown = false;
 bool s_noteOn = false;
@@ -427,7 +429,13 @@ void patchItemText(int item, char* label, int llen, char* value, int vlen, int8_
                 polystrncpy(value, name, vlen);
             break;
         }
-        case kItemVoices: snprintf(label, llen, "Voices"); snprintf(value, vlen, "%d", (int)sp.voiceCount); break;
+        case kItemVoices:
+        {
+            snprintf(label, llen, "Voices");
+            const int free = gsynth()->getMaxVoiceCount(GS->part) - (int)sp.voiceCount;
+            snprintf(value, vlen, "%d  (+%d free)", (int)sp.voiceCount, free > 0 ? free : 0);
+            break;
+        }
         case kItemGain: snprintf(label, llen, "Gain"); snprintf(value, vlen, "%.1f dB", (double)sp.gainDb); break;
         case kItemPan:
         {
@@ -447,7 +455,18 @@ void patchItemText(int item, char* label, int llen, char* value, int vlen, int8_
             snprintf(label, llen, "Delay send");
             snprintf(value, vlen, "%d%%", (int)lroundf(sp.delaySend));
             break;
-        default: label[0] = 0; break;
+        default:
+            label[0] = 0;
+            if (isEngineItem(item))
+            {
+                const int idx = item - kItemEngineFirst;
+                polystrncpy(label, gsynth()->getInstrumentTypeName(idx).c_str(), llen);
+                if (idx == engineIdx())
+                    snprintf(value, vlen, "in use");
+                else if (idx == s_pendingEngine)
+                    snprintf(value, vlen, "Middle again!");
+            }
+            break;
     }
 }
 
@@ -621,6 +640,9 @@ void cGibGobSynth::rebuild()
 {
     buildModel(meta(), s->model);
     page = clampi(page, 0, kPageCount - 1);
+    // an engine without the GibGob pages: start where the engine is picked
+    if (!s->model.valid && page != kPagePatch)
+        page = kPageMain;
     refresh();
 }
 
@@ -630,6 +652,13 @@ void cGibGobSynth::refresh()
     const PageModel& pm = s->model.page[page];
     const int views = (page == kPageMain || page == kPagePatch) ? 1 : (pm.viewCount ? pm.viewCount : 1);
     s_view[page] = clampi(s_view[page], 0, views - 1);
+    // the engine list of the Main page
+    {
+        const int count = clampi((int)gsynth()->getSynthTypes().size(), 0, kMaxEngines);
+        s->model.engineCount = (uint8_t)count;
+        s->model.engineFirst = (uint8_t)clampi(s_engineFirst, 0, count > kEngineRows ? count - kEngineRows : 0);
+        s_engineFirst = s->model.engineFirst;
+    }
     layoutPage(s->model, page, s_view[page], v.layout);
     const ViewLayout& l = v.layout;
     s_cursor[page] = l.cellCount ? clampi(s_cursor[page], 0, l.cellCount - 1) : 0;
@@ -651,6 +680,8 @@ void cGibGobSynth::refresh()
         v.pageText[0] = 0;
     if (page == kPagePatch)
         snprintf(v.title, sizeof(v.title), "Patch");
+    else if (page == kPageMain)
+        snprintf(v.title, sizeof(v.title), "Engine");
     else if (s->comparing)
         snprintf(v.title, sizeof(v.title), "COMPARE: as saved");
     else
@@ -680,46 +711,44 @@ void cGibGobSynth::refresh()
     }
     v.hint[0] = 0;
     v.pathText[0] = 0;
+    v.warn = false;
     if (l.style == kStyleMain)
     {
-        snprintf(v.panelTitle[0], sizeof(v.panelTitle[0]), "OUTPUT");
-        snprintf(v.panelTitle[1], sizeof(v.panelTitle[1]), "SIGNAL PATH");
-        // the first oscillator's wave
-        const PageModel& osc = s->model.page[kPageOsc];
-        if (osc.groupCount > 0)
-            fillGraph(osc.groups[0], v.graph[0], 0);
+        snprintf(v.panelTitle[0], sizeof(v.panelTitle[0]), "ENGINE");
+        snprintf(v.panelTitle[1], sizeof(v.panelTitle[1]), "TRACK SOUND");
+        const polysynth::PsynStatus st = polysynth::psynStatus();
+        const int freeKb = (int)((st.arenaTotal - st.arenaUsed) / 1024);
+        if (settings().voiceCount <= 0)
+        {
+            v.warn = true;
+            snprintf(v.pathText, sizeof(v.pathText), "No voices: this synth is silent!");
+            snprintf(v.hint, sizeof(v.hint), "Other synths use all 8 voices");
+        }
+        else if (st.voiceFailures > 0)
+        {
+            v.warn = true;
+            snprintf(v.pathText, sizeof(v.pathText), "%lu voices failed: memory full",
+                     (unsigned long)st.voiceFailures);
+            snprintf(v.hint, sizeof(v.hint), "Free: %d KB (old engines in /Synths?)", freeKb);
+        }
         else
-            v.graph[0].shape = 2;
-        // the path: oscillator names > filter type > ADSR > FX
-        char path[48] = { 0 };
-        for (int g = 0; g < osc.groupCount && g < 3; g++)
         {
-            if (g)
-                strncat(path, "+", sizeof(path) - strlen(path) - 1);
-            strncat(path, osc.groups[g].name, sizeof(path) - strlen(path) - 1);
+            snprintf(v.pathText, sizeof(v.pathText), "All synths share 8 voices");
+            snprintf(v.hint, sizeof(v.hint), "Plugin memory free: %d KB", freeKb);
         }
-        const PageModel& flt = s->model.page[kPageFilter];
-        if (flt.groupCount > 0)
-        {
-            const int tr = flt.groups[0].find(kRoleType);
-            char t[16] = "Filter";
-            if (tr >= 0)
-                formatValue(flt.groups[0].id[tr], rawValue(flt.groups[0].id[tr]), t, sizeof(t));
-            strncat(path, " > ", sizeof(path) - strlen(path) - 1);
-            strncat(path, t, sizeof(path) - strlen(path) - 1);
-        }
-        strncat(path, " > ADSR > FX", sizeof(path) - strlen(path) - 1);
-        snprintf(v.pathText, sizeof(v.pathText), "%s", path);
-        snprintf(v.hint, sizeof(v.hint), "Hold Middle: play   Shift+top: page tools");
     }
     else if (l.style == kStyleEnvList)
         snprintf(v.hint, sizeof(v.hint), "Colour buttons: A / D / S / R");
-    if (l.cellCount == 0)
-        snprintf(v.hint, sizeof(v.hint), "This synth has nothing for this page");
     else if (l.style == kStylePatch)
     {
         snprintf(v.panelTitle[0], sizeof(v.panelTitle[0]), "PATCH");
-        snprintf(v.panelTitle[1], sizeof(v.panelTitle[1]), "TRACK SOUND");
+        snprintf(v.panelTitle[1], sizeof(v.panelTitle[1]), "INIT / GO APE");
+    }
+    if (l.cellCount == 0)
+    {
+        v.warn = !s->model.valid;
+        snprintf(v.hint, sizeof(v.hint), "%s",
+                 s->model.valid ? "This synth has nothing for this page" : "This engine has no GibGob pages: pick one on Main");
     }
 
     // boxes
@@ -729,9 +758,11 @@ void cGibGobSynth::refresh()
         SynthCellText& t = v.cells[i];
         t.fill = -1;
         t.bipolar = false;
-        if (c.id <= kItemDelay && c.id >= kItemLoad)
+        t.lit = false;
+        if (isPatchItem(c.id))
         {
             patchItemText(c.id, t.label, sizeof(t.label), t.value, sizeof(t.value), t.fill);
+            t.lit = isEngineItem(c.id) && c.id - kItemEngineFirst == engineIdx();
             continue;
         }
         if (!validParam(c.id))
@@ -762,7 +793,11 @@ void cGibGobSynth::refresh()
             continue;
         }
         abbreviate(v.cells[c].label, v.quick[k].label, (int)sizeof(v.quick[k].label) - 1);
-        polystrncpy(v.quick[k].value, v.cells[c].value, sizeof(v.quick[k].value));
+        // an action has no value: just its name
+        if (l.cell[c].kind == kCellAction)
+            v.quick[k].value[0] = 0;
+        else
+            polystrncpy(v.quick[k].value, v.cells[c].value, sizeof(v.quick[k].value));
     }
 
     // bottom: pages, or with Shift the tools
@@ -799,6 +834,20 @@ void cGibGobSynth::goToPage(int newPage)
 void cGibGobSynth::moveCursor(int dx, int dy)
 {
     const ViewLayout& l = s->view.layout;
+    // the engine list scrolls at its top and bottom rows
+    if (page == kPageMain && dx == 0 && s_cursor[page] < l.cellCount && isEngineItem(l.cell[s_cursor[page]].id))
+    {
+        const int idx = l.cell[s_cursor[page]].id - kItemEngineFirst;
+        const int first = s->model.engineFirst;
+        const int count = s->model.engineCount;
+        if ((dy < 0 && idx == first && first > 0) || (dy > 0 && idx == first + kEngineRows - 1 && idx + 1 < count))
+        {
+            s_engineFirst = first + dy;
+            s_pendingEngine = -1;
+            refresh(); // the same row: the list moved under it
+            return;
+        }
+    }
     const int next = navigate(l, s_cursor[page], dx, dy);
     if (next >= 0 && next != s_cursor[page])
     {
@@ -840,23 +889,12 @@ void cGibGobSynth::changeValue(int value)
     const int dir = value > 0 ? 1 : -1;
     const bool big = value >= 10 || value <= -10;
 
-    if (c.id >= kItemLoad && c.id <= kItemDelay)
+    if (isPatchItem(c.id))
     {
         SynthPartSettings& sp = settings();
         switch (c.id)
         {
             case kItemApeAmount: s_apeAmount = clampi(s_apeAmount + dir * 10, 10, 100); break;
-            case kItemEngine:
-            {
-                const int count = (int)gsynth()->getSynthTypes().size();
-                const int from = s_pendingEngine >= 0 ? s_pendingEngine : engineIdx();
-                s_pendingEngine = clampi(from + dir, 0, count > 0 ? count - 1 : 0);
-                if (s_pendingEngine == engineIdx())
-                    s_pendingEngine = -1;
-                else
-                    say("Middle: change engine (patch starts clean)");
-                break;
-            }
             case kItemVoices:
                 sp.voiceCount = clampi(sp.voiceCount + dir, 0, gsynth()->getMaxVoiceCount(part));
                 gsynth()->setVoiceCount(part, sp.voiceCount);
@@ -976,14 +1014,23 @@ void cGibGobSynth::middle(bool pressed)
             case kItemSaveAs: savePatchAs(); return;
             case kItemInit: initPatch(); return;
             case kItemGoApe: goApe(true); return;
-            case kItemEngine:
-                if (s_pendingEngine >= 0)
-                {
-                    applyEngine();
-                    return;
-                }
-                break;
             default: break;
+        }
+    }
+    if (page == kPageMain && pressed && isEngineItem(item))
+    {
+        const int idx = item - kItemEngineFirst;
+        if (idx != engineIdx())
+        {
+            if (s_pendingEngine == idx)
+                applyEngine(); // the second press
+            else
+            {
+                s_pendingEngine = idx;
+                say("Middle again: change engine (patch starts clean)");
+                refresh();
+            }
+            return;
         }
     }
     // play a note while held (not while latched: that one is already on)
@@ -1007,7 +1054,7 @@ void cGibGobSynth::middle(bool pressed)
 void cGibGobSynth::tool(int button)
 {
     int16_t ids[kClipSize];
-    const int n = (page == kPagePatch) ? 0 : pageParams(page, ids, kClipSize);
+    const int n = (page == kPagePatch || page == kPageMain) ? 0 : pageParams(page, ids, kClipSize);
     const bool needsParams = button <= 3;
     if (needsParams && n == 0)
     {
@@ -1194,17 +1241,12 @@ void cGibGobSynth::applyEngine()
         return;
     sp.synthType = idx;
     gsynth()->setInstrumentType(part, types.at(idx));
-    sp.voiceCount = clampi(sp.voiceCount, 0, gsynth()->getMaxVoiceCount(part));
+    // at least one voice if any is free, else the new engine stays silent
+    const int maxVoices = gsynth()->getMaxVoiceCount(part);
+    sp.voiceCount = clampi(sp.voiceCount < 1 ? 4 : sp.voiceCount, 0, maxVoices);
     gsynth()->setVoiceCount(part, sp.voiceCount);
     initPatch();
     newFileManager.setProjectStructChanged();
-    if (!handles(mtProject.values.lastUsedInstrument))
-    {
-        // a stock engine: its own pages
-        IE->mode = mtInstEditModeSynth;
-        mtInterface.deactivateModule(this);
-        mtInterface.activateModule(IE, 1);
-    }
 }
 
 // Load: the file browser, hearing each patch while moving through them

@@ -191,8 +191,10 @@ static const char* const kHelpSynth[] = {
     "Patch page: Middle on Load / Save / Save as /",
     "  Init / GO APE! runs it",
     "Ape amount: how far Go Ape shakes it",
-    "Engine: +/- picks, Middle changes it",
-    "  (the patch starts clean)",
+    "Main: the engine list, Middle twice on one",
+    "  switches to it (the patch starts clean)",
+    "Main: voices, gain, pan, sends",
+    "  (all synths share 8 voices)",
     "Button 2: chord palette   Button 1: main seq",
     "Play: play / stop",
 };

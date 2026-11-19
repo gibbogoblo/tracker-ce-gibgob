@@ -189,9 +189,10 @@ void cInstrumentEditor::start(uint32_t options)
     }
 
 #if GUI_HANDLE_SYNTH
-    // GibGob OS: a synth with the GibGob layout has its own pages (Y2K editor)
+    // GibGob OS: every synth opens the GibGob synth editor (Y2K); its Main
+    // page picks the engine
     if ((mode == mtInstEditModeSynth || mode == mtInstEditModeSynthMacros || mode == mtInstEditModeSynthPatchEdit) &&
-        cGibGobSynth::handles(mtProject.values.lastUsedInstrument))
+        isSynthInstrument(mtProject.values.lastUsedInstrument))
     {
         mode = mtInstEditModeSynth;
         mtInterface.deactivateModule(this);

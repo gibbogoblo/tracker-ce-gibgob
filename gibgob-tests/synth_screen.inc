@@ -79,7 +79,13 @@ static int synthTests(int limit)
         abbreviate("Cutoff", ab, 6);
         if (strcmp(ab, "Cutoff") != 0) { printf("  synth: abbreviate changed a short name (%s)\n", ab); fails++; }
     }
-    if (model.page[kPageMain].groups[0].count != 12) { printf("  synth: main page has %d\n", model.page[kPageMain].groups[0].count); fails++; }
+    model.engineCount = 9; model.engineFirst = 1; // more engines than rows: a scrolled list
+    {
+        ViewLayout l; layoutPage(model, kPageMain, 0, l);
+        int engines = 0;
+        for (int i = 0; i < l.cellCount; i++) if (isEngineItem(l.cell[i].id)) engines++;
+        if (engines != kEngineRows || cellOf(l, kItemEngineFirst + 1) < 0 || cellOf(l, kItemVoices) < 0) { printf("  synth: main page engine list wrong (%d)\n", engines); fails++; }
+    }
 
     {
         ViewLayout l; layoutPage(model, kPageOsc, 0, l);
@@ -162,7 +168,7 @@ static int synthTests(int limit)
             snprintf(sv.pageText, sizeof(sv.pageText), "%d/%d", vi + 1, views);
             snprintf(sv.title, sizeof(sv.title), "Mod envelopes 2/3");
             snprintf(sv.pathText, sizeof(sv.pathText), "MAMA + BABY + PAPA > LP 24 > ADSR > FX");
-            if (l.style == kStyleMain) snprintf(sv.hint, sizeof(sv.hint), "Hold Middle: play   Shift+top: page tools");
+            if (l.style == kStyleMain) { snprintf(sv.hint, sizeof(sv.hint), "Free: 99999 KB (old engines in /Synths?)"); snprintf(sv.pathText, sizeof(sv.pathText), "4294967295 voices failed: memory full"); sv.warn = true; }
             if (l.style == kStyleEnvList) snprintf(sv.hint, sizeof(sv.hint), "Colour buttons: A / D / S / R");
             for (int i = 0; i < l.cellCount; i++)
             {
@@ -209,13 +215,31 @@ static int synthTests(int limit)
                 // a picture: no Shift, a short note off, the cursor on the second box
                 sv.shift = false; sv.message[0] = 0; sv.cursor = l.cellCount > 1 ? 1 : 0;
                 for (int i = 0; i < 8; i++) { sv.tabText[i] = kTabs[i]; sv.tabOn[i] = (i == page); }
+                for (int i = 0; i < l.cellCount; i++)
+                    if (isEngineItem(l.cell[i].id))
+                    {
+                        static const char* const kEng[9] = { "ACD", "DIRT", "FAT", "MORPHANGUTAN", "PERC", "VAP", "WTFM", "CHIPTUNE", "BASSBOON" };
+                        snprintf(sv.cells[i].label, sizeof(sv.cells[i].label), "%s", kEng[(l.cell[i].id - kItemEngineFirst) % 9]);
+                        snprintf(sv.cells[i].value, sizeof(sv.cells[i].value), "%s", l.cell[i].id - kItemEngineFirst == 3 ? "in use" : "");
+                        sv.cells[i].lit = l.cell[i].id - kItemEngineFirst == 3;
+                        sv.cells[i].fill = -1;
+                    }
+                if (l.style == kStyleMain)
+                {
+                    snprintf(sv.panelTitle[0], 18, "ENGINE"); snprintf(sv.panelTitle[1], 18, "TRACK SOUND");
+                    snprintf(sv.pathText, sizeof(sv.pathText), "All synths share 8 voices");
+                    snprintf(sv.hint, sizeof(sv.hint), "Plugin memory free: 1712 KB");
+                    sv.warn = false;
+                }
                 static const char* const kItemLabel[12] = { "Load patch", "Save", "Save as", "Init patch", "GO APE!", "Ape amount",
                                                             "Engine", "Voices", "Gain", "Pan", "Reverb send", "Delay send" };
                 static const char* const kItemValue[12] = { "Hairy Lead", "unsaved edits", "new name", "clean start", "shake it all", "30%",
-                                                            "MORPHANGUTAN", "4", "-9.0 dB", "C", "20%", "10%" };
+                                                            "MORPHANGUTAN", "4  (+4 free)", "-9.0 dB", "C", "20%", "10%" };
                 for (int i = 0; i < l.cellCount; i++)
                 {
                     const int id = l.cell[i].id;
+                    if (isEngineItem(id))
+                        continue;
                     if (id >= kItemLoad && id <= kItemDelay)
                     {
                         snprintf(sv.cells[i].label, sizeof(sv.cells[i].label), "%s", kItemLabel[id - kItemLoad]);
@@ -225,21 +249,19 @@ static int synthTests(int limit)
                     else
                         snprintf(sv.cells[i].value, sizeof(sv.cells[i].value), l.cell[i].isEnum ? "Tri" : "%d%%", (i * 37) % 101);
                 }
-                if (l.style == kStylePatch) { snprintf(sv.panelTitle[0], 18, "PATCH"); snprintf(sv.panelTitle[1], 18, "TRACK SOUND"); }
-                if (l.style == kStyleMain) { snprintf(sv.panelTitle[0], 18, "OUTPUT"); snprintf(sv.panelTitle[1], 18, "SIGNAL PATH"); }
+                if (l.style == kStylePatch) { snprintf(sv.panelTitle[0], 18, "PATCH"); snprintf(sv.panelTitle[1], 18, "INIT / GO APE"); }
                 for (int p = 0; p < l.panelCount; p++)
                     if (l.panel[p].group >= 0) for (char* c = sv.panelTitle[p]; *c; c++) *c = (char)toupper((unsigned char)*c);
                 for (int k = 0; k < 4; k++)
                 {
                     const int c = l.quick[k];
                     abbreviate(sv.cells[c].label, sv.quick[k].label, 9);
-                    snprintf(sv.quick[k].value, sizeof(sv.quick[k].value), "%s", sv.cells[c].value);
+                    snprintf(sv.quick[k].value, sizeof(sv.quick[k].value), "%s", l.cell[c].kind == kCellAction ? "" : sv.cells[c].value);
                     sv.quickActive[k] = (c == sv.cursor);
                 }
                 snprintf(sv.headerInfo, sizeof(sv.headerInfo), "TRK 5 // HAIRY LEAD*");
                 sv.pageText[0] = 0;
-                snprintf(sv.title, sizeof(sv.title), "%s", page == kPagePatch ? "Patch" : model.page[page].title);
-                if (l.style == kStyleMain) snprintf(sv.pathText, sizeof(sv.pathText), "MAMA+BABY+PAPA > LP 24 > ADSR > FX");
+                snprintf(sv.title, sizeof(sv.title), "%s", page == kPagePatch ? "Patch" : (page == kPageMain ? "Engine" : model.page[page].title));
                 sv.panelInfo[0][0] = 0;
                 if (l.style == kStyleGraphList) snprintf(sv.panelInfo[0], 20, "LP 24");
                 for (int p = 0; p < l.panelCount; p++) sv.graph[p].shape = (float)((page * 3 + p) % 4);

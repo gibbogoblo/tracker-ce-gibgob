@@ -104,14 +104,14 @@ The Tracker's stock editor only uses the flat layout (`layoutFlat`), so
 
 | `layout33` section short name | Page (top button) |
 |---|---|
-| `GibGob` | 1 Main: its parameters (up to 12) as boxes with light bars |
+| `GibGob` | marks the synth as made for GibGob OS (its parameters are not shown; page 1 Main is the engine list, voices, gain, pan, sends) |
 | `Osc` | 2 Osc |
 | `Filter` | 3 Filter |
 | `Amp` | 4 Amp |
 | `LFO` | 5 LFO |
 | `Env` | 6 Env |
 | `FX` | 7 FX |
-| (none) | 8 Patch: load / save / init / Go Ape, engine, voices, gain, pan, sends |
+| (none) | 8 Patch: load / save / save as, init / Go Ape |
 
 Each subsection of a section is one column on its page (up to 3 side by side;
 more columns: pressing the page's button again shows the next ones). The

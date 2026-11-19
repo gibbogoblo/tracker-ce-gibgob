@@ -4,6 +4,7 @@
 #include "PolySynth/Patch.h"
 #include "PolySynth/config.h"
 #include "PolySynth/psyn_plugin.h"
+#include "PolySynth/PsynStatus.h"
 #include "PolySynth/sdk/InstrumentType.h"
 #include "PolySynth/sdk/InstrumentVoice.h"
 #include "PolyUtil/ScopeExit.h"
@@ -402,6 +403,8 @@ void syncInstructionCache([[maybe_unused]] void* addr, [[maybe_unused]] size_t s
     asm volatile("isb 0xf" ::: "memory");
 #endif
 }
+
+uint32_t s_voiceFailures = 0;
 
 bool evictOneIdlePlugin(const PluginRecord* exclude)
 {
@@ -1309,7 +1312,12 @@ class PsynVoiceWrapper : public InstrumentVoice
                 if (pluginVoice_ == nullptr)
                 {
                     rec.activeVoices--;
+                    s_voiceFailures++;
                 }
+            }
+            else
+            {
+                s_voiceFailures++; // the engine's code could not be loaded
             }
         }
     }
@@ -2037,6 +2045,15 @@ void PsynLoader::setSamplesFileSystem(FileSystem& samplesFs)
             ensurePluginSampleFolder(s_plugins[i]);
         }
     }
+}
+
+PsynStatus psynStatus()
+{
+    PsynStatus st;
+    st.arenaTotal = s_arena.isInitialized() ? s_arena.totalBytes() : 0;
+    st.arenaUsed = s_arena.isInitialized() ? s_arena.usedBytes() : 0;
+    st.voiceFailures = s_voiceFailures;
+    return st;
 }
 
 } // namespace polysynth
