@@ -73,6 +73,14 @@ enum Role : uint8_t
 // the role a parameter plays, from its name
 Role roleFromName(const char* name, bool isEnum);
 
+// a sample slot of the synth (kItemSampleFirst + slot)
+static constexpr int16_t kItemSampleFirst = -300;
+static constexpr int kMaxSampleSlots = 4;
+inline bool isSampleItem(int id)
+{
+    return id >= kItemSampleFirst && id < kItemSampleFirst + kMaxSampleSlots;
+}
+
 // ---- what is on each page ----
 static constexpr int kMaxRows = 16;  // parameters in one column
 static constexpr int kMaxGroups = 9; // columns on one page (3 at a time)
@@ -155,8 +163,20 @@ bool buildModel(const Meta& meta, SynthModel& out)
     {
         for (const auto& e : elements)
         {
-            // parameters only (type 1); sample slots stay in the stock editor
-            if ((int)e.type != 1 || e.id < 0 || e.id >= (int)meta.params.size() || n >= kMaxRows * 4)
+            if (n >= kMaxRows * 4 || e.id < 0)
+                continue;
+            if ((int)e.type == 2)
+            {
+                // a sample slot: a row with the sample's name (+/- picks, Middle browses)
+                if (e.id >= (int)meta.sampleSlots.size() || e.id >= kMaxSampleSlots)
+                    continue;
+                ids[n] = (int16_t)(kItemSampleFirst + e.id);
+                names[n] = meta.sampleSlots[e.id].displayName.c_str();
+                en[n] = true;
+                n++;
+                continue;
+            }
+            if ((int)e.type != 1 || e.id >= (int)meta.params.size())
                 continue;
             ids[n] = (int16_t)e.id;
             names[n] = meta.params[e.id].displayName.c_str();
@@ -246,7 +266,7 @@ inline bool isEngineItem(int id)
 }
 inline bool isPatchItem(int id)
 {
-    return (id >= kItemLoad && id <= kItemDelay) || isEngineItem(id);
+    return (id >= kItemLoad && id <= kItemDelay) || isEngineItem(id) || isSampleItem(id);
 }
 
 struct CellPos

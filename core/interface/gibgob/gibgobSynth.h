@@ -46,6 +46,8 @@ class cGibGobSynth : public ModuleBase
     void initPatch();
     void goApe(bool wholePatch);
     void applyEngine();
+    void stepSample(int slot, int dir); // a sample slot: the next / previous sample
+    void pickSample(int slot);          // a sample slot: the file browser
 
     void releaseNotes();
     void restoreCompare();

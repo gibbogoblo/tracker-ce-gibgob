@@ -154,3 +154,20 @@ An enum parameter named `Syllable` with `midiCC = 3` makes an engine a singer:
 The voice of LILITRON is `engines/lilitron/LILITRON.wav`, made by
 `engines/lilitron/make_voice.py`. On the card it goes in
 `/SynthSamples/LILI/LILITRON.wav`.
+
+### Sample slots in the GibGob editor (GORILLAGRAIN)
+
+A sample slot element (`EditorElement::Type::kSampleSlot`, id = the slot) in a
+layout33 subsection shows as a row with the sample's name: +/- steps through
+the WAVs in `/SynthSamples/<code name>/`, Middle opens the file browser there,
+Delete loads the slot's `defaultSamplePath`.
+
+GORILLAGRAIN (`engines/gorillagrain.cpp`, DSP in `engines/gorillagrain/grain_dsp.h`,
+code name `GORILLA`, type id 62, 4 voices, stereo) is a granular engine: one
+playhead per voice (Position + Scan), grains cut around it (Size, Density, Spray,
+Window), with per-grain Jitter, Sparkle (octave up), Reverse and Spread; then
+filter, amp, 2 LFOs, 2 envelopes and MORPHANGUTAN's delay and reverb (Shimmer on
+by default). Its own sample `engines/gorillagrain/GORILLA.wav` (made by
+`make_sample.py`) goes in `/SynthSamples/GORILLA/GORILLA.wav`; any WAV put in
+that folder can be picked. `make grain-test` runs the DSP tests,
+`engines/gorillagrain/preview.cpp` renders WAV previews.

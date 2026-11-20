@@ -38,7 +38,7 @@ LDFLAGS       := -nostartfiles --specs=nano.specs \
                  -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=calloc \
                  -Wl,--wrap=_malloc_r -Wl,--wrap=_free_r -Wl,--wrap=_calloc_r
 
-all: $(BUILD_DIR)/CHIP.psyn $(BUILD_DIR)/MRPH.psyn $(BUILD_DIR)/LILI.psyn
+all: $(BUILD_DIR)/CHIP.psyn $(BUILD_DIR)/MRPH.psyn $(BUILD_DIR)/LILI.psyn $(BUILD_DIR)/GORILLA.psyn
 
 $(BUILD_DIR)/CHIP.elf: $(SDK_DIR)/engines/chip.cpp $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
 	@mkdir -p $(BUILD_DIR)
@@ -112,6 +112,32 @@ $(BUILD_DIR)/LILI.psyn: $(BUILD_DIR)/LILI.elf $(SDK_DIR)/tools/psyn_builder.py
 		--supports-idle-sleep 1 \
 		--has-voice-tick-idle 0
 
+# ---- GORILLAGRAIN (GibGob OS): granular; samples in /SynthSamples/GORILLA/ ----
+$(BUILD_DIR)/GORILLA.elf: $(SDK_DIR)/engines/gorillagrain.cpp $(SDK_DIR)/engines/gorillagrain/grain_dsp.h $(SDK_DIR)/engines/morphangutan/morph_dsp.h $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I$(SDK_DIR)/engines $< $(LDFLAGS) $(PSYN_EXTRA_LDFLAGS) -o $@
+
+$(BUILD_DIR)/GORILLA.psyn: $(BUILD_DIR)/GORILLA.elf $(SDK_DIR)/tools/psyn_builder.py
+	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py \
+		--elf $< \
+		--out $@ \
+		--code-name "GORILLA" \
+		--display-name "GORILLAGRAIN" \
+		--patch-folder "GORILLAGRAIN" \
+		--type-id-wave 62 \
+		--type-id-play-tracker 62 \
+		--default-voices 4 \
+		--max-voices 4 \
+		--output-channels 2 \
+		--renders-aux 0 \
+		--has-sample-slots 1 \
+		--supports-idle-sleep 1 \
+		--has-voice-tick-idle 1
+
+grain-test:
+	$(HOSTCXX) -O2 -std=c++20 -Wall -I$(SDK_DIR)/engines $(SDK_DIR)/engines/gorillagrain/grain_test.cpp -o $(BUILD_DIR)/grain_test
+	$(BUILD_DIR)/grain_test
+
 # ---- hardware test builds of MORPHANGUTAN (to find what the Tracker dislikes) ----
 # TA: mono, no FX   TB: stereo, no FX   TC: sine test tone, mono, no FX   TD: full, automatic ID
 MORPH_TEST_FLAGS_TA := -DMORPH_MONO -DMORPH_NO_FX
@@ -153,4 +179,4 @@ morph-previews:
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean morph-test morph-previews morph-hwtest
+.PHONY: all clean morph-test morph-previews morph-hwtest grain-test

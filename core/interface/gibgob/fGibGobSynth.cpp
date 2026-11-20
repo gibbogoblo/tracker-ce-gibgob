@@ -490,6 +490,13 @@ void patchItemText(int item, char* label, int llen, char* value, int vlen, int8_
             break;
         default:
             label[0] = 0;
+            if (isSampleItem(item))
+            {
+                const int slot = item - kItemSampleFirst;
+                polystrncpy(label, gsynth()->getSampleSlotName(GS->part, slot).c_str(), llen);
+                polystrncpy(value, gsynth()->getSampleName(GS->part, slot).c_str(), vlen);
+                break;
+            }
             if (isEngineItem(item))
             {
                 const int idx = item - kItemEngineFirst;
@@ -1075,6 +1082,11 @@ void cGibGobSynth::changeValue(int value)
     const int dir = value > 0 ? 1 : -1;
     const bool big = value >= 10 || value <= -10;
 
+    if (isSampleItem(c.id))
+    {
+        stepSample(c.id - kItemSampleFirst, dir);
+        return;
+    }
     if (isPatchItem(c.id))
     {
         SynthPartSettings& sp = settings();
@@ -1171,6 +1183,23 @@ void cGibGobSynth::setDefault()
             IE->setSynthDelaySend(part, sp.delaySend, false);
             break;
         default:
+            if (isSampleItem(c.id))
+            {
+                const int slot = c.id - kItemSampleFirst;
+                const auto& slots = meta().sampleSlots;
+                if (slot < (int)slots.size() && !slots[slot].defaultSamplePath.empty())
+                {
+                    releaseNotes();
+                    sequencer.stopManualNotes();
+                    gsynth()->silencePart(part);
+                    if (gsynth()->loadSampleByPath(part, slot, "/SynthSamples/" + slots[slot].defaultSamplePath))
+                    {
+                        markDirty();
+                        say("The engine's own sample");
+                    }
+                }
+                break;
+            }
             if (!validParam(c.id) || !meta().params[c.id].defaultValue.has_value())
                 return;
             if (s->comparing)
@@ -1202,6 +1231,11 @@ void cGibGobSynth::middle(bool pressed)
             case kItemGoApe: goApe(true); return;
             default: break;
         }
+    }
+    if (pressed && isSampleItem(item))
+    {
+        pickSample(item - kItemSampleFirst);
+        return;
     }
     if (page == kPageMain && pressed && isEngineItem(item))
     {
@@ -1458,6 +1492,72 @@ void cGibGobSynth::applyEngine()
     gsynth()->setVoiceCount(part, sp.voiceCount);
     initPatch();
     newFileManager.setProjectStructChanged();
+}
+
+// a sample slot: +/- steps through the samples in the engine's folder
+void cGibGobSynth::stepSample(int slot, int dir)
+{
+    auto samples = gsynth()->listSamples(part);
+    if (samples.empty())
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "No samples in %.40s", gsynth()->getEngineSampleFolder(part).c_str());
+        say(msg);
+        refresh();
+        return;
+    }
+    const int count = (int)samples.size();
+    int idx = gsynth()->getSampleIndex(part, slot);
+    idx = idx < 0 ? (dir > 0 ? 0 : count - 1) : ((idx + dir) % count + count) % count;
+    releaseNotes();
+    sequencer.stopManualNotes();
+    gsynth()->silencePart(part);
+    if (gsynth()->loadSampleByIndex(part, slot, idx))
+        markDirty();
+    else
+        say("Could not load that sample (sample memory full?)");
+    refresh();
+}
+
+// Middle on a sample slot: browse the engine's sample folder for a WAV
+void cGibGobSynth::pickSample(int slot)
+{
+    releaseNotes();
+    restoreCompare();
+    const int p = part;
+    sequencer.stopManualNotes();
+    gsynth()->silencePart(p);
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
+    cfg.title = "Sample - " + gsynth()->getSynthName(p);
+    cfg.initialDirectory = gsynth()->getEngineSampleFolder(p);
+    cfg.extensionFilter = ".wav";
+    cfg.contextKey = "synth_sample_" + gsynth()->getSynthName(p);
+    cfg.returnModule = this;
+    cfg.returnModuleOptions = 0;
+    cfg.initialSelectedName = gsynth()->getSampleName(p, slot) + ".wav";
+    cfg.onConfirm = [p, slot](const std::string& fullPath)
+    {
+        sequencer.stopManualNotes();
+        IE->getSynth()->silencePart(p);
+        if (fullPath.rfind("/SynthSamples/", 0) != 0)
+        {
+            GS->say("Pick a sample inside /SynthSamples");
+        }
+        else if (IE->getSynth()->loadSampleByPath(p, slot, fullPath))
+        {
+            IE->getSynth()->setPatchDirty(p);
+            GS->say("Sample loaded");
+        }
+        else
+        {
+            GS->say("Could not load that sample (sample memory full?)");
+        }
+        GS->rebuild();
+    };
+    cfg.onCancel = []() { GS->rebuild(); };
+    openGlobalFileBrowser(cfg);
 }
 
 // Load: the file browser, hearing each patch while moving through them
@@ -1832,5 +1932,7 @@ void cGibGobSynth::goApe(bool) {}
 void cGibGobSynth::applyEngine() {}
 void cGibGobSynth::releaseNotes() {}
 void cGibGobSynth::restoreCompare() {}
+void cGibGobSynth::stepSample(int, int) {}
+void cGibGobSynth::pickSample(int) {}
 
 #endif

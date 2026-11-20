@@ -14,7 +14,8 @@ struct Sub { std::string name; std::vector<Element> elements; };
 struct Section { std::string name, shortName; std::vector<Sub> subsections; std::vector<Element> elements; };
 struct Layout { std::vector<Section> sections; };
 struct Param { std::string displayName; bool isEnum = false; };
-struct Meta { std::vector<Param> params; Layout layout33; };
+struct Slot { std::string displayName; };
+struct Meta { std::vector<Param> params; Layout layout33; std::vector<Slot> sampleSlots; };
 
 // MORPHANGUTAN's parameters and layout
 Meta morph()
@@ -166,6 +167,75 @@ static int synthTests(int limit)
             ViewLayout l; layoutPage(m3, kPageOsc, v, l);
             for (int i = 0; i < l.cellCount; i++)
                 if (l.cell[i].h < 18) { printf("  synth: rows too thin (%d)\n", l.cell[i].h); fails++; break; }
+        }
+    }
+
+    // GORILLAGRAIN: a sample slot shows as a row on the Grains (Osc) page
+    {
+        synthfix::Meta gg;
+        const char* const kNames[12] = { "Position", "Scan", "Size", "Density", "Spray", "Jitter", "Sparkle", "Reverse", "Window", "Spread", "Tune", "Fine" };
+        for (int i = 0; i < 12; i++) gg.params.push_back({ kNames[i], i == 8 });
+        gg.sampleSlots = { { "Sample" } };
+        gg.layout33.sections = { { "Main", "GibGob", {}, { { 1, 0 }, { 1, 1 } } },
+                                 { "Grains", "Osc", { { "Playhead", { { 2, 0 }, { 1, 0 }, { 1, 1 }, { 1, 4 } } },
+                                                      { "Grains", { { 1, 2 }, { 1, 3 }, { 1, 8 }, { 1, 5 } } },
+                                                      { "Colour", { { 1, 6 }, { 1, 7 }, { 1, 9 }, { 1, 10 }, { 1, 11 } } } }, {} } };
+        static SynthModel gm;
+        if (!buildModel(gg, gm)) { printf("  synth: grain model not built\n"); fails++; }
+        const Group& g0 = gm.page[kPageOsc].groups[0];
+        if (gm.page[kPageOsc].groupCount != 3 || g0.count != 4 || !isSampleItem(g0.id[0]) || g0.id[0] - kItemSampleFirst != 0)
+        { printf("  synth: grain Sample row missing\n"); fails++; }
+        // a slot that does not exist is skipped, not shown
+        synthfix::Meta bad = gg;
+        bad.layout33.sections[1].subsections[0].elements[0] = { 2, 3 };
+        static SynthModel bm;
+        buildModel(bad, bm);
+        if (bm.page[kPageOsc].groups[0].count != 3) { printf("  synth: missing sample slot not skipped\n"); fails++; }
+        static SynthView gv;
+        memset(&gv, 0, sizeof(gv));
+        layoutPage(gm, kPageOsc, 0, gv.layout);
+        const ViewLayout& l = gv.layout;
+        for (int i = 0; i < l.cellCount; i++)
+        {
+            const CellPos& a = l.cell[i];
+            if (a.x < 4 || a.y < kContentTop || a.x + a.w > 796 || a.y + a.h > kContentBottom + 4) { printf("  synth grain: cell %d outside\n", i); fails++; }
+            for (int j = i + 1; j < l.cellCount; j++)
+            {
+                const CellPos& b = l.cell[j];
+                if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) { printf("  synth grain: cells overlap\n"); fails++; }
+            }
+        }
+        snprintf(gv.synthName, sizeof(gv.synthName), "GORILLAGRAIN");
+        snprintf(gv.headerInfo, sizeof(gv.headerInfo), "TRK 5 // GORILLA");
+        snprintf(gv.title, sizeof(gv.title), "Grains");
+        snprintf(gv.pageText, sizeof(gv.pageText), "1/1");
+        for (int i = 0; i < l.cellCount; i++)
+        {
+            const int id = l.cell[i].id;
+            snprintf(gv.cells[i].label, sizeof(gv.cells[i].label), "%s", isSampleItem(id) ? "Sample" : gg.params[id].displayName.c_str());
+            snprintf(gv.cells[i].value, sizeof(gv.cells[i].value), "%s", isSampleItem(id) ? "GORILLA_REC_99" : (l.cell[i].isEnum ? "Smooth" : "140 ms"));
+            gv.cells[i].fill = isSampleItem(id) ? -1 : (int8_t)((i * 29) % 101);
+        }
+        for (int p2 = 0; p2 < l.panelCount; p2++)
+            snprintf(gv.panelTitle[p2], sizeof(gv.panelTitle[p2]), "%s", l.panel[p2].group >= 0 ? gm.page[kPageOsc].groups[l.panel[p2].group].name : "");
+        static const char* const kTabs[8] = { "MAIN", "GRAINS", "FILTER", "AMP", "LFO", "ENV", "FX", "PATCH" };
+        for (int i = 0; i < 8; i++) { gv.tabText[i] = kTabs[i]; gv.tabOn[i] = i == 1; }
+        gv.editing = true; gv.cursor = 0;
+        strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &gv;
+        SynthEditControl sc(&prop);
+        g_minY = 0;
+        render(sc, "synth GORILLAGRAIN grains", limit, false);
+        gv.shift = true;
+        render(sc, "synth GORILLAGRAIN grains shift", limit, true);
+        gv.shift = false;
+        if (const char* dir = getenv("SYNTH_SVG"))
+        {
+            char path[256]; snprintf(path, sizeof(path), "%s/10_gorillagrain.svg", dir);
+            g_svg = fopen(path, "w");
+            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+            render(sc, "synth GORILLAGRAIN (svg)", limit, false);
+            fprintf(g_svg, "</svg>\n");
+            fclose(g_svg); g_svg = nullptr;
         }
     }
 
