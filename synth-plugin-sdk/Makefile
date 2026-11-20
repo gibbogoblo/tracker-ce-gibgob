@@ -134,6 +134,27 @@ $(BUILD_DIR)/GORILLA.psyn: $(BUILD_DIR)/GORILLA.elf $(SDK_DIR)/tools/psyn_builde
 		--supports-idle-sleep 1 \
 		--has-voice-tick-idle 1
 
+# a diagnosis build (beeps where the sound stops): build/diag/GORILLA.psyn
+$(BUILD_DIR)/diag/GORILLA.elf: $(SDK_DIR)/engines/gorillagrain.cpp $(SDK_DIR)/engines/gorillagrain/grain_dsp.h
+	@mkdir -p $(BUILD_DIR)/diag
+	$(CXX) $(CXXFLAGS) -DGORILLA_DIAG -I$(SDK_DIR)/engines $< $(LDFLAGS) $(PSYN_EXTRA_LDFLAGS) -o $@
+
+$(BUILD_DIR)/diag/GORILLA.psyn: $(BUILD_DIR)/diag/GORILLA.elf $(SDK_DIR)/tools/psyn_builder.py
+	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py --elf $< --out $@ \
+		--code-name "GORILLA" --display-name "GORILLAGRAIN" --patch-folder "GORILLAGRAIN" \
+		--type-id-wave 62 --type-id-play-tracker 62 --default-voices 4 --max-voices 4 \
+		--output-channels 2 --renders-aux 0 --has-sample-slots 1 --supports-idle-sleep 1 --has-voice-tick-idle 1
+
+# the whole plugin (glue + DSP) through its C API, as the Tracker's loader drives it
+GRAIN_HOST_INC := -I$(SDK_DIR)/include -I$(REPO_ROOT)/synth/include -I$(REPO_ROOT)/synth/config \
+                  -I$(REPO_ROOT)/util/include -I$(REPO_ROOT)/util/3rdparty \
+                  -I$(REPO_ROOT)/thirdparty/boost/include -I$(REPO_ROOT)/thirdparty/enum_util/include -I$(SDK_DIR)/engines
+grain-plugin-test:
+	$(HOSTCXX) -std=c++20 -includecstdint -O3 -ffast-math -fno-exceptions -DPRODUCT=WAVE -DPRODUCT_WAVE \
+		-D__dso_handle=psyn_test_dso_handle -D__cxa_atexit=psyn_test_cxa_atexit $(GRAIN_HOST_INC) \
+		$(SDK_DIR)/engines/gorillagrain/plugin_harness.cpp -o $(BUILD_DIR)/grain_plugin_harness
+	GARBAGE=1 $(BUILD_DIR)/grain_plugin_harness $(SDK_DIR)/engines/gorillagrain/GORILLA.wav
+
 grain-test:
 	$(HOSTCXX) -O2 -std=c++20 -Wall -I$(SDK_DIR)/engines $(SDK_DIR)/engines/gorillagrain/grain_test.cpp -o $(BUILD_DIR)/grain_test
 	$(BUILD_DIR)/grain_test
@@ -179,4 +200,4 @@ morph-previews:
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean morph-test morph-previews morph-hwtest grain-test
+.PHONY: all clean morph-test morph-previews morph-hwtest grain-test grain-plugin-test

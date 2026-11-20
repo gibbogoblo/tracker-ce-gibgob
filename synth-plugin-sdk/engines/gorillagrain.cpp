@@ -201,6 +201,10 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
         refreshSource();
         dsp.noteOn(params, src, static_cast<float>(note), velocity);
         gate = true;
+#ifdef GORILLA_DIAG
+        dsp.dbgReset();
+        diagBlocks = 0;
+#endif
     }
 
     void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final
@@ -236,6 +240,26 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
         }
         blip = 0;
         dsp.render(params, ctx.tempo, pitchBendSemitones, left.data(), right.data(), n);
+#ifdef GORILLA_DIAG
+        // after ~0.3 s of a held note, a stage that never made sound beeps its number:
+        // 1 the grains are silent  2 the filter kills them  3 the envelope / volume is 0
+        // 4 broken numbers (NaN)
+        lastVoicePeak = dsp.dbgOut;
+        if (gate && ++diagBlocks > 100)
+        {
+            int code = 0;
+            if (dsp.dbgNan)
+                code = 4;
+            else if (dsp.dbgGrains < 1e-5f)
+                code = 1;
+            else if (dsp.dbgFilter < 1e-5f)
+                code = 2;
+            else if (dsp.dbgEnv < 1e-5f || dsp.dbgOut < 1e-6f)
+                code = 3;
+            if (code != 0)
+                beepCode(code, left.data(), right.data(), n);
+        }
+#endif
         for (int i = 0; i < n && i < static_cast<int>(lastGraphSamples.size()); ++i)
             lastGraphSamples[i] = 0.5f * (left[i] + right[i]);
     }
@@ -266,6 +290,43 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
             else
                 fx.attach(fxMemory);
         }
+#ifdef GORILLA_DIAG
+        {
+            // 5 the voice sounds but the mix handed to the effects is silent
+            // 6 no memory for the effects   7 the effects break the sound
+            auto left = outputBuffer[0];
+            auto right = outputBuffer[1];
+            const int n = static_cast<int>(std::min(left.size(), right.size()));
+            float inPeak = 0.0f;
+            for (int i = 0; i < n; ++i)
+                inPeak = std::max(inPeak, std::fabs(left[i]));
+            int code = 0;
+            if (fxAllocFailed)
+                code = 6;
+            else if (gate && diagBlocks > 100 && lastVoicePeak > 1e-4f && inPeak < 1e-6f)
+                code = 5;
+            if (code == 0 && !fxAllocFailed)
+            {
+                fx.process(fxParams, ctx.tempo, dsp.fxMod, left.data(), right.data(), n);
+                bool bad = false;
+                float outPeak = 0.0f;
+                for (int i = 0; i < n; ++i)
+                {
+                    if (!(left[i] == left[i]) || !(right[i] == right[i]))
+                        bad = true;
+                    outPeak = std::max(outPeak, std::fabs(left[i]));
+                }
+                if (bad || (inPeak > 1e-3f && outPeak < 1e-6f))
+                    fxBroken = true;
+                if (fxBroken)
+                    code = 7;
+                else
+                    return;
+            }
+            beepCode(code, left.data(), right.data(), n);
+            return;
+        }
+#endif
         if (fxAllocFailed)
             return; // no memory for the effects: dry
         auto left = outputBuffer[0];
@@ -273,6 +334,27 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
         const int n = static_cast<int>(std::min(left.size(), right.size()));
         fx.process(fxParams, ctx.tempo, dsp.fxMod, left.data(), right.data(), n);
     }
+
+#ifdef GORILLA_DIAG
+    // code beeps (0.2 s each) in a 1.6 s cycle, replacing the sound
+    void beepCode(int code, float* l, float* r, int n)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const uint32_t t = diagSamples % 70560u;
+            const uint32_t slot = t / 8820u;
+            const bool on = slot < (uint32_t)code && (t % 8820u) < 4410u;
+            diagPhase += 880.0f / 44100.0f;
+            if (diagPhase >= 1.0f)
+                diagPhase -= 1.0f;
+            l[i] = r[i] = on ? sdk::fastSine(diagPhase) * 0.3f : 0.0f;
+            ++diagSamples;
+        }
+    }
+    uint32_t diagSamples = 0, diagBlocks = 0;
+    float diagPhase = 0.0f, lastVoicePeak = 0.0f;
+    bool fxBroken = false;
+#endif
 
     bool hasPostProcess() const final { return true; }
 

@@ -364,10 +364,25 @@ class Voice
             const float e = amp.process() * gAmp;
             outL[i] = yl * e * panL;
             outR[i] = yr * e * panR;
+#ifdef GORILLA_DIAG
+            // the largest values seen at each stage (hardware diagnosis)
+            const float al = l < 0 ? -l : l, ay = yl < 0 ? -yl : yl, ao = outL[i] < 0 ? -outL[i] : outL[i];
+            dbgGrains = al > dbgGrains ? al : dbgGrains;
+            dbgFilter = ay > dbgFilter ? ay : dbgFilter;
+            dbgEnv = e > dbgEnv ? e : dbgEnv;
+            dbgOut = ao > dbgOut ? ao : dbgOut;
+            if (!(outL[i] == outL[i]) || !(outR[i] == outR[i]) || !(l == l) || !(yl == yl))
+                dbgNan = true;
+#endif
         }
     }
 
     float fxMod[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // delay mix, delay fb, reverb mix, reverb decay
+#ifdef GORILLA_DIAG
+    float dbgGrains = 0.0f, dbgFilter = 0.0f, dbgEnv = 0.0f, dbgOut = 0.0f;
+    bool dbgNan = false;
+    void dbgReset() { dbgGrains = dbgFilter = dbgEnv = dbgOut = 0.0f; dbgNan = false; }
+#endif
     int activeGrains() const
     {
         int c = 0;
