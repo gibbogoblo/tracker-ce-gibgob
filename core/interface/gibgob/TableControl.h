@@ -2,6 +2,7 @@
 #define GIBGOB_TABLECONTROL_H_
 
 #include "displayControls.h"
+#include "gibgob/ChordCanopy.h"
 #include "gibgob/gibgobUi.h"
 
 namespace gibgob
@@ -29,6 +30,7 @@ struct TableView
     bool keyboard = false; // on-screen keyboard is open: draw only a backdrop
     BottomBar bar;
     HelpView help;
+    const CanopyView* canopy = nullptr; // set: draw the Chord Canopy instead of the table
 };
 
 class TableControl : public cDisplayControl

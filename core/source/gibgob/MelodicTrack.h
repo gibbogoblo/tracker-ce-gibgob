@@ -286,6 +286,8 @@ bool chordHeld(int track);
 void auditionOn(int track, uint8_t pitch, uint8_t velocity);
 void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocity);
 void auditionOff(int track);
+// the notes the track's audition is playing right now (for the Chord Canopy)
+int auditionSounding(int track, uint8_t* out, int max);
 
 // Record what is being played into the pattern at the play position.
 // holdLength = true: the note length is set when liveRecordOff() is called.

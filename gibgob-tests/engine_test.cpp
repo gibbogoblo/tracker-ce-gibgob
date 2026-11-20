@@ -689,17 +689,30 @@ int main()
         setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
         TrackSettings s = getSettings(&pat, 5);
         CHECK(!s.feel.any());
-        s.feel.strum = 10; s.feel.strumDir = kStrumAlt; s.feel.humTime = 7; s.feel.humVel = 3; s.feel.arpMode = kArpAsPlaced;
+        CHECK(s.feel.mode == kFeelChord && s.feel.strum == 5 && s.feel.arpMode == kArpUp && s.feel.humTime == 0);
+        s.feel.mode = kFeelArp; s.feel.strum = 10; s.feel.strumDir = kStrumAlt; s.feel.humTime = 4; s.feel.humVel = 3; s.feel.arpMode = kArpAsPlaced;
         setSettings(&pat, 5, s);
         TrackSettings r = getSettings(&pat, 5);
-        CHECK(r.feel.strum == 10 && r.feel.strumDir == kStrumAlt && r.feel.arpMode == kArpAsPlaced && r.feel.humTime == 7 && r.feel.humVel == 3);
+        CHECK(r.feel.mode == kFeelArp && r.feel.strum == 10 && r.feel.strumDir == kStrumAlt && r.feel.arpMode == kArpAsPlaced && r.feel.humTime == 4 && r.feel.humVel == 3);
         CHECK(r.arpMode == kArpOff); // the live arp leaves the pattern's arp off
-        for (int m = 0; m < kArpModeCount; m++) for (int h = 0; h <= 10; h += 5)
-        { TrackSettings q = s; q.feel.arpMode = m; q.feel.humTime = h; q.feel.humVel = 10 - h; setSettings(&pat, 5, q);
-          TrackSettings w = getSettings(&pat, 5); CHECK(w.feel.arpMode == m && w.feel.humTime == h && w.feel.humVel == 10 - h && w.feel.strum == 10); }
         CHECK(r.apeSeed == s.apeSeed);
+        // every combination survives being stored
+        for (int m = 0; m < kFeelModeCount; m++)
+            for (int st = 1; st <= kStrumMax; st++)
+                for (int d = 0; d < kStrumDirCount; d++)
+                    for (int a = 1; a < kArpModeCount; a++)
+                        for (int h = 0; h <= kHumanMax; h++)
+                        {
+                            TrackSettings q = s;
+                            q.feel.mode = m; q.feel.strum = st; q.feel.strumDir = d; q.feel.arpMode = a;
+                            q.feel.humTime = h; q.feel.humVel = kHumanMax - h;
+                            setSettings(&pat, 5, q);
+                            ChordFeel w = getSettings(&pat, 5).feel;
+                            CHECK(w.mode == m && w.strum == st && w.strumDir == d && w.arpMode == a && w.humTime == h && w.humVel == kHumanMax - h);
+                        }
         // strum up: 13 ms between notes, low first; then Alt turns round
-        s.feel = ChordFeel{}; s.feel.strum = 10; s.feel.strumDir = kStrumAlt;
+        s.feel = ChordFeel{}; s.feel.mode = kFeelStrum; s.feel.strum = 10; s.feel.strumDir = kStrumAlt;
+        s.feel.humTime = 5; // kept for Human, unused while strumming
         setSettings(&pat, 5, s);
         const uint8_t ch[3] = { 60, 64, 67 };
         auto ons = [&]() { std::vector<int> v; for (auto& e : events) if (e.kind == 'M') v.push_back(e.b); return v; };
@@ -727,9 +740,10 @@ int main()
         chordRelease(5, 2);
         chordPoll(3100);
         CHECK(ons().size() == 1 && stuckSynth() == 0);
-        // humanize: every note within 4 ms * time, nothing stuck
-        s.feel = ChordFeel{}; s.feel.humTime = 10; s.feel.humVel = 10;
+        // humanize: every note within 80 ms at Time 5, nothing stuck; the delays spread
+        s.feel = ChordFeel{}; s.feel.mode = kFeelHuman; s.feel.humTime = 5; s.feel.humVel = 5;
         setSettings(&pat, 5, s);
+        int lateCount = 0;
         for (int i = 0; i < 50; i++)
         {
             events.clear();
@@ -737,12 +751,15 @@ int main()
             chordPoll(t0);
             chordPress(5, 1, ch, 3, 100);
             chordPoll(t0 + 40);
+            if (ons().size() == 3) lateCount += 0; else lateCount++;
+            chordPoll(t0 + 80);
             CHECK(ons().size() == 3);
             chordRelease(5, 1);
         }
+        CHECK(lateCount > 10); // with up to 80 ms, many chords still have a note to come at +40 ms
         CHECK(stuckSynth() == 0);
         // arp, free running at 120 bpm: 1/16 = 125 ms, gate 50 %
-        s.feel = ChordFeel{}; s.feel.arpMode = kArpUp;
+        s.feel = ChordFeel{}; s.feel.mode = kFeelArp; s.feel.arpMode = kArpUp; s.feel.strum = 10;
         s.arpMode = kArpOff; s.arpRate = 3; s.arpOctaves = 2; s.arpGate = 50;
         setSettings(&pat, 5, s);
         events.clear();

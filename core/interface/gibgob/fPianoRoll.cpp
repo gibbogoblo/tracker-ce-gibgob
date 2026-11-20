@@ -400,7 +400,7 @@ void cPianoRoll::refreshView()
     if (view.shift)
     {
         // what the coloured buttons do with Shift
-        static const char* const kShiftNames[4] = { "Edit", "Acid", "Arp", "" };
+        static const char* const kShiftNames[4] = { "Edit", "Acid", "Arp", padsMode() ? "" : "Chord" };
         for (int i = 0; i < 4; i++)
         {
             snprintf(view.params[i].label, sizeof(view.params[i].label), "%s", kShiftNames[i]);

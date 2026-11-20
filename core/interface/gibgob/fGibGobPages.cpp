@@ -19,6 +19,9 @@
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
 
+#include "cr_section_macros.h"
+
+#include <new>
 #include <stdio.h>
 #include <string.h>
 
@@ -65,20 +68,65 @@ enum EditKind
 
 static char s_barText[8][16];
 
-// the chord page: 8 chords (Shift + top 1-8 in the piano roll), then how they play
-enum FeelRow
+// the Chord Canopy (the chord page): one chord at a time, then how it is played
+enum CanopyField : uint8_t
 {
-    kRowStrum = 8,  // speed | direction
-    kRowArp,        // mode | rate | octaves | gate (rate, octaves, gate shared with the Arp menu)
-    kRowHuman,      // timing | velocity
-    kPaletteRowCount
+    kFieldRoot = 0,
+    kFieldType,
+    kFieldInversion,
+    kFieldVoicing,
+    kFieldStrumSpeed,
+    kFieldStrumDir,
+    kFieldArpMode,
+    kFieldArpRate,
+    kFieldArpOctaves,
+    kFieldArpGate,
+    kFieldHumTime,
+    kFieldHumVel,
 };
 static const char* const kStrumDirNames[kStrumDirCount] = { "Up", "Down", "Alt" };
+static const char* const kFeelNames[kFeelModeCount] = { "Chord", "Strum", "Arp", "Human" };
+static const uint32_t kFeelColors[kFeelModeCount] = { color::kNoteBtn, color::kInstrBtn, color::kFx1Btn, color::kFx2Btn };
 
-static int feelColumns(int row)
+// the values shown for a way of playing: the chord's four, then the mode's
+static int canopyFields(int mode, uint8_t* ids)
 {
-    return row == kRowArp ? 4 : (row >= kRowStrum ? 2 : 4);
+    int n = 0;
+    ids[n++] = kFieldRoot;
+    ids[n++] = kFieldType;
+    ids[n++] = kFieldInversion;
+    ids[n++] = kFieldVoicing;
+    if (mode == kFeelStrum)
+    {
+        ids[n++] = kFieldStrumSpeed;
+        ids[n++] = kFieldStrumDir;
+    }
+    else if (mode == kFeelArp)
+    {
+        ids[n++] = kFieldArpMode;
+        ids[n++] = kFieldArpRate;
+        ids[n++] = kFieldArpOctaves;
+        ids[n++] = kFieldArpGate;
+    }
+    else if (mode == kFeelHuman)
+    {
+        ids[n++] = kFieldHumTime;
+        ids[n++] = kFieldHumVel;
+    }
+    return n;
 }
+
+// the page's picture data lives in external RAM (the fast RAM is full)
+alignas(CanopyView) __NOINIT(EXTERNAL_RAM) static uint8_t s_canopyMem[sizeof(CanopyView)];
+static CanopyView* s_canopy = nullptr;
+static CanopyView& canopy()
+{
+    if (s_canopy == nullptr)
+        s_canopy = new (s_canopyMem) CanopyView();
+    return *s_canopy;
+}
+
+static void functColour(uint8_t button, uint8_t state);
 
 static void functPlay(uint8_t state);
 static void functUp(uint8_t state);
@@ -140,12 +188,12 @@ void cGibGobPages::start(uint32_t options)
     origin = o == kFromPianoRoll ? kFromPianoRoll : (o == kFromInstrumentEditor ? kFromInstrumentEditor : kFromHome);
     track = (int)(options & 7);
     row = 0;
-    col = 1;
+    col = page == kPagePalette ? 0 : 1;
     auditioning = false;
     s_auditionOffAt = 0;
 
     songTimer.hide();
-    snprintf(titleText, sizeof(titleText), page == kPagePalette ? "Chord palette" : "Track settings");
+    snprintf(titleText, sizeof(titleText), page == kPagePalette ? "Chord Canopy" : "Track settings");
     titleBar->show();
     titleBar->setTitle(titleText);
 
@@ -191,6 +239,52 @@ void cGibGobPages::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButtonParams, functParams);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
+
+    // the Chord Canopy: Note / Instr / FX1 / FX2 choose how chords are played
+    if (page == kPagePalette)
+    {
+        ip->setButtonObj(interfaceButtonNote, functColour);
+        ip->setButtonObj(interfaceButtonInstr, functColour);
+        ip->setButtonObj(physFx1Button(), functColour);
+        ip->setButtonObj(physFx2Button(), functColour);
+    }
+}
+
+void cGibGobPages::setFeelMode(int mode)
+{
+    Sequencer::strPattern* p = current();
+    TrackSettings s = getSettings(p, track);
+    if (s.feel.mode == mode)
+        return;
+    for (int b = 0; b < 8; b++)
+        chordRelease(track, b); // a held chord stops; the next one plays the new way
+    s.feel.mode = (uint8_t)mode;
+    if (mode == kFeelHuman && s.feel.humTime == 0 && s.feel.humVel == 0)
+    {
+        s.feel.humTime = 2; // something to hear straight away
+        s.feel.humVel = 2;
+    }
+    beginEdit(kEditPalette);
+    setSettings(p, track, s);
+    markChanged();
+    uint8_t ids[CanopyView::kMaxFields];
+    const int n = canopyFields(mode, ids);
+    col = mode == kFeelChord ? clampInt(col, 0, 3) : (n > 4 ? 4 : n - 1); // onto the mode's first value
+    refresh();
+}
+
+static void functColour(uint8_t button, uint8_t state)
+{
+    if (state != buttonPress || GP->page != cGibGobPages::kPagePalette || GP->view.help.active)
+        return;
+    if (button == interfaceButtonNote)
+        GP->setFeelMode(kFeelChord);
+    else if (button == interfaceButtonInstr)
+        GP->setFeelMode(kFeelStrum);
+    else if (button == physFx1Button())
+        GP->setFeelMode(kFeelArp);
+    else if (button == physFx2Button())
+        GP->setFeelMode(kFeelHuman);
 }
 
 void cGibGobPages::switchPage(Page newPage)
@@ -198,7 +292,7 @@ void cGibGobPages::switchPage(Page newPage)
     auditionOff(track);
     page = newPage;
     row = 0;
-    col = 1;
+    col = page == kPagePalette ? 0 : 1;
     setDefaultScreenFunct();
     refresh();
 }
@@ -211,7 +305,7 @@ void cGibGobPages::refresh()
     view.mode[0] = 0;
     if (page == kPagePalette)
     {
-        view.help.title = "Chord palette - shortcuts";
+        view.help.title = "Chord Canopy - shortcuts";
         view.help.lines = kHelpPalette;
         view.help.count = (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0]));
     }
@@ -224,6 +318,7 @@ void cGibGobPages::refresh()
 
     if (page == kPageTrack)
     {
+        view.canopy = nullptr;
         TrackSettings s = getSettings(p, track);
         bool melodic = isMelodic(p, track);
 
@@ -291,70 +386,92 @@ void cGibGobPages::refresh()
     }
     else
     {
-        view.rows = kPaletteRowCount; // Shift + top 1-8 in the piano roll, then the feel
-        view.cols = 5;
-        view.colX[0] = 24;
-        view.colX[1] = 130;
-        view.colX[2] = 240;
-        view.colX[3] = 400;
-        view.colX[4] = 540;
-        view.header[0] = "Shift+";
-        view.header[1] = "Root";
-        view.header[2] = "Type";
-        view.header[3] = "Inversion";
-        view.header[4] = "Voicing";
-        row = clampInt(row, 0, kPaletteRowCount - 1);
-        col = clampInt(col, 1, feelColumns(row));
-        view.cursorRow = row;
-        view.cursorCol = col;
-
-        static const uint32_t kColColor[5] = { 0, color::kNoteBtn, color::kInstrBtn, color::kFx1Btn,
-                                               color::kFx2Btn };
-        for (int r = 0; r < 8; r++)
-        {
-            PaletteChord c = getPaletteChord(p, r);
-            snprintf(view.cell[r][0], 20, "%d", r + 1);
-            snprintf(view.cell[r][1], 20, "%s", mtNotes[c.root]);
-            snprintf(view.cell[r][2], 20, "%s", chordType(c.type).label);
-            snprintf(view.cell[r][3], 20, "%d", c.inversion % chordType(c.type).count);
-            snprintf(view.cell[r][4], 20, "%s", kVoicingNames[c.voicing < kVoicingCount ? c.voicing : 0]);
-            view.rowColor[r] = kColColor[col];
-
-            paletteChordName(c, s_barText[r], sizeof(s_barText[r]));
-            view.bar.text[r] = s_barText[r];
-            view.bar.fill[r] = color::kMelodic;
-            view.bar.highlighted[r] = (r == row);
-        }
-
-        // how the chords play on this track
+        // the Chord Canopy: the chord of Shift + top `row` in the piano roll
+        CanopyView& v = canopy();
+        view.canopy = &v;
         const TrackSettings s = getSettings(p, track);
         const ChordFeel& f = s.feel;
-        for (int r = kRowStrum; r < kPaletteRowCount; r++)
-            for (int c = 0; c < 5; c++)
-                view.cell[r][c][0] = 0;
-        snprintf(view.cell[kRowStrum][0], 20, "Strum");
-        if (f.strum == 0)
-            snprintf(view.cell[kRowStrum][1], 20, "Off");
-        else
-            snprintf(view.cell[kRowStrum][1], 20, "Speed %d", f.strum);
-        snprintf(view.cell[kRowStrum][2], 20, "%s", kStrumDirNames[f.strumDir % kStrumDirCount]);
-        snprintf(view.cell[kRowArp][0], 20, "Arp");
-        snprintf(view.cell[kRowArp][1], 20, "%s", kArpModeNames[f.arpMode < kArpModeCount ? f.arpMode : 0]);
-        snprintf(view.cell[kRowArp][2], 20, "%s", kArpRateNames[clampInt(s.arpRate, 0, kArpRateCount - 1)]);
-        snprintf(view.cell[kRowArp][3], 20, "%d oct", s.arpOctaves);
-        snprintf(view.cell[kRowArp][4], 20, "Gate %d%%", s.arpGate);
-        snprintf(view.cell[kRowHuman][0], 20, "Human");
-        snprintf(view.cell[kRowHuman][1], 20, "Time %d", f.humTime);
-        snprintf(view.cell[kRowHuman][2], 20, "Vel %d", f.humVel);
-        for (int r = kRowStrum; r < kPaletteRowCount; r++)
-            view.rowColor[r] = kColColor[col];
+        row = clampInt(row, 0, 7);
+        uint8_t ids[CanopyView::kMaxFields];
+        v.fieldCount = canopyFields(f.mode, ids);
+        col = clampInt(col, 0, v.fieldCount - 1);
+        v.cursor = col;
+        v.mode = f.mode;
+        v.shift = view.shift;
+        v.chordIndex = row;
 
-        snprintf(view.title, sizeof(view.title),
-                 row == kRowStrum  ? "Strum: speed and direction   (track %d)"
-                 : row == kRowArp  ? "Arp while held   (rate/oct/gate = Arp menu)"
-                 : row == kRowHuman ? "Humanize: late notes, loose velocity   (track %d)"
-                                    : "Chord page   (plays on track %d)",
-                 track + 1);
+        const PaletteChord c = getPaletteChord(p, row);
+        paletteChordName(c, v.chordName, sizeof(v.chordName));
+        v.noteCount = buildPaletteChord(c, v.notes, CanopyView::kMaxNotes);
+        v.soundingCount = auditionSounding(track, v.sounding, CanopyView::kMaxNotes);
+        snprintf(v.title, sizeof(v.title), "Track %d", track + 1);
+
+        // the four ways of playing on the coloured buttons
+        for (int m = 0; m < kFeelModeCount; m++)
+        {
+            snprintf(v.params[m].label, sizeof(v.params[m].label), "%s", kFeelNames[m]);
+            v.params[m].color = kFeelColors[m];
+        }
+        snprintf(v.params[kFeelChord].value, sizeof(v.params[0].value), "all");
+        snprintf(v.params[kFeelStrum].value, sizeof(v.params[0].value), "%d", f.strum);
+        snprintf(v.params[kFeelArp].value, sizeof(v.params[0].value), "%s", kArpRateNames[clampInt(s.arpRate, 0, kArpRateCount - 1)]);
+        snprintf(v.params[kFeelHuman].value, sizeof(v.params[0].value), "%d/%d", f.humTime, f.humVel);
+
+        for (int i = 0; i < v.fieldCount; i++)
+        {
+            CanopyView::Field& fd = v.fields[i];
+            fd.meter = 0;
+            fd.meterMax = 0;
+            fd.color = i < 4 ? 0xFFC83A : kFeelColors[f.mode];
+            const int n = chordType(c.type).count;
+            switch (ids[i])
+            {
+                case kFieldRoot: snprintf(fd.label, 10, "Root"); snprintf(fd.value, 12, "%s", mtNotes[c.root]); break;
+                case kFieldType: snprintf(fd.label, 10, "Type"); snprintf(fd.value, 12, "%s", chordType(c.type).label); break;
+                case kFieldInversion: snprintf(fd.label, 10, "Inversion"); snprintf(fd.value, 12, "%d", c.inversion % n); break;
+                case kFieldVoicing:
+                    snprintf(fd.label, 10, "Voicing");
+                    snprintf(fd.value, 12, "%s", kVoicingNames[c.voicing < kVoicingCount ? c.voicing : 0]);
+                    break;
+                case kFieldStrumSpeed:
+                    snprintf(fd.label, 10, "Speed");
+                    snprintf(fd.value, 12, "%d", f.strum);
+                    fd.meter = (f.strum + 1) / 2;
+                    fd.meterMax = 5;
+                    break;
+                case kFieldStrumDir: snprintf(fd.label, 10, "Direction"); snprintf(fd.value, 12, "%s", kStrumDirNames[f.strumDir % kStrumDirCount]); break;
+                case kFieldArpMode: snprintf(fd.label, 10, "Mode"); snprintf(fd.value, 12, "%s", kArpModeNames[clampInt(f.arpMode, 1, kArpModeCount - 1)]); break;
+                case kFieldArpRate: snprintf(fd.label, 10, "Rate"); snprintf(fd.value, 12, "%s", kArpRateNames[clampInt(s.arpRate, 0, kArpRateCount - 1)]); break;
+                case kFieldArpOctaves:
+                    snprintf(fd.label, 10, "Octaves");
+                    snprintf(fd.value, 12, "%d", s.arpOctaves);
+                    fd.meter = s.arpOctaves;
+                    fd.meterMax = 4;
+                    break;
+                case kFieldArpGate: snprintf(fd.label, 10, "Gate"); snprintf(fd.value, 12, "%d%%", s.arpGate); break;
+                case kFieldHumTime:
+                    snprintf(fd.label, 10, "Time");
+                    snprintf(fd.value, 12, "%d", f.humTime);
+                    fd.meter = f.humTime;
+                    fd.meterMax = kHumanMax;
+                    break;
+                default:
+                    snprintf(fd.label, 10, "Velocity");
+                    snprintf(fd.value, 12, "%d", f.humVel);
+                    fd.meter = f.humVel;
+                    fd.meterMax = kHumanMax;
+                    break;
+            }
+        }
+
+        // bottom bar: the 8 chords
+        for (int r = 0; r < 8; r++)
+        {
+            paletteChordName(getPaletteChord(p, r), s_barText[r], sizeof(s_barText[r]));
+            v.bar.text[r] = s_barText[r];
+            v.bar.fill[r] = 0x2A7340;
+            v.bar.highlighted[r] = (r == row);
+        }
     }
 
     display.refreshControl(table);
@@ -362,6 +479,14 @@ void cGibGobPages::refresh()
 
 void cGibGobPages::update()
 {
+    if (page == kPagePalette && s_canopy != nullptr && view.canopy != nullptr)
+    {
+        uint8_t now[CanopyView::kMaxNotes];
+        const int n = auditionSounding(track, now, CanopyView::kMaxNotes);
+        if (n != s_canopy->soundingCount || memcmp(now, s_canopy->sounding, (size_t)n) != 0)
+            refresh(); // a note started or stopped: light its fruit
+    }
+
     if (s_auditionOffAt != 0 && (uint32_t)s_clock >= s_auditionOffAt)
     {
         s_auditionOffAt = 0;
@@ -566,8 +691,10 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
     }
     else
     {
-        row = clampInt(row + dRow, 0, kPaletteRowCount - 1);
-        col = clampInt(col + dCol, 1, feelColumns(row));
+        uint8_t ids[CanopyView::kMaxFields];
+        const int n = canopyFields(getSettings(current(), track).feel.mode, ids);
+        row = clampInt(row + dRow, 0, 7); // Up/Down: the previous / next chord
+        col = clampInt(col + dCol, 0, n - 1);
     }
     refresh();
 }
@@ -576,65 +703,53 @@ void cGibGobPages::changeValue(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
 
-    if (page == kPagePalette && row >= kRowStrum)
+    if (page == kPagePalette)
     {
         TrackSettings s = getSettings(p, track);
         ChordFeel& f = s.feel;
-        auto wrap = [](int v, int n) { return ((v % n) + n) % n; };
-        if (row == kRowStrum && col == 1)
-            f.strum = (uint8_t)clampInt(f.strum + delta * (big ? 5 : 1), 0, 10);
-        else if (row == kRowStrum)
-            f.strumDir = (uint8_t)wrap(f.strumDir + delta, kStrumDirCount);
-        else if (row == kRowArp && col == 1)
-            f.arpMode = (uint8_t)wrap(f.arpMode + delta, kArpModeCount);
-        else if (row == kRowArp && col == 2)
-            s.arpRate = (uint8_t)clampInt(s.arpRate + delta, 0, kArpRateCount - 1);
-        else if (row == kRowArp && col == 3)
-            s.arpOctaves = (uint8_t)clampInt(s.arpOctaves + delta, 1, 4);
-        else if (row == kRowArp)
-            s.arpGate = (uint8_t)clampInt(s.arpGate + delta * (big ? 25 : 5), 10, 100);
-        else if (row == kRowHuman && col == 1)
-            f.humTime = (uint8_t)clampInt(f.humTime + delta * (big ? 5 : 1), 0, 10);
-        else
-            f.humVel = (uint8_t)clampInt(f.humVel + delta * (big ? 5 : 1), 0, 10);
+        PaletteChord c = getPaletteChord(p, row);
+        uint8_t ids[CanopyView::kMaxFields];
+        const int n = canopyFields(f.mode, ids);
+        const int field = ids[clampInt(col, 0, n - 1)];
+        auto wrap = [](int v, int count) { return ((v % count) + count) % count; };
         beginEdit(kEditPalette);
-        setSettings(p, track, s);
-        markChanged();
-        refresh();
-        return;
-    }
-
-    if (page == kPagePalette)
-    {
-        int idx = row;
-        PaletteChord c = getPaletteChord(p, idx);
-        switch (col)
+        if (field <= kFieldVoicing)
         {
-            case 1: c.root = (uint8_t)clampInt(c.root + delta * (big ? 12 : 1), 0, 127); break;
-            case 2:
-                c.type = (uint8_t)(((c.type + delta * (big ? 4 : 1)) % kChordTypeCount + kChordTypeCount) %
-                                   kChordTypeCount);
-                break;
-            case 3:
+            switch (field)
             {
-                int n = chordType(c.type).count;
-                c.inversion = (uint8_t)(((c.inversion + delta) % n + n) % n);
-                break;
+                case kFieldRoot: c.root = (uint8_t)clampInt(c.root + delta * (big ? 12 : 1), 0, 127); break;
+                case kFieldType: c.type = (uint8_t)wrap(c.type + delta * (big ? 4 : 1), kChordTypeCount); break;
+                case kFieldInversion:
+                {
+                    const int count = chordType(c.type).count;
+                    c.inversion = (uint8_t)wrap(c.inversion + delta, count);
+                    break;
+                }
+                default: c.voicing = (uint8_t)wrap(c.voicing + delta, kVoicingCount); break;
             }
-            case 4:
-                c.voicing = (uint8_t)(((c.voicing + delta) % kVoicingCount + kVoicingCount) % kVoicingCount);
-                break;
-            default: break;
+            c.inversion = (uint8_t)(c.inversion % chordType(c.type).count);
+            setPaletteChord(p, row, c);
+            uint8_t notes[kMaxChordNotes];
+            const int count = buildPaletteChord(c, notes, kMaxChordNotes);
+            if (count > 0)
+                auditionBriefly(track, notes, count);
         }
-        c.inversion = (uint8_t)(c.inversion % chordType(c.type).count);
-        beginEdit(kEditPalette);
-        setPaletteChord(p, idx, c);
+        else
+        {
+            switch (field)
+            {
+                case kFieldStrumSpeed: f.strum = (uint8_t)clampInt(f.strum + delta * (big ? 5 : 1), 1, kStrumMax); break;
+                case kFieldStrumDir: f.strumDir = (uint8_t)wrap(f.strumDir + delta, kStrumDirCount); break;
+                case kFieldArpMode: f.arpMode = (uint8_t)(wrap(f.arpMode - 1 + delta, kArpModeCount - 1) + 1); break;
+                case kFieldArpRate: s.arpRate = (uint8_t)clampInt(s.arpRate + delta, 0, kArpRateCount - 1); break;
+                case kFieldArpOctaves: s.arpOctaves = (uint8_t)clampInt(s.arpOctaves + delta, 1, 4); break;
+                case kFieldArpGate: s.arpGate = (uint8_t)clampInt(s.arpGate + delta * (big ? 25 : 5), 10, 100); break;
+                case kFieldHumTime: f.humTime = (uint8_t)clampInt(f.humTime + delta, 0, kHumanMax); break;
+                default: f.humVel = (uint8_t)clampInt(f.humVel + delta, 0, kHumanMax); break;
+            }
+            setSettings(p, track, s);
+        }
         markChanged();
-
-        uint8_t notes[kMaxChordNotes];
-        int n = buildPaletteChord(c, notes, kMaxChordNotes);
-        if (n > 0)
-            auditionBriefly(track, notes, n);
         refresh();
         return;
     }
@@ -740,9 +855,8 @@ void cGibGobPages::topButton(int button, bool pressed)
             return;
         }
         // the chord of Shift + this button in the piano roll, played with the track's feel
-        if (row < kRowStrum)
-            row = clampInt(button, 0, 7);
-        PaletteChord c = getPaletteChord(p, button);
+        row = clampInt(button, 0, 7); // the Canopy shows this chord
+        PaletteChord c = getPaletteChord(p, row);
         uint8_t notes[kMaxChordNotes];
         int n = buildPaletteChord(c, notes, kMaxChordNotes);
         if (n > 0)

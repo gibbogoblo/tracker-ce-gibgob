@@ -30,16 +30,16 @@ uint32_t ChordPlayer::rand32()
 
 uint32_t ChordPlayer::humanDelay()
 {
-    if (f.humTime == 0)
+    if (f.mode != kFeelHuman || f.humTime == 0)
         return 0;
-    return rand32() % (uint32_t)(f.humTime * 4 + 1);
+    return rand32() % (uint32_t)(clampInt(f.humTime, 0, kHumanMax) * kHumanMsPerStep + 1);
 }
 
 uint8_t ChordPlayer::humanVelocity(int v)
 {
-    if (f.humVel > 0)
+    if (f.mode == kFeelHuman && f.humVel > 0)
     {
-        const int depth = f.humVel * 3;
+        const int depth = clampInt(f.humVel, 0, kHumanMax) * kHumanVelPerStep;
         v += (int)(rand32() % (uint32_t)(2 * depth + 1)) - depth;
     }
     return (uint8_t)clampInt(v, 1, 127);
@@ -70,7 +70,7 @@ void ChordPlayer::start(const uint8_t* pitches, int count, uint8_t vel, const Ch
     for (int i = 0; i < noteCount; i++)
         order[i] = pitches[i] > 127 ? 127 : pitches[i];
     // low to high (the arp keeps the order pressed in its As placed mode)
-    if (!(f.arpMode != 0 && a.mode == kModeAsPlaced))
+    if (!(f.mode == kFeelArp && a.mode == kModeAsPlaced))
         for (int x = 0; x < noteCount; x++)
             for (int y = x + 1; y < noteCount; y++)
                 if (order[y] < order[x])
@@ -81,7 +81,7 @@ void ChordPlayer::start(const uint8_t* pitches, int count, uint8_t vel, const Ch
                 }
     held = true;
 
-    if (f.arpMode != 0)
+    if (f.mode == kFeelArp)
     {
         arpIdx = 0;
         lastGrid = synced ? playTick / a.rateTicks : -1;
@@ -92,14 +92,16 @@ void ChordPlayer::start(const uint8_t* pitches, int count, uint8_t vel, const Ch
 
     // the chord: strummed (each note a little after the one before) and humanized
     bool up = true;
-    if (f.strumDir == kStrumDown)
+    if (f.mode != kFeelStrum)
+        ; // the chord (or humanized): no strum
+    else if (f.strumDir == kStrumDown)
         up = false;
     else if (f.strumDir == kStrumAlt)
     {
         up = strumUpNext;
         strumUpNext = !strumUpNext;
     }
-    const int spacing = f.strum > 0 ? strumSpacingMs(f.strum) : 0;
+    const int spacing = f.mode == kFeelStrum ? strumSpacingMs(f.strum) : 0;
     for (int i = 0; i < noteCount; i++)
     {
         const uint8_t pitch = order[up ? i : noteCount - 1 - i];
@@ -140,7 +142,7 @@ void ChordPlayer::arpStep(uint32_t nowMs, float msPerTick)
 void ChordPlayer::poll(uint32_t nowMs, float msPerTick, bool synced, int playTick, Out& out)
 {
     // the arp clock: the sequencer's grid while it plays, else the tempo
-    if (held && f.arpMode != 0)
+    if (held && f.mode == kFeelArp)
     {
         if (synced)
         {

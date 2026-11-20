@@ -41,6 +41,7 @@ class cGibGobPages : public ModuleBase
     void topButton(int button, bool pressed);
     void goBack();
     void switchPage(Page newPage);
+    void setFeelMode(int mode); // the Chord Canopy: plain chord, strum, arp or human
     void pressMiddle();
     void loadSample();
     void backToInstrumentEditor();

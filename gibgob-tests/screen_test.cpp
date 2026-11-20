@@ -407,24 +407,68 @@ int main()
         prop.data = &pv2;
         TableControl tc2(&prop);
         render(tc2, "chord palette page", kLimit);
-        // the chord page with its feel rows (Strum, Arp, Human): 11 rows
-        pv2.rows = 11; pv2.header[0] = "Shift+";
-        const char* feel[3][5] = { { "Strum", "Speed 10", "Down", "", "" },
-                                   { "Arp", "As placed", "1/16 T", "4 oct", "Gate 100%" },
-                                   { "Human", "Time 10", "Vel 10", "", "" } };
-        for (int r = 0; r < 3; r++) for (int c = 0; c < 5; c++) snprintf(pv2.cell[8 + r][c], 20, "%s", feel[r][c]);
-        for (int r = 0; r < 12; r++) pv2.rowColor[r] = 0xE07B39;
-        pv2.cursorRow = 9; pv2.cursorCol = 4;
-        snprintf(pv2.title, sizeof(pv2.title), "Arp while held   (rate/oct/gate = Arp menu)");
-        render(tc2, "chord page + feel rows", kLimit);
-        if (const char* out = getenv("PALETTE_SVG"))
+        // the Chord Canopy: each way of playing; the busiest case is a wide
+        // 8-note chord, all sounding, with the arp's 8 values and Shift on
         {
-            g_svg = fopen(out, "w");
-            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
-            render(tc2, "chord page (svg)", kLimit);
-            fprintf(g_svg, "</svg>\n");
-            fclose(g_svg); g_svg = nullptr;
-        }
+            static CanopyView cv;
+            TableView ct; ct.canopy = &cv; ct.shift = true;
+            prop.data = &ct;
+            TableControl cc(&prop);
+            snprintf(cv.title, sizeof(cv.title), "Track 8");
+            snprintf(cv.chordName, sizeof(cv.chordName), "G#m maj9 add11");
+            cv.chordIndex = 7;
+            const uint8_t wide[8] = { 36, 43, 49, 56, 61, 66, 70, 71 };
+            for (int i = 0; i < 8; i++) { cv.notes[i] = wide[i]; cv.sounding[i] = wide[i]; }
+            cv.noteCount = 8; cv.soundingCount = 8;
+            static const char* const kModes[4] = { "Chord", "Strum", "Arp", "Human" };
+            static const uint32_t kCols[4] = { 0x53B886, 0xB8AA53, 0x7B6FD6, 0x5AC8FA };
+            for (int m = 0; m < 4; m++) { snprintf(cv.params[m].label, 10, "%s", kModes[m]); snprintf(cv.params[m].value, 10, "%s", m == 0 ? "all" : (m == 1 ? "10" : (m == 2 ? "1/16 T" : "5/5"))); cv.params[m].color = kCols[m]; }
+            static const char* const kLabels[8] = { "Root", "Type", "Inversion", "Voicing", "Mode", "Rate", "Octaves", "Gate" };
+            static const char* const kValues[8] = { "G#10", "m maj9", "4", "Drop 2", "As placed", "1/16 T", "4", "100%" };
+            for (int i = 0; i < 8; i++)
+            {
+                snprintf(cv.fields[i].label, 10, "%s", kLabels[i]); snprintf(cv.fields[i].value, 12, "%s", kValues[i]);
+                cv.fields[i].color = 0x7B6FD6; cv.fields[i].meter = 3; cv.fields[i].meterMax = (i == 6 ? 4 : 5);
+            }
+            for (int i = 0; i < 8; i++) { cv.bar.text[i] = "G#m maj9"; cv.bar.fill[i] = 0x2A7340; cv.bar.highlighted[i] = (i == 7); }
+            for (int mode = 0; mode < 4; mode++)
+            {
+                cv.mode = mode; cv.fieldCount = mode == 0 ? 4 : (mode == 2 ? 8 : 6); cv.cursor = cv.fieldCount - 1;
+                char name[48]; snprintf(name, sizeof(name), "chord canopy, %s", kModes[mode]);
+                render(cc, name, kLimit);
+                if (mode == 2 && getenv("PALETTE_SVG2"))
+                {
+                    g_svg = fopen(getenv("PALETTE_SVG2"), "w");
+                    fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                    render(cc, "chord canopy, Arp (svg)", kLimit);
+                    fprintf(g_svg, "</svg>\n");
+                    fclose(g_svg); g_svg = nullptr;
+                }
+            }
+            // a 2-octave chord, nothing sounding, cursor on a chord value
+            const uint8_t triad[3] = { 60, 63, 67 };
+            for (int i = 0; i < 3; i++) cv.notes[i] = triad[i];
+            cv.noteCount = 3; cv.soundingCount = 1; cv.sounding[0] = 63; cv.mode = 1; cv.fieldCount = 6; cv.cursor = 0; ct.shift = false;
+            snprintf(cv.chordName, sizeof(cv.chordName), "Cm"); cv.chordIndex = 2;
+            snprintf(cv.fields[4].label, 10, "Speed"); snprintf(cv.fields[4].value, 12, "7"); cv.fields[4].meter = 4; cv.fields[4].color = 0xB8AA53;
+            snprintf(cv.fields[5].label, 10, "Direction"); snprintf(cv.fields[5].value, 12, "Alt"); cv.fields[5].meterMax = 0; cv.fields[5].color = 0xB8AA53;
+            for (int i = 0; i < 4; i++) { cv.fields[i].meterMax = 0; cv.fields[i].color = 0xFFC83A; }
+            render(cc, "chord canopy, triad", kLimit, false);
+            int lowC, oct;
+            canopyKeyRange(wide, 8, lowC, oct); if (lowC != 36 || oct != 3) { printf("  canopy range wrong %d %d\n", lowC, oct); fails++; }
+            canopyKeyRange(triad, 3, lowC, oct); if (lowC != 60 || oct != 2) { printf("  canopy range wrong %d %d\n", lowC, oct); fails++; }
+            const uint8_t top[2] = { 120, 127 };
+            canopyKeyRange(top, 2, lowC, oct); if (lowC + 12 * oct > 128) { printf("  canopy range past 127\n"); fails++; }
+            if (const char* out = getenv("PALETTE_SVG"))
+            {
+                g_svg = fopen(out, "w");
+                fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                render(cc, "chord canopy (svg)", kLimit, false);
+                fprintf(g_svg, "</svg>\n");
+                fclose(g_svg); g_svg = nullptr;
+            }
+            prop.data = &pv2;
+    }
     }
 
     {

@@ -233,13 +233,42 @@ bool isBeatSliceSound(uint8_t instrument)
 constexpr uint8_t kSliceMapMagic = 0xA5;
 constexpr uint8_t kNoteMapMagic = 0xA6; // the slot holds the top buttons' notes instead
 
+ChordFeel decodeFeel(uint8_t a, uint8_t b)
+{
+    ChordFeel f;
+    const int sd = a & 0x3F;
+    if (sd < kStrumMax * kStrumDirCount)
+    {
+        f.strum = (uint8_t)((sd / kStrumDirCount + 4) % kStrumMax + 1); // stored 0 = speed 5
+        f.strumDir = (uint8_t)(sd % kStrumDirCount);
+    }
+    f.mode = (uint8_t)((a >> 6) % kFeelModeCount);
+    if (b < (kHumanMax + 1) * (kHumanMax + 1) * (kArpModeCount - 1))
+    {
+        f.arpMode = (uint8_t)(b % (kArpModeCount - 1) + 1);
+        const int hum = b / (kArpModeCount - 1);
+        f.humTime = (uint8_t)(hum / (kHumanMax + 1));
+        f.humVel = (uint8_t)(hum % (kHumanMax + 1));
+    }
+    return f;
+}
+
+void encodeFeel(const ChordFeel& f, uint8_t& a, uint8_t& b)
+{
+    const int strum = clampInt(f.strum, 1, kStrumMax);
+    a = (uint8_t)((((strum + 5) % kStrumMax) * kStrumDirCount + f.strumDir % kStrumDirCount) | ((f.mode % kFeelModeCount) << 6));
+    const int arp = clampInt(f.arpMode, 1, kArpModeCount - 1);
+    const int hum = clampInt(f.humTime, 0, kHumanMax) * (kHumanMax + 1) + clampInt(f.humVel, 0, kHumanMax);
+    b = (uint8_t)(hum * (kArpModeCount - 1) + arp - 1);
+}
+
 // ---------------- extras slot (seed, track length) ----------------
 struct Extras
 {
     uint32_t seed = 0;
     uint8_t steps = 0; // 0 = follow the pattern length
-    // the live chord feel: [5] strum (bits 0-3), strum direction (4-5), arp mode
-    // bits 0-1 (6-7); [6] humanize time * 11 + velocity (bits 0-6), arp mode bit 2 (7)
+    // the live chord feel: [5] ((strum + 5) % 10) * 3 + direction (bits 0-5), mode (6-7);
+    // [6] (humanize time * 6 + velocity) * 5 + arp mode - 1 (all zero: the defaults)
     uint8_t feelA = 0;
     uint8_t feelB = 0;
 };
@@ -979,13 +1008,7 @@ TrackSettings getSettings(const Sequencer::strPattern* p, int track)
     t = decodeSettings(rawBytes(p, track) + kSlotSettings * kSlotBytes, h);
     const Extras e = readExtras(rawBytes(p, track));
     t.apeSeed = e.seed;
-    t.feel.strum = (uint8_t)clampInt(e.feelA & 0x0F, 0, 10);
-    t.feel.strumDir = (uint8_t)(((e.feelA >> 4) & 0x03) % kStrumDirCount);
-    const int arp = ((e.feelA >> 6) & 0x03) | (((e.feelB >> 7) & 0x01) << 2);
-    t.feel.arpMode = (uint8_t)(arp < kArpModeCount ? arp : 0);
-    const int hum = e.feelB & 0x7F;
-    t.feel.humTime = (uint8_t)clampInt(hum / 11, 0, 10);
-    t.feel.humVel = (uint8_t)(hum % 11);
+    t.feel = decodeFeel(e.feelA, e.feelB);
     return t;
 }
 
@@ -1013,9 +1036,7 @@ void setSettings(Sequencer::strPattern* p, int track, const TrackSettings& s)
     memcpy(rawBytes(p, track) + kSlotSettings * kSlotBytes, enc, kSlotBytes);
     Extras e = readExtras(rawBytes(p, track));
     e.seed = s.apeSeed;
-    const int arp = s.feel.arpMode < kArpModeCount ? s.feel.arpMode : 0;
-    e.feelA = (uint8_t)(clampInt(s.feel.strum, 0, 10) | ((s.feel.strumDir % kStrumDirCount) << 4) | ((arp & 0x03) << 6));
-    e.feelB = (uint8_t)((clampInt(s.feel.humTime, 0, 10) * 11 + clampInt(s.feel.humVel, 0, 10)) | ((arp >> 2) << 7));
+    encodeFeel(s.feel, e.feelA, e.feelB);
     writeExtrasLocked(rawBytes(p, track), e);
 }
 
@@ -1849,6 +1870,17 @@ bool isSounding(int track)
 // =====================================================================
 // live playing (UI context)
 // =====================================================================
+
+int auditionSounding(int track, uint8_t* out, int max)
+{
+    if (!validTrack(track) || !audition[track].on)
+        return 0;
+    const Audition& a = audition[track];
+    int n = 0;
+    for (int i = 0; i < a.count && n < max; i++)
+        out[n++] = a.pitches[i];
+    return n;
+}
 
 void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocity)
 {

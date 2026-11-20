@@ -31,11 +31,27 @@ TableControl::TableControl(strControlProperties* properties)
 
 void TableControl::update()
 {
-    if (view == nullptr || view->rows <= 0 || view->cols <= 0)
+    if (view == nullptr)
         return;
 
     const int fRegular = fonts[1].handle;
     const int fBold = fonts[3].handle;
+
+    if (view->canopy != nullptr)
+    {
+        draw::begin(kDrawBudget);
+        if (!drawHelp(view->help, fRegular, fBold))
+        {
+            draw::setLighten(view->shift);
+            drawChordCanopy(*view->canopy, fRegular, fBold);
+            if (view->shift)
+                drawShiftBorder();
+        }
+        draw::end();
+        return;
+    }
+    if (view->rows <= 0 || view->cols <= 0)
+        return;
 
     const bool hasHeader = view->header[0] != nullptr;
     const int top = kTop + (hasHeader ? kHeaderH : 0);

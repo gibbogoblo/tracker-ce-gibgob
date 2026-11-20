@@ -18,16 +18,32 @@ enum StrumDir : uint8_t
     kStrumDirCount
 };
 
+// one way of playing at a time (the coloured buttons on the Chord Canopy)
+enum FeelMode : uint8_t
+{
+    kFeelChord = 0, // all notes at once (Note)
+    kFeelStrum,     // one after another (Instr)
+    kFeelArp,       // an arpeggio while held (FX1)
+    kFeelHuman,     // loose timing and velocity (FX2)
+    kFeelModeCount
+};
+
+constexpr int kStrumMax = 10;
+constexpr int kHumanMax = 5;
+constexpr int kHumanMsPerStep = 16;  // Time 5: notes up to 80 ms late
+constexpr int kHumanVelPerStep = 12; // Vel 5: velocity +/- 60
+
 struct ChordFeel
 {
-    uint8_t strum = 0;    // 0 off, 1 (slow, harp) .. 10 (tight)
+    uint8_t mode = kFeelChord;
+    // each mode keeps its settings while another is chosen
+    uint8_t strum = 5;      // 1 (slow, harp) .. 10 (tight)
     uint8_t strumDir = kStrumUp;
-    uint8_t arpMode = 0;  // 0 off, else an ArpMode (Up .. As placed): the held chord runs as an
-                          // arpeggio at the track's arp rate, octaves and gate
-    uint8_t humTime = 0;  // 0 .. 10: notes land up to 4 ms * this late
-    uint8_t humVel = 0;   // 0 .. 10: velocity up to +/- 3 * this
+    uint8_t arpMode = 1;    // an ArpMode, Up (1) .. As placed (5): rate, octaves, gate are the track's
+    uint8_t humTime = 0;    // 0 .. 5: notes land up to 16 ms * this late
+    uint8_t humVel = 0;     // 0 .. 5: velocity up to +/- 12 * this
 
-    bool any() const { return strum > 0 || arpMode != 0 || humTime > 0 || humVel > 0; }
+    bool any() const { return mode != kFeelChord; }
 };
 
 // milliseconds between two strummed notes
