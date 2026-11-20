@@ -9,6 +9,7 @@
 #include <vector>
 
 using namespace gibgob;
+namespace gibgob { bool g_recArmed = false; }
 
 Sequencer sequencer;
 strMtProject mtProject;
@@ -680,6 +681,100 @@ int main()
     mtProject.instrument[7].playMode = playModeBeatSlice;
     mtProject.instrument[7].sliceNumber = 0;
     CHECK(!isSliceTrack(&pat, 2));
+
+    // T23: live chord feel (Shift + top in the piano roll): strum, arp, humanize
+    {
+        freshPattern();
+        sequencer.playing = false;
+        setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+        TrackSettings s = getSettings(&pat, 5);
+        CHECK(!s.feel.any());
+        s.feel.strum = 10; s.feel.strumDir = kStrumAlt; s.feel.humTime = 7; s.feel.humVel = 3; s.feel.arpMode = kArpAsPlaced;
+        setSettings(&pat, 5, s);
+        TrackSettings r = getSettings(&pat, 5);
+        CHECK(r.feel.strum == 10 && r.feel.strumDir == kStrumAlt && r.feel.arpMode == kArpAsPlaced && r.feel.humTime == 7 && r.feel.humVel == 3);
+        CHECK(r.arpMode == kArpOff); // the live arp leaves the pattern's arp off
+        for (int m = 0; m < kArpModeCount; m++) for (int h = 0; h <= 10; h += 5)
+        { TrackSettings q = s; q.feel.arpMode = m; q.feel.humTime = h; q.feel.humVel = 10 - h; setSettings(&pat, 5, q);
+          TrackSettings w = getSettings(&pat, 5); CHECK(w.feel.arpMode == m && w.feel.humTime == h && w.feel.humVel == 10 - h && w.feel.strum == 10); }
+        CHECK(r.apeSeed == s.apeSeed);
+        // strum up: 13 ms between notes, low first; then Alt turns round
+        s.feel = ChordFeel{}; s.feel.strum = 10; s.feel.strumDir = kStrumAlt;
+        setSettings(&pat, 5, s);
+        const uint8_t ch[3] = { 60, 64, 67 };
+        auto ons = [&]() { std::vector<int> v; for (auto& e : events) if (e.kind == 'M') v.push_back(e.b); return v; };
+        chordPoll(1000);
+        events.clear();
+        chordPress(5, 2, ch, 3, 100);
+        CHECK(ons() == std::vector<int>({60}));
+        chordPoll(1012); CHECK(ons().size() == 1);
+        chordPoll(1013); CHECK(ons() == std::vector<int>({60, 64}));
+        chordPoll(1026); CHECK(ons() == std::vector<int>({60, 64, 67}));
+        CHECK(chordHeld(5));
+        chordRelease(5, 3); CHECK(chordHeld(5)); // another button: not this chord
+        chordRelease(5, 2); CHECK(!chordHeld(5));
+        CHECK(stuckSynth() == 0);
+        events.clear();
+        chordPoll(2000);
+        chordPress(5, 2, ch, 3, 100);
+        chordPoll(2030);
+        CHECK(ons() == std::vector<int>({67, 64, 60})); // down this time
+        // released mid-strum: the rest never starts
+        chordRelease(5, 2);
+        events.clear();
+        chordPoll(3000);
+        chordPress(5, 2, ch, 3, 100);
+        chordRelease(5, 2);
+        chordPoll(3100);
+        CHECK(ons().size() == 1 && stuckSynth() == 0);
+        // humanize: every note within 4 ms * time, nothing stuck
+        s.feel = ChordFeel{}; s.feel.humTime = 10; s.feel.humVel = 10;
+        setSettings(&pat, 5, s);
+        for (int i = 0; i < 50; i++)
+        {
+            events.clear();
+            const uint32_t t0 = 5000 + i * 100;
+            chordPoll(t0);
+            chordPress(5, 1, ch, 3, 100);
+            chordPoll(t0 + 40);
+            CHECK(ons().size() == 3);
+            chordRelease(5, 1);
+        }
+        CHECK(stuckSynth() == 0);
+        // arp, free running at 120 bpm: 1/16 = 125 ms, gate 50 %
+        s.feel = ChordFeel{}; s.feel.arpMode = kArpUp;
+        s.arpMode = kArpOff; s.arpRate = 3; s.arpOctaves = 2; s.arpGate = 50;
+        setSettings(&pat, 5, s);
+        events.clear();
+        chordPoll(20000);
+        chordPress(5, 4, ch, 3, 100);
+        for (uint32_t t = 20000; t <= 20000 + 125 * 6 + 10; t += 5)
+            chordPoll(t);
+        CHECK(ons() == std::vector<int>({60, 64, 67, 72, 76, 79, 60}));
+        CHECK(stuckSynth() == 1); // only the note started at +750 ms still sounds
+        chordRelease(5, 4);
+        CHECK(stuckSynth() == 0);
+        // arp following the playing sequencer's grid; recorded with Rec on
+        sequencer.playing = true;
+        g_recArmed = true;
+        stopAll();
+        events.clear();
+        runTicks(0, 1);
+        chordPoll(30000);
+        chordPress(5, 0, ch, 3, 100);
+        uint32_t ms = 30000;
+        for (int tick = 1; tick < 48 * 4; tick++)
+        {
+            runTicks(tick, 1);
+            ms += 1;
+            chordPoll(ms);
+        }
+        chordRelease(5, 0);
+        g_recArmed = false;
+        CHECK(noteCount(&pat, 5) >= 4); // the arp notes were recorded
+        stopAll();
+        CHECK(stuckSynth() == 0);
+    }
 
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;

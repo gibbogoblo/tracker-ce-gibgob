@@ -58,6 +58,7 @@ class cPianoRoll : public ModuleBase
     void releaseAllButtons();
     void auditionGhost(bool on);
     void openTrackPage();
+    void openChordPage();
     void utility(int button); // an Edit menu tool (Shift + Note)
     void copyOrPaste();
 
@@ -112,6 +113,7 @@ class cPianoRoll : public ModuleBase
     bool held[8] = { false };
     bool heldIsNote[8] = { false }; // held to play its own note (can be retuned while held)
     bool heldRecording[8] = { false };
+    bool heldFeel[8] = { false };      // a chord played through the track's feel (strum, arp, humanize)
     uint8_t heldNotes[8][gibgob::kMaxChordNotes];
     uint8_t heldCount[8] = { 0 };
 

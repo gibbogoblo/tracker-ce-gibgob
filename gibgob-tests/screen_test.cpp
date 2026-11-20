@@ -407,6 +407,24 @@ int main()
         prop.data = &pv2;
         TableControl tc2(&prop);
         render(tc2, "chord palette page", kLimit);
+        // the chord page with its feel rows (Strum, Arp, Human): 11 rows
+        pv2.rows = 11; pv2.header[0] = "Shift+";
+        const char* feel[3][5] = { { "Strum", "Speed 10", "Down", "", "" },
+                                   { "Arp", "As placed", "1/16 T", "4 oct", "Gate 100%" },
+                                   { "Human", "Time 10", "Vel 10", "", "" } };
+        for (int r = 0; r < 3; r++) for (int c = 0; c < 5; c++) snprintf(pv2.cell[8 + r][c], 20, "%s", feel[r][c]);
+        for (int r = 0; r < 12; r++) pv2.rowColor[r] = 0xE07B39;
+        pv2.cursorRow = 9; pv2.cursorCol = 4;
+        snprintf(pv2.title, sizeof(pv2.title), "Arp while held   (rate/oct/gate = Arp menu)");
+        render(tc2, "chord page + feel rows", kLimit);
+        if (const char* out = getenv("PALETTE_SVG"))
+        {
+            g_svg = fopen(out, "w");
+            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+            render(tc2, "chord page (svg)", kLimit);
+            fprintf(g_svg, "</svg>\n");
+            fclose(g_svg); g_svg = nullptr;
+        }
     }
 
     {

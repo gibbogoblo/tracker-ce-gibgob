@@ -34,6 +34,8 @@ class Sequencer
     };
     strPattern* getActualPattern() { return pattern; }
     bool isPlay() { return playing; }
+    float getCurrentTempo() { return tempo; }
+    float tempo = 120.0f;
     void startCountIn() {}
     bool isCountingIn() { return false; }
     void playPattern() { playing = true; }

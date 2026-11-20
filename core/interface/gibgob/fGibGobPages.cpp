@@ -65,6 +65,21 @@ enum EditKind
 
 static char s_barText[8][16];
 
+// the chord page: 8 chords (Shift + top 1-8 in the piano roll), then how they play
+enum FeelRow
+{
+    kRowStrum = 8,  // speed | direction
+    kRowArp,        // mode | rate | octaves | gate (rate, octaves, gate shared with the Arp menu)
+    kRowHuman,      // timing | velocity
+    kPaletteRowCount
+};
+static const char* const kStrumDirNames[kStrumDirCount] = { "Up", "Down", "Alt" };
+
+static int feelColumns(int row)
+{
+    return row == kRowArp ? 4 : (row >= kRowStrum ? 2 : 4);
+}
+
 static void functPlay(uint8_t state);
 static void functUp(uint8_t state);
 static void functDown(uint8_t state);
@@ -146,6 +161,8 @@ void cGibGobPages::stop()
         keyboardManager.deactivateKeyboard();
         s_naming = false;
     }
+    for (int b = 0; b < 8; b++)
+        chordRelease(track, b); // a chord still held stops
     auditionOff(track);
     auditioning = false;
     s_auditionOffAt = 0;
@@ -274,7 +291,7 @@ void cGibGobPages::refresh()
     }
     else
     {
-        view.rows = 8; // Shift + top 1-8 in the piano roll
+        view.rows = kPaletteRowCount; // Shift + top 1-8 in the piano roll, then the feel
         view.cols = 5;
         view.colX[0] = 24;
         view.colX[1] = 130;
@@ -286,8 +303,8 @@ void cGibGobPages::refresh()
         view.header[2] = "Type";
         view.header[3] = "Inversion";
         view.header[4] = "Voicing";
-        row = clampInt(row, 0, 7);
-        col = clampInt(col, 1, 4);
+        row = clampInt(row, 0, kPaletteRowCount - 1);
+        col = clampInt(col, 1, feelColumns(row));
         view.cursorRow = row;
         view.cursorCol = col;
 
@@ -309,7 +326,35 @@ void cGibGobPages::refresh()
             view.bar.highlighted[r] = (r == row);
         }
 
-        snprintf(view.title, sizeof(view.title), "Chord palette   (plays on track %d)", track + 1);
+        // how the chords play on this track
+        const TrackSettings s = getSettings(p, track);
+        const ChordFeel& f = s.feel;
+        for (int r = kRowStrum; r < kPaletteRowCount; r++)
+            for (int c = 0; c < 5; c++)
+                view.cell[r][c][0] = 0;
+        snprintf(view.cell[kRowStrum][0], 20, "Strum");
+        if (f.strum == 0)
+            snprintf(view.cell[kRowStrum][1], 20, "Off");
+        else
+            snprintf(view.cell[kRowStrum][1], 20, "Speed %d", f.strum);
+        snprintf(view.cell[kRowStrum][2], 20, "%s", kStrumDirNames[f.strumDir % kStrumDirCount]);
+        snprintf(view.cell[kRowArp][0], 20, "Arp");
+        snprintf(view.cell[kRowArp][1], 20, "%s", kArpModeNames[f.arpMode < kArpModeCount ? f.arpMode : 0]);
+        snprintf(view.cell[kRowArp][2], 20, "%s", kArpRateNames[clampInt(s.arpRate, 0, kArpRateCount - 1)]);
+        snprintf(view.cell[kRowArp][3], 20, "%d oct", s.arpOctaves);
+        snprintf(view.cell[kRowArp][4], 20, "Gate %d%%", s.arpGate);
+        snprintf(view.cell[kRowHuman][0], 20, "Human");
+        snprintf(view.cell[kRowHuman][1], 20, "Time %d", f.humTime);
+        snprintf(view.cell[kRowHuman][2], 20, "Vel %d", f.humVel);
+        for (int r = kRowStrum; r < kPaletteRowCount; r++)
+            view.rowColor[r] = kColColor[col];
+
+        snprintf(view.title, sizeof(view.title),
+                 row == kRowStrum  ? "Strum: speed and direction   (track %d)"
+                 : row == kRowArp  ? "Arp while held   (rate/oct/gate = Arp menu)"
+                 : row == kRowHuman ? "Humanize: late notes, loose velocity   (track %d)"
+                                    : "Chord page   (plays on track %d)",
+                 track + 1);
     }
 
     display.refreshControl(table);
@@ -521,8 +566,8 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
     }
     else
     {
-        row = clampInt(row + dRow, 0, 7);
-        col = clampInt(col + dCol, 1, 4);
+        row = clampInt(row + dRow, 0, kPaletteRowCount - 1);
+        col = clampInt(col + dCol, 1, feelColumns(row));
     }
     refresh();
 }
@@ -530,6 +575,34 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
 void cGibGobPages::changeValue(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
+
+    if (page == kPagePalette && row >= kRowStrum)
+    {
+        TrackSettings s = getSettings(p, track);
+        ChordFeel& f = s.feel;
+        auto wrap = [](int v, int n) { return ((v % n) + n) % n; };
+        if (row == kRowStrum && col == 1)
+            f.strum = (uint8_t)clampInt(f.strum + delta * (big ? 5 : 1), 0, 10);
+        else if (row == kRowStrum)
+            f.strumDir = (uint8_t)wrap(f.strumDir + delta, kStrumDirCount);
+        else if (row == kRowArp && col == 1)
+            f.arpMode = (uint8_t)wrap(f.arpMode + delta, kArpModeCount);
+        else if (row == kRowArp && col == 2)
+            s.arpRate = (uint8_t)clampInt(s.arpRate + delta, 0, kArpRateCount - 1);
+        else if (row == kRowArp && col == 3)
+            s.arpOctaves = (uint8_t)clampInt(s.arpOctaves + delta, 1, 4);
+        else if (row == kRowArp)
+            s.arpGate = (uint8_t)clampInt(s.arpGate + delta * (big ? 25 : 5), 10, 100);
+        else if (row == kRowHuman && col == 1)
+            f.humTime = (uint8_t)clampInt(f.humTime + delta * (big ? 5 : 1), 0, 10);
+        else
+            f.humVel = (uint8_t)clampInt(f.humVel + delta * (big ? 5 : 1), 0, 10);
+        beginEdit(kEditPalette);
+        setSettings(p, track, s);
+        markChanged();
+        refresh();
+        return;
+    }
 
     if (page == kPagePalette)
     {
@@ -656,19 +729,28 @@ void cGibGobPages::topButton(int button, bool pressed)
         if (!pressed)
         {
             auditioning = false;
-            if (s_auditionOffAt == 0)
+            if (chordHeld(track))
+            {
+                chordRelease(track, button);
+                if (g_recArmed && sequencer.isPlay())
+                    markChanged();
+            }
+            if (s_auditionOffAt == 0 && !chordHeld(track))
                 auditionOff(track);
             return;
         }
-        row = clampInt(button, 0, 7); // the chord of Shift + this button in the piano roll
-        PaletteChord c = getPaletteChord(p, row);
+        // the chord of Shift + this button in the piano roll, played with the track's feel
+        if (row < kRowStrum)
+            row = clampInt(button, 0, 7);
+        PaletteChord c = getPaletteChord(p, button);
         uint8_t notes[kMaxChordNotes];
         int n = buildPaletteChord(c, notes, kMaxChordNotes);
         if (n > 0)
         {
             s_auditionOffAt = 0;
             auditioning = true;
-            auditionChord(track, notes, n, 100);
+            auditionOff(track);
+            chordPress(track, button, notes, n, 100);
         }
         refresh();
         return;

@@ -6,6 +6,7 @@
 #include "gibgob/gibbonVision.h"
 #include "gibgob/gibgobMasterFx.h"
 #include "gibgob/gibgobSynth.h"
+#include "gibgob/MelodicTrack.h"
 #include <string.h>
 
 #include "core/interface.h"
@@ -144,12 +145,17 @@ void Interface::begin(Platform* platform, Synth* synth)
 //=======================================================================
 //=======================================================================
 //=======================================================================
+static elapsedMillis s_chordClock; // the live chord player's clock
+
 void Interface::update()
 {
     processOperatingMode();
 
     if (operatingMode == mtOperatingModeRun)
+    {
         gibgobSynthPoll(); // which synths sing syllables (LILITRON)
+        gibgob::chordPoll((uint32_t)s_chordClock); // live chords: strum, arp, humanize
+    }
 
     if (onScreenModule != nullptr && onScreenModule->moduleRefresh)
         onScreenModule->update();

@@ -21,6 +21,7 @@
 //   slot 127      : two chords of the pattern's chord palette
 
 #include "mtSequencer.h"
+#include "gibgob/ChordFeel.h"
 #include <stdint.h>
 
 namespace gibgob
@@ -100,6 +101,7 @@ struct TrackSettings
     uint8_t apeGate = 40;   // 0..100
     uint8_t apeNotes = 40;  // 0..100
     uint32_t apeSeed = 0;   // the random sequence Go Ape made (0 = none yet)
+    ChordFeel feel;         // how live chords sound (strum, arp, humanize)
 };
 
 // ---- chord palette (one complete chord per top-row button) ----
@@ -270,6 +272,15 @@ void markLegacyPlayed(int track); // an old tracker step sounded on this track
 int playheadTick(int track);      // micro steps inside the track, -1 when stopped
 int voiceOwner(int voice);        // track that last played on a sample voice (chords borrow voices)
 bool isSounding(int track);       // for activity lights
+
+// ---- live chords with the track's feel (UI context) ----
+// A chord pressed / let go on a top button: strummed, arpeggiated and / or
+// humanized as the track's settings say, recorded note by note when Rec is
+// on. chordPoll() plays what is due; call it from the UI loop.
+void chordPress(int track, int button, const uint8_t* pitches, int count, uint8_t velocity);
+void chordRelease(int track, int button);
+void chordPoll(uint32_t nowMs);
+bool chordHeld(int track);
 
 // ---- live playing (UI context) ----
 void auditionOn(int track, uint8_t pitch, uint8_t velocity);

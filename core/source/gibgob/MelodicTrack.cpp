@@ -5,6 +5,7 @@
 #include "mtMidi.h"
 #include "mtStructs.h"
 
+#include <new>
 #include <string.h>
 
 #if __has_include("cr_section_macros.h")
@@ -237,6 +238,10 @@ struct Extras
 {
     uint32_t seed = 0;
     uint8_t steps = 0; // 0 = follow the pattern length
+    // the live chord feel: [5] strum (bits 0-3), strum direction (4-5), arp mode
+    // bits 0-1 (6-7); [6] humanize time * 11 + velocity (bits 0-6), arp mode bit 2 (7)
+    uint8_t feelA = 0;
+    uint8_t feelB = 0;
 };
 
 Extras readExtras(const uint8_t* raw)
@@ -247,6 +252,8 @@ Extras readExtras(const uint8_t* raw)
         return e;
     e.seed = (uint32_t)x[0] | ((uint32_t)x[1] << 8) | ((uint32_t)x[2] << 16) | ((uint32_t)x[3] << 24);
     e.steps = x[4] <= kMaxTrackSteps ? x[4] : 0;
+    e.feelA = x[5];
+    e.feelB = x[6];
     return e;
 }
 
@@ -259,8 +266,8 @@ void writeExtrasLocked(uint8_t* raw, const Extras& e)
     x[2] = (uint8_t)((e.seed >> 16) & 0xFF);
     x[3] = (uint8_t)((e.seed >> 24) & 0xFF);
     x[4] = e.steps;
-    x[5] = 0;
-    x[6] = 0;
+    x[5] = e.feelA;
+    x[6] = e.feelB;
     x[7] = kExtrasMagic;
 }
 
@@ -970,7 +977,15 @@ TrackSettings getSettings(const Sequencer::strPattern* p, int track)
     if (!readHeader(p, track, h))
         return t;
     t = decodeSettings(rawBytes(p, track) + kSlotSettings * kSlotBytes, h);
-    t.apeSeed = readExtras(rawBytes(p, track)).seed;
+    const Extras e = readExtras(rawBytes(p, track));
+    t.apeSeed = e.seed;
+    t.feel.strum = (uint8_t)clampInt(e.feelA & 0x0F, 0, 10);
+    t.feel.strumDir = (uint8_t)(((e.feelA >> 4) & 0x03) % kStrumDirCount);
+    const int arp = ((e.feelA >> 6) & 0x03) | (((e.feelB >> 7) & 0x01) << 2);
+    t.feel.arpMode = (uint8_t)(arp < kArpModeCount ? arp : 0);
+    const int hum = e.feelB & 0x7F;
+    t.feel.humTime = (uint8_t)clampInt(hum / 11, 0, 10);
+    t.feel.humVel = (uint8_t)(hum % 11);
     return t;
 }
 
@@ -998,6 +1013,9 @@ void setSettings(Sequencer::strPattern* p, int track, const TrackSettings& s)
     memcpy(rawBytes(p, track) + kSlotSettings * kSlotBytes, enc, kSlotBytes);
     Extras e = readExtras(rawBytes(p, track));
     e.seed = s.apeSeed;
+    const int arp = s.feel.arpMode < kArpModeCount ? s.feel.arpMode : 0;
+    e.feelA = (uint8_t)(clampInt(s.feel.strum, 0, 10) | ((s.feel.strumDir % kStrumDirCount) << 4) | ((arp & 0x03) << 6));
+    e.feelB = (uint8_t)((clampInt(s.feel.humTime, 0, 10) * 11 + clampInt(s.feel.humVel, 0, 10)) | ((arp >> 2) << 7));
     writeExtrasLocked(rawBytes(p, track), e);
 }
 
@@ -1878,6 +1896,190 @@ void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocit
         a.serials[a.count] = serial;
         a.count++;
     }
+}
+
+// one more note in the track's audition (the others keep sounding)
+void auditionAdd(int track, uint8_t pitch, uint8_t velocity)
+{
+    ensureInit();
+    if (!validTrack(track))
+        return;
+    Audition& a = audition[track];
+    const Sequencer::strPattern* p = current();
+    const uint8_t instrument = getSound(p, track);
+    const bool sample = isSampleInstrument(instrument);
+    if (sample && mtProject.instrument[instrument].isActive != 1)
+        return;
+    if (!a.on || a.instrument != instrument)
+    {
+        auditionOff(track);
+        a.instrument = instrument;
+        a.oneShot = sample && (!isMelodic(p, track) || isBeatSliceSound(instrument));
+        a.count = 0;
+        a.on = true;
+    }
+    if (a.count >= kMaxChordNotes)
+        return;
+    pitch = pitch > 127 ? 127 : pitch;
+    int voice = -1;
+    uint8_t serial = 0;
+    if (sample)
+    {
+        {
+            AudioLock lock;
+            serial = ++playState[track].serialCounter;
+            voice = allocVoice(track, serial);
+        }
+        instrumentPlayer[voice].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), 0, 0, 0, 0);
+    }
+    else
+    {
+        s_lastSyllable[track & (kTracks - 1)] = (uint8_t)(g_liveSyllable % kSyllables);
+        soundOnPoly(instrument, pitch, velocity, g_liveSyllable);
+    }
+    a.pitches[a.count] = pitch;
+    a.voices[a.count] = (int8_t)voice;
+    a.serials[a.count] = serial;
+    a.count++;
+}
+
+// one note of the track's audition off
+void auditionRemove(int track, uint8_t pitch)
+{
+    if (!validTrack(track) || !audition[track].on)
+        return;
+    Audition& a = audition[track];
+    for (int i = 0; i < a.count; i++)
+    {
+        if (a.pitches[i] != pitch)
+            continue;
+        if (a.voices[i] >= 0)
+        {
+            bool mine = false;
+            {
+                AudioLock lock;
+                VoiceUse& u = voiceUse[a.voices[i]];
+                mine = u.on && u.track == track && u.serial == a.serials[i];
+                if (mine)
+                    u.on = false;
+            }
+            if (mine && !a.oneShot)
+                instrumentPlayer[a.voices[i]].noteOff();
+        }
+        else
+        {
+            soundOffPoly(a.instrument, a.pitches[i]);
+        }
+        for (int k = i; k + 1 < a.count; k++)
+        {
+            a.pitches[k] = a.pitches[k + 1];
+            a.voices[k] = a.voices[k + 1];
+            a.serials[k] = a.serials[k + 1];
+        }
+        a.count--;
+        if (a.count == 0)
+            a.on = false;
+        return;
+    }
+}
+
+extern bool g_recArmed; // the Rec toggle (gibgobUi)
+
+namespace
+{
+// the live chord of each track (external RAM: the fast RAM is full)
+alignas(ChordPlayer) __NOINIT(EXTERNAL_RAM) static uint8_t s_chordMem[kTracks * sizeof(ChordPlayer)];
+ChordPlayer* s_chord = nullptr;
+ChordPlayer* chords()
+{
+    if (s_chord == nullptr)
+    {
+        s_chord = reinterpret_cast<ChordPlayer*>(s_chordMem);
+        for (int t = 0; t < kTracks; t++)
+            new (&s_chord[t]) ChordPlayer();
+    }
+    return s_chord;
+}
+int8_t s_chordButton[kTracks] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+uint32_t s_chordNow = 0;
+
+struct ChordOut : ChordPlayer::Out
+{
+    int track;
+    bool record;
+    void on(uint8_t pitch, uint8_t velocity) override
+    {
+        auditionAdd(track, pitch, velocity);
+        if (record)
+            liveRecordOn(track, &pitch, 1, velocity, true);
+    }
+    void off(uint8_t pitch) override
+    {
+        auditionRemove(track, pitch);
+        if (record)
+            liveRecordOff(track, &pitch, 1);
+    }
+};
+
+float msPerTick()
+{
+    const float bpm = sequencer.getCurrentTempo();
+    return 60000.0f / ((bpm > 20.0f ? bpm : 120.0f) * 4.0f * kTicksPerStep);
+}
+
+ArpConf arpConf(const TrackSettings& s)
+{
+    return ArpConf{ s.feel.arpMode, kArpRateTicks[clampInt(s.arpRate, 0, kArpRateCount - 1)], s.arpOctaves, s.arpGate };
+}
+} // namespace
+
+void chordPress(int track, int button, const uint8_t* pitches, int count, uint8_t velocity)
+{
+    ensureInit();
+    if (!validTrack(track))
+        return;
+    const Sequencer::strPattern* p = current();
+    const TrackSettings s = getSettings(p, track);
+    ChordOut out;
+    out.track = track;
+    out.record = g_recArmed && sequencer.isPlay();
+    const bool playing = sequencer.isPlay();
+    chords()[track].start(pitches, count, velocity, s.feel, arpConf(s), s_chordNow, msPerTick(), playing,
+                         playing ? (int)playState[track].runTicks : 0, out);
+    s_chordButton[track] = (int8_t)button;
+}
+
+void chordRelease(int track, int button)
+{
+    if (!validTrack(track) || s_chordButton[track] != button)
+        return;
+    ChordOut out;
+    out.track = track;
+    out.record = g_recArmed && sequencer.isPlay();
+    chords()[track].stop(out);
+    s_chordButton[track] = -1;
+}
+
+void chordPoll(uint32_t nowMs)
+{
+    s_chordNow = nowMs;
+    if (s_chord == nullptr)
+        return; // nothing played yet
+    const bool playing = sequencer.isPlay();
+    for (int t = 0; t < kTracks; t++)
+    {
+        if (!s_chord[t].active())
+            continue;
+        ChordOut out;
+        out.track = t;
+        out.record = g_recArmed && playing;
+        s_chord[t].poll(nowMs, msPerTick(), playing, playing ? (int)playState[t].runTicks : 0, out);
+    }
+}
+
+bool chordHeld(int track)
+{
+    return validTrack(track) && s_chordButton[track] >= 0;
 }
 
 void auditionOn(int track, uint8_t pitch, uint8_t velocity)

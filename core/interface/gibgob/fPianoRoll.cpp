@@ -117,6 +117,7 @@ void cPianoRoll::start(uint32_t options)
         held[i] = false;
         heldRecording[i] = false;
         heldCount[i] = 0;
+        heldFeel[i] = false;
     }
     clearSelection();
     mode = Mode::Idle;
@@ -1004,6 +1005,13 @@ void cPianoRoll::topButton(int button, bool pressed)
         if (!held[button])
             return;
         held[button] = false;
+        if (heldFeel[button])
+        {
+            heldFeel[button] = false;
+            chordRelease(track, button); // its notes stop (and end their recording)
+            if (g_recArmed)
+                markChanged();
+        }
         if (heldRecording[button])
         {
             liveRecordOff(track, heldNotes[button], heldCount[button]);
@@ -1076,8 +1084,23 @@ void cPianoRoll::topButton(int button, bool pressed)
     heldCount[button] = (uint8_t)n;
     for (int i = 0; i < n; i++)
         heldNotes[button][i] = notes[i];
+    heldFeel[button] = false;
 
     auditionOffAt = 0;
+    if (chords && getSettings(p, track).feel.any())
+    {
+        // the chord page's feel: strummed, arpeggiated or humanized while held;
+        // the chord player records each note as it plays
+        if (recording)
+            beginEdit(kEditRecord);
+        auditionOff(track);
+        heldFeel[button] = true;
+        chordPress(track, button, notes, n, (uint8_t)velocity);
+        if (recording)
+            markChanged();
+        refreshView();
+        return;
+    }
     auditionChord(track, notes, n, (uint8_t)velocity);
 
     if (recording)
@@ -1129,6 +1152,11 @@ void cPianoRoll::releaseAllButtons()
         if (!held[i])
             continue;
         held[i] = false;
+        if (heldFeel[i])
+        {
+            heldFeel[i] = false;
+            chordRelease(track, i);
+        }
         if (heldRecording[i])
         {
             liveRecordOff(track, heldNotes[i], heldCount[i]);
@@ -1239,6 +1267,15 @@ void cPianoRoll::copyOrPaste()
 void cPianoRoll::openTrackPage()
 {
     uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPageTrack, cGibGobPages::kFromPianoRoll, track);
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibgobPages, options);
+}
+
+// Shift + FX2: the chord page (the 8 Shift chords and how they are played)
+void cPianoRoll::openChordPage()
+{
+    releaseAllButtons();
+    uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPagePalette, cGibGobPages::kFromPianoRoll, track);
     mtInterface.deactivateModule(this);
     mtInterface.activateModule(&gibgobPages, options);
 }
@@ -1906,6 +1943,8 @@ static void functParamButton(uint8_t button, uint8_t state)
             PR->openMenu(cPianoRoll::Menu::Acid);
         else if (button == physFx1Button())
             PR->openMenu(cPianoRoll::Menu::Arp);
+        else if (button == physFx2Button() && !PR->padsMode())
+            PR->openChordPage();
         return;
     }
     if (button == interfaceButtonNote)

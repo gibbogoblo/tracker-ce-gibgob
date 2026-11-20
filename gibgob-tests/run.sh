@@ -8,10 +8,10 @@ CORE=../core
 G=$CORE/interface/gibgob
 FLAGS="-std=c++17 -Wall -g -fsanitize=address,undefined -I stubs -I $CORE/source -I $CORE/interface -I $G"
 mkdir -p build
-g++ $FLAGS engine_test.cpp $CORE/source/gibgob/MelodicTrack.cpp -o build/engine_test
+g++ $FLAGS engine_test.cpp $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/ChordFeel.cpp -o build/engine_test
 g++ $FLAGS chord_test.cpp -o build/chord_test
 g++ $FLAGS screen_test.cpp $G/LaneControl.cpp $G/PianoRollControl.cpp $G/TableControl.cpp $G/DrumSeqControl.cpp $G/PerformControl.cpp $G/VisionControl.cpp $G/SynthEditControl.cpp $G/gibgobUi.cpp $CORE/source/gibgob/SynthLayout.cpp \
-    $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/PerformFx.cpp -o build/screen_test
+    $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/ChordFeel.cpp $CORE/source/gibgob/PerformFx.cpp -o build/screen_test
 g++ $FLAGS -std=c++20 perform_test.cpp $CORE/source/gibgob/PerformFx.cpp -o build/perform_test
 g++ $FLAGS master_test.cpp $CORE/source/gibgob/MasterFx.cpp -o build/master_test
 ./build/engine_test
