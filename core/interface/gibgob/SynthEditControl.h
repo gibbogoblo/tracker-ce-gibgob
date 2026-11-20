@@ -83,6 +83,9 @@ struct SynthGrainView
     float partPeak;     // what the Mini's synth stage got from this part (since the note began)
     uint32_t overloads; // times all synths were muted for running late
     uint32_t lateUs;    // the longest synth update (2100 us is the limit)
+    float postPeak;     // after the part's volume
+    float gainDb;       // the part's volume as used
+    float panL, panR;   // the pan stage before the mixer
 };
 
 struct SynthView

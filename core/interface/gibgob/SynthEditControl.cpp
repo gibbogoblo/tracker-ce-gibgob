@@ -304,20 +304,23 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
         char line[96];
         draw::alpha(200);
         draw::color(0x000000);
-        draw::rect(x1 + 2, y1 + 2, x1 + 560, y1 + 56);
+        draw::rect(x1 + 2, y1 + 2, x1 + 560, y1 + 74);
         draw::alpha(255);
         draw::color(0xFFFF66);
-        snprintf(line, sizeof(line), "GRN %.3f  FLT %.3f  ENV %.3f  OUT %.3f  HOST %.3f", (double)d[0], (double)d[1],
+        snprintf(line, sizeof(line), "GRN %.3f FLT %.3f ENV %.3f OUT %.3f HOST %.3f", (double)d[0], (double)d[1],
                  (double)d[2], (double)d[3], (double)d[4]);
         draw::text(x1 + 8, y1 + 11, f.small, OPT_CENTERY, line);
         static const char* const kFx[3] = { "none", "ready", "FAILED" };
         const int fxs = (int)d[7] >= 0 && (int)d[7] <= 2 ? (int)d[7] : 0;
-        snprintf(line, sizeof(line), "FXin %.3f  FXout %.3f  FX %s  fixV %d fixFX %d  CUT %.0f  VOL %.2f",
+        snprintf(line, sizeof(line), "FXin %.3f FXout %.3f FX %s fix %d/%d CUT %.0f VOL %.2f",
                  (double)d[10], (double)d[11], kFx[fxs], (int)d[5], (int)d[6], (double)d[8], (double)d[9]);
         draw::text(x1 + 8, y1 + 29, f.small, OPT_CENTERY, line);
-        snprintf(line, sizeof(line), "PART %.3f  LATE %lu  SLOW %lu us",
+        snprintf(line, sizeof(line), "PART %.3f LATE %lu SLOW %lu",
                  (double)gv.partPeak, (unsigned long)gv.overloads, (unsigned long)gv.lateUs);
         draw::text(x1 + 8, y1 + 47, f.small, OPT_CENTERY, line);
+        snprintf(line, sizeof(line), "POST %.3f GAIN %.1f PAN %.2f %.2f", (double)gv.postPeak, (double)gv.gainDb,
+                 (double)gv.panL, (double)gv.panR);
+        draw::text(x1 + 8, y1 + 65, f.small, OPT_CENTERY, line);
     }
     char info[20];
     snprintf(info, sizeof(info), j ? "%d fireflies" : "%d grains", n);

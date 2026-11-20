@@ -21,6 +21,8 @@
 volatile float g_gibgobPartPeak[kSynthParts] = {};
 volatile uint32_t g_gibgobSynthOverloads = 0;
 volatile uint32_t g_gibgobSynthLateUs = 0; // the longest synth update, microseconds
+volatile float g_gibgobPartPost[kSynthParts] = {};   // after the part's volume
+volatile float g_gibgobPartGainDb[kSynthParts] = {}; // the volume used
 
 AUDIO_CORE_RAM void PolySynth::update(void)
 {
@@ -243,6 +245,16 @@ AUDIO_CORE_RAM void PolySynth::update(void)
 
             tempBufRef = tempBufPostfaderLeft;
             polysynth::sdk::saturateSoftClip(tempBufRef, gainDB[partIdx]);
+            {
+                float post = g_gibgobPartPost[partIdx];
+                for (const float v : tempBufPostfaderLeft)
+                {
+                    const float a = v < 0.0f ? -v : v;
+                    post = a > post ? a : post;
+                }
+                g_gibgobPartPost[partIdx] = post;
+                g_gibgobPartGainDb[partIdx] = gainDB[partIdx];
+            }
 
             if (isStereo)
             {

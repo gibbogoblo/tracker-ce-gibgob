@@ -717,6 +717,9 @@ void cGibGobSynth::setDefaultScreenFunct()
 extern volatile float g_gibgobPartPeak[];
 extern volatile uint32_t g_gibgobSynthOverloads;
 extern volatile uint32_t g_gibgobSynthLateUs;
+extern volatile float g_gibgobPartPost[];
+extern volatile float g_gibgobPartGainDb[];
+extern volatile float g_gibgobSynthPan[];
 
 namespace
 {
@@ -743,6 +746,12 @@ bool readGrainView(int part, SynthGrainView& gv)
         gv.partPeak = peak > gv.partPeak ? peak : gv.partPeak;
         gv.overloads = g_gibgobSynthOverloads;
         gv.lateUs = g_gibgobSynthLateUs;
+        const float post = g_gibgobPartPost[part];
+        g_gibgobPartPost[part] = 0.0f;
+        gv.postPeak = post > gv.postPeak ? post : gv.postPeak;
+        gv.gainDb = g_gibgobPartGainDb[part];
+        gv.panL = g_gibgobSynthPan[2 * part];
+        gv.panR = g_gibgobSynthPan[2 * part + 1];
     }
     const int voices = gsynth()->readVoiceGraphs(part, s_graphBuf, kGraphPerVoice, SynthGrainView::kMaxHeads);
     gv.heads = 0;
@@ -771,7 +780,7 @@ bool readGrainView(int part, SynthGrainView& gv)
         }
     }
     if (oldHeads == 0 && gv.heads != 0)
-        gv.partPeak = 0.0f; // a new note: measure afresh
+        gv.partPeak = gv.postPeak = 0.0f; // a new note: measure afresh
     return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0 || gv.hasDiag;
 }
 

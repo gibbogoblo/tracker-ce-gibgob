@@ -1340,10 +1340,17 @@ void audioEngine::gibgobCutSynth(int synthIdx, bool cut)
     }
 }
 
+volatile float g_gibgobSynthPan[2 * kSynthParts] = { 1, 1, 1, 1, 1, 1 }; // L, R per part (diagnosis)
+
 AUDIO_CORE_RAM void audioEngine::setSynthPanning(int synthIdx, float value)
 {
     float gainR = mapClamped<float>(value, -100.0f, 0.0f, 0.0f, 1.0f);
     float gainL = mapClamped<float>(value, 0.0f, 100.0f, 1.0f, 0.0f);
+    if (synthIdx >= 0 && synthIdx < kSynthParts)
+    {
+        g_gibgobSynthPan[2 * synthIdx] = gainL;
+        g_gibgobSynthPan[2 * synthIdx + 1] = gainR;
+    }
 
     synthVoice.getPanningAmplifier(synthIdx, SynthVoice::Channels::kLeft)->gain(gainL);
     synthVoice.getPanningAmplifier(synthIdx, SynthVoice::Channels::kRight)->gain(gainR);
