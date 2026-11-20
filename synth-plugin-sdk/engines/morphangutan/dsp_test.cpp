@@ -242,6 +242,46 @@ static void testEnvelope()
     CHECK(envAt(1.35f) < sus * 0.05f, "release did not finish");
 }
 
+// a new note over the last one's release still gets its whole attack
+static void testRetriggerAttack()
+{
+    Params p = cleanParams();
+    p.mamaMorph = 0.0f;
+    p.amp = { 0.3f, 0.1f, 1.0f, 1.5f };
+    static Voice v;
+    v = Voice();
+    v.init(1);
+    std::vector<float> x(44100 * 2);
+    float l[128], r[128];
+    const int offAt = (int)(0.6f * kSampleRate), againAt = (int)(0.7f * kSampleRate);
+    v.noteOn(p, 69.0f, 1.0f, false);
+    for (int pos = 0; pos < (int)x.size(); pos += 128)
+    {
+        if (pos >= offAt && pos < offAt + 128)
+            v.noteOff();
+        if (pos >= againAt && pos < againAt + 128)
+            v.noteOn(p, 72.0f, 1.0f, true); // even when the host calls it legato
+        v.render(p, 120.0f, 0.0f, l, r, 128);
+        for (int i = 0; i < 128 && pos + i < (int)x.size(); ++i)
+            x[pos + i] = 0.5f * (l[i] + r[i]);
+    }
+    auto envAt = [&](float t)
+    {
+        const int c = (int)(t * kSampleRate);
+        float pk = 0;
+        for (int i = c; i < c + 441; ++i)
+            pk = std::max(pk, std::fabs(x[i]));
+        return pk;
+    };
+    const float full = envAt(0.5f);
+    printf("  retrigger: before %.2f  tail %.2f  +10ms %.2f  +100ms %.2f  +300ms %.2f\n", full, envAt(0.69f),
+           envAt(0.715f), envAt(0.8f), envAt(1.0f));
+    CHECK(envAt(0.69f) > full * 0.5f, "the release tail should still be loud");
+    CHECK(envAt(0.715f) < full * 0.25f, "the new note did not start from silence");
+    CHECK(envAt(0.8f) < full * 0.8f, "the new note skipped its attack");
+    CHECK(envAt(1.0f) > full * 0.85f, "the new note did not reach full level");
+}
+
 static void testFxStable()
 {
     std::vector<uint8_t> mem(Fx::kMemoryBytes);
@@ -321,6 +361,8 @@ int main()
     testComb();
     printf("envelope\n");
     testEnvelope();
+    printf("retrigger\n");
+    testRetriggerAttack();
     printf("lfo\n");
     testSyncedLfo();
     printf("fx stability (takes a moment)\n");

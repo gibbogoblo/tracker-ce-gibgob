@@ -306,7 +306,8 @@ class Envelope
         kAttack,
         kDecay,
         kSustain,
-        kRelease
+        kRelease,
+        kDeclick // a new note on a sounding voice: fade out fast, then attack from zero
     };
 
     // Analog-style segments: the attack aims above 1.0 so it is slightly
@@ -331,9 +332,11 @@ class Envelope
     {
         if (on)
         {
-            if (retrigger || stage == kIdle || stage == kRelease)
+            if (retrigger || stage == kIdle || stage == kRelease || stage == kDeclick)
             {
-                stage = kAttack;
+                // the amp envelope starts every note from silence, so a long
+                // attack is heard on every note, even over the last note's tail
+                stage = (restartFromZero && level > 0.001f) ? kDeclick : kAttack;
             }
         }
         else if (stage != kIdle)
@@ -379,6 +382,14 @@ class Envelope
                     stage = kIdle;
                 }
                 break;
+            case kDeclick:
+                level -= kDeclickStep;
+                if (level <= 0.0f)
+                {
+                    level = 0.0f;
+                    stage = kAttack;
+                }
+                break;
             case kIdle:
                 break;
         }
@@ -398,6 +409,8 @@ class Envelope
 
     Stage stage = kIdle;
     float level = 0.0f;
+    bool restartFromZero = false; // the amp envelope: yes (see gate)
+    static constexpr float kDeclickStep = 1.0f / (0.003f * kSampleRate); // full level to 0 in 3 ms
 
   private:
     float sustain = 0.5f;
@@ -643,6 +656,7 @@ class Voice
     void init(uint32_t seed)
     {
         rng.state = seed * 2654435761u + 1u;
+        amp.restartFromZero = true;
         lfo[0].seed(seed * 7919u + 3u);
         lfo[1].seed(seed * 104729u + 5u);
         mama.phase = rng.unipolar();
@@ -667,7 +681,9 @@ class Voice
         hasPlayed = true;
         vel = clampf(velocity, 0.0f, 1.0f);
 
-        const bool restart = !legato;
+        // envelopes carry on only in the Legato glide mode; otherwise every
+        // note starts its envelopes again (from silence for the amp)
+        const bool restart = !(legato && p.glideMode == 2);
         if (restart && amp.stage == Envelope::kIdle)
         {
             // fresh start: oscillators from a clean phase avoid a click
