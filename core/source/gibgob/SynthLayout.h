@@ -209,6 +209,7 @@ enum Style : uint8_t
     kStyleEnvList,   // an envelope + a list: big envelope left, A D S R under it
     kStyleColumns,   // up to 3 columns side by side
     kStylePatch,     // load / save | init / Go Ape
+    kStyleSinger,    // a singer: the syllables big on the left, settings top right, the picture bottom right
 };
 
 enum CellKind : uint8_t
@@ -290,6 +291,11 @@ static constexpr int kQuickY = 34;
 static constexpr int kQuickH = 28;
 static constexpr int kQuickW = 112;
 static constexpr int kQuickX0 = 334; // first quick box; then every 116
+// the singer picture (kStyleSinger): up to this size, in the bottom right corner
+static constexpr int kSingerW = 200;
+static constexpr int kSingerH = 250;
+static constexpr int kSingerRight = 790;
+static constexpr int kSingerBottom = 425;
 
 void layoutPage(const SynthModel& m, int page, int view, ViewLayout& out);
 // the cell the D-pad moves to from `from` (dx, dy = -1, 0, 1); `from` if none

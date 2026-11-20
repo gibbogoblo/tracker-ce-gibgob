@@ -228,10 +228,13 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
     const SynthGraph& g = v.graph[pi];
     const uint32_t col = panelColor(v, pi);
     const int x1 = p.gx, y1 = p.gy, x2 = p.gx + p.gw - 1, y2 = p.gy + p.gh - 1;
-    draw::color(y2k::kGraphBg);
-    draw::rect(x1, y1, x2, y2);
-    draw::color(y2k::kPanelEdge);
-    draw::frame(x1, y1, x2, y2, 1);
+    if (p.graph != kGraphAvatar)
+    {
+        draw::color(y2k::kGraphBg);
+        draw::rect(x1, y1, x2, y2);
+        draw::color(y2k::kPanelEdge);
+        draw::frame(x1, y1, x2, y2, 1);
+    }
 
     // inside the frame
     const int ix = x1 + 4, iy = y1 + 6, iw = p.gw - 8, ih = p.gh - 12;
@@ -313,62 +316,34 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
         }
         case kGraphAvatar:
         {
-            // the singer (and the cat when it is on); the mouth opens on each note
+            // the 8 syllables, one tile per top button: the picked one outlined,
+            // the one being sung lit
             const SynthAvatar& av = v.avatar;
-            const int cy = iy + ih / 2 + 16;
-            const int singerX = av.cat ? ix + iw * 33 / 100 : ix + iw / 2;
-            const int catX = ix + iw * 74 / 100;
-            auto face = [&](int cx, int pic, bool catFace)
+            if (av.names == nullptr)
+                break;
+            const int cols = 4, gap = 10;
+            const int tw = (p.gw - (cols - 1) * gap) / cols;
+            const int th = (p.gh - gap) / 2;
+            for (int k = 0; k < 8; k++)
             {
-                const int k = pic + (av.singing ? 1 : 0);
-                if (av.loaded[k])
-                {
-                    draw::bitmap(av.address[k], av.w[k], av.h[k], cx - av.w[k] / 2, cy - av.h[k] / 2);
-                    return;
-                }
-                // no picture on the card: a little stand-in face
-                const int r = 56;
-                draw::color(catFace ? 0xFFB347 : 0xFF9AD5);
-                if (catFace)
-                {
-                    draw::rect(cx - r, cy - r - 18, cx - r + 26, cy - r + 6); // ears
-                    draw::rect(cx + r - 26, cy - r - 18, cx + r, cy - r + 6);
-                }
+                const int x1 = p.gx + (k % cols) * (tw + gap), y1 = p.gy + (k / cols) * (th + gap);
+                const int x2 = x1 + tw - 1, y2 = y1 + th - 1;
+                const bool lit = av.sung == k;
+                if (lit)
+                    draw::slant(x1, y1, x2, y2, 12, y2k::kLime, y2k::kPanel);
                 else
                 {
-                    draw::color(y2k::kPurple); // hair
-                    draw::rect(cx - r - 6, cy - r - 10, cx + r + 6, cy - r + 22);
-                    draw::color(0xFFD9EC);
+                    draw::color(y2k::kRow);
+                    draw::rect(x1 + 6, y1, x2 - 6, y2);
                 }
-                draw::rect(cx - r, cy - r, cx + r, cy + r);
-                draw::color(y2k::kDark);
-                draw::rect(cx - 26, cy - 18, cx - 14, cy - 2); // eyes
-                draw::rect(cx + 14, cy - 18, cx + 26, cy - 2);
-                if (av.singing)
-                {
-                    draw::color(0xC0304F);
-                    draw::rect(cx - 12, cy + 14, cx + 12, cy + 36); // open mouth
-                }
-                else
-                    draw::rect(cx - 12, cy + 22, cx + 12, cy + 25);
-            };
-            face(singerX, SynthAvatar::kSinger, false);
-            if (av.cat)
-                face(catX, SynthAvatar::kCat, true);
-            if (av.singing && av.word[0])
-            {
-                // a speech bubble with the syllable
-                const int bx = singerX + 30, by = iy + 4;
-                draw::slant(bx, by, bx + 92, by + 30, 8, y2k::kLime, y2k::kGraphBg);
-                draw::color(y2k::kDark);
-                draw::text(bx + 46, by + 15, f.bold, OPT_CENTER, av.word);
-                if (av.cat)
-                {
-                    const int cx2 = catX + 26;
-                    draw::slant(cx2, by, cx2 + 92, by + 30, 8, 0xFFB347, y2k::kGraphBg);
-                    draw::color(y2k::kDark);
-                    draw::text(cx2 + 46, by + 15, f.bold, OPT_CENTER, "nyaa");
-                }
+                if (av.picked == k)
+                    draw::slantOutline(x1, y1, x2, y2, 12, y2k::kCyan, 32);
+                char num[4];
+                snprintf(num, sizeof(num), "%d", k + 1);
+                draw::color(lit ? y2k::kDark : y2k::kDim);
+                draw::text(x1 + 18, y1 + 16, f.small, OPT_CENTERY, num);
+                draw::color(lit ? y2k::kDark : y2k::kText);
+                draw::text((x1 + x2) / 2, (y1 + y2) / 2 + 4, f.big, OPT_CENTER, av.names[k]);
             }
             break;
         }
@@ -566,6 +541,67 @@ void drawMainExtras(const SynthView& v, const Fonts& f)
     draw::text(p.x + 14, p.y + p.h - 28, f.small, OPT_CENTERY, line);
 }
 
+// the singer picture in the bottom right corner (kStyleSinger). Its background
+// is meant to match the screen's (y2k::kBg), so it is drawn at its true
+// colours even while Shift lightens everything else, on a patch of unlightened
+// background.
+void drawSinger(const SynthView& v)
+{
+    const SynthAvatar& av = v.avatar;
+    const int k = (av.cat ? SynthAvatar::kDuo : SynthAvatar::kSinger) + (av.singing ? 1 : 0);
+    if (av.loaded[k])
+    {
+        const int w = av.w[k] < kSingerW ? av.w[k] : kSingerW;
+        const int h = av.h[k] < kSingerH ? av.h[k] : kSingerH;
+        const int x = kSingerRight - w + 1, y = kSingerBottom - h + 1;
+        if (v.shift)
+        {
+            draw::setLighten(false);
+            draw::color(y2k::kBg);
+            draw::rect(x, y, kSingerRight, kSingerBottom);
+        }
+        draw::bitmap(av.address[k], w, h, x, y);
+        draw::setLighten(v.shift);
+        return;
+    }
+    // no picture on the card: little stand-in faces
+    auto face = [&](int cx, int cy, bool catFace)
+    {
+        const int r = 40;
+        if (catFace)
+        {
+            draw::color(0xFFB347);
+            draw::rect(cx - r, cy - r - 14, cx - r + 20, cy - r + 6);
+            draw::rect(cx + r - 20, cy - r - 14, cx + r, cy - r + 6);
+        }
+        else
+        {
+            draw::color(y2k::kPurple);
+            draw::rect(cx - r - 5, cy - r - 8, cx + r + 5, cy - r + 16);
+        }
+        draw::color(catFace ? 0xFFB347 : 0xFFD9EC);
+        draw::rect(cx - r, cy - r, cx + r, cy + r);
+        draw::color(y2k::kDark);
+        draw::rect(cx - 20, cy - 14, cx - 10, cy - 2);
+        draw::rect(cx + 10, cy - 14, cx + 20, cy - 2);
+        if (av.singing)
+        {
+            draw::color(0xC0304F);
+            draw::rect(cx - 9, cy + 10, cx + 9, cy + 26);
+        }
+        else
+            draw::rect(cx - 9, cy + 16, cx + 9, cy + 18);
+    };
+    const int cx = kSingerRight - kSingerW / 2, cy = kSingerBottom - 70;
+    if (av.cat)
+    {
+        face(cx - 46, cy, false);
+        face(cx + 50, cy - 20, true);
+    }
+    else
+        face(cx, cy, false);
+}
+
 void drawQuickBoxes(const SynthView& v, const Fonts& f)
 {
     static const uint32_t kBtn[4] = { y2k::kNote, y2k::kInstr, y2k::kFx1, y2k::kFx2 };
@@ -681,6 +717,8 @@ void SynthEditControl::update()
         drawMainExtras(v, f);
     for (int i = 0; i < v.layout.cellCount; i++)
         drawCell(v, i, f);
+    if (v.layout.style == kStyleSinger)
+        drawSinger(v);
     if (v.hint[0] && v.layout.style != kStyleMain)
     {
         draw::color(v.warn ? y2k::kPink : y2k::kDim);

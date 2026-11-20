@@ -105,7 +105,13 @@ static int synthTests(int limit)
         static SynthView av;
         memset(&av, 0, sizeof(av));
         layoutPage(lm, kPageOsc, 0, av.layout);
-        if (av.layout.style != kStyleGraphList) { printf("  synth: singer page style %d\n", av.layout.style); fails++; }
+        if (av.layout.style != kStyleSinger) { printf("  synth: singer page style %d\n", av.layout.style); fails++; }
+        for (int i = 0; i < av.layout.cellCount; i++)
+        {
+            const CellPos& c = av.layout.cell[i];
+            if (c.y + c.h > kSingerBottom - kSingerH) { printf("  synth: singer settings run into the picture\n"); fails++; }
+        }
+        av.avatar.names = kSyllableNames; av.avatar.picked = 2;
         snprintf(av.synthName, sizeof(av.synthName), "LILITRON"); av.editing = true;
         snprintf(av.title, sizeof(av.title), "Voice");
         snprintf(av.panelTitle[0], 18, "LILITRON");
@@ -118,14 +124,14 @@ static int synthTests(int limit)
         for (int pic = 0; pic < 2; pic++)
             for (int sing = 0; sing < 2; sing++)
             {
-                av.avatar.cat = true; av.avatar.singing = sing; snprintf(av.avatar.word, 8, "umm");
-                for (int k = 0; k < SynthAvatar::kPics; k++) { av.avatar.loaded[k] = pic; av.avatar.address[k] = 350000 + k * 40000; av.avatar.w[k] = 140; av.avatar.h[k] = 140; }
+                av.avatar.cat = pic; av.avatar.singing = sing; av.avatar.sung = sing ? 4 : -1;
+                for (int k = 0; k < SynthAvatar::kPics; k++) { av.avatar.loaded[k] = pic; av.avatar.address[k] = 350000 + k * 100000; av.avatar.w[k] = 200; av.avatar.h[k] = 250; }
                 av.shift = sing;
                 char nm[48]; snprintf(nm, 48, "synth singer, %s, %s", pic ? "pictures" : "stand-ins", sing ? "singing shift" : "quiet");
                 render(sc, nm, limit, sing);
-                if (getenv("SYNTH_SVG") && !pic && sing)
+                if (getenv("SYNTH_SVG") && pic && !sing)
                 {
-                    av.shift = false;
+                    av.shift = false; av.avatar.cat = false; av.avatar.sung = 4; av.avatar.singing = true;
                     char path[256]; snprintf(path, sizeof(path), "%s/9_singer.svg", getenv("SYNTH_SVG"));
                     g_svg = fopen(path, "w");
                     if (g_svg) { fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n"); words = 0; sc.update(); fprintf(g_svg, "</svg>\n"); fclose(g_svg); g_svg = nullptr; }

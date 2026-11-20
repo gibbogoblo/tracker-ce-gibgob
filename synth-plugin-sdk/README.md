@@ -143,10 +143,13 @@ An enum parameter named `Syllable` with `midiCC = 3` makes an engine a singer:
   (`syllable * 127 / 7`) just before the note.
 - In the piano roll, the top buttons pick the syllable, and hold FX2 + +/-
   changes a note's syllable.
-- The page holding the `Syllable` parameter shows the singer pictures from
-  `/GibGob/Lilitron/` (`singer`, `singer_sing`, `cat`, `cat_sing`.jpg: baseline
-  JPEG, up to 150x150). The mouth opens while a note of that synth sounds, and
-  a parameter named `Cat` shows the cat.
+- The page holding the `Syllable` parameter shows the 8 syllables as big tiles
+  (the one sung lights up), and a picture from `/GibGob/Lilitron/` in the
+  bottom right corner: `singer.jpg` / `singer_sing.jpg` (mouth shut / open),
+  `duo.jpg` / `duo_sing.jpg` (the same with the cat, while a parameter named
+  `Cat` is on). Baseline JPEG, up to 200 x 250, anchored bottom right. Paint the
+  background #0C0624: on the Mini that shows exactly as the screen's
+  background, so the picture looks cut out.
 
 The voice of LILITRON is `engines/lilitron/LILITRON.wav`, made by
 `engines/lilitron/make_voice.py`. On the card it goes in

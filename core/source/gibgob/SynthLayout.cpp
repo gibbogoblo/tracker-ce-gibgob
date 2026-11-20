@@ -407,7 +407,19 @@ void layoutPage(const SynthModel& m, int page, int view, ViewLayout& out)
     const int count = p.viewLen[view];
     const Group& g0 = p.groups[first];
 
-    if (count == 1 && g0.graph != kGraphNone && g0.graph != kGraphEnv)
+    if (count == 1 && g0.graph == kGraphAvatar)
+    {
+        // a singer: the 8 syllables big on the left, its settings top right,
+        // the picture in the bottom right corner under them
+        out.style = kStyleSinger;
+        const int p0 = b.panel(10, top, 560, bottom - top, kGraphAvatar, first);
+        b.graphArea(p0, 24, top + 36, 532, bottom - top - 50);
+        const int rows = g0.count < 3 ? g0.count : 3;
+        for (int i = 0; i < rows; i++)
+            b.cell(kSingerRight - kSingerW - 10, top + i * 52, kSingerW + 10, 44, kCellRow, p0, g0.id[i], g0.role[i],
+                   g0.isEnum[i]);
+    }
+    else if (count == 1 && g0.graph != kGraphNone && g0.graph != kGraphEnv)
     {
         // Filter style: big picture, list on the right
         out.style = kStyleGraphList;

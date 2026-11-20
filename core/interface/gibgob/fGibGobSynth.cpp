@@ -125,9 +125,9 @@ char s_tabNames[8][10];
 // into the display's picture memory (shared with the image viewer and
 // Gibbon vision, so they load again each time this screen opens)
 const char* const kAvatarFiles[SynthAvatar::kPics] = { "GibGob/Lilitron/singer", "GibGob/Lilitron/singer_sing",
-                                                       "GibGob/Lilitron/cat", "GibGob/Lilitron/cat_sing" };
-constexpr int kAvatarMax = 150; // pixels, each way
-constexpr uint32_t kAvatarAddress = 350000;
+                                                       "GibGob/Lilitron/duo", "GibGob/Lilitron/duo_sing" };
+constexpr uint32_t kAvatarAddress = 350000; // 4 x 100 KB, up to 750000 (the project cover is at 670000, loaded again on its screen)
+constexpr uint32_t kAvatarBytes = kSingerW * kSingerH * 2;
 int s_avatarNext = 0;
 bool s_avatarBusy = false;
 uint32_t s_rand = 0x1234567;
@@ -613,6 +613,8 @@ void cGibGobSynth::start(uint32_t options)
     for (int k = 0; k < SynthAvatar::kPics; k++)
         v.avatar.loaded[k] = false;
     v.avatar.singing = false;
+    v.avatar.names = kSyllableNames;
+    v.avatar.sung = -1;
     s_avatarNext = 0;
     s_avatarBusy = false;
 
@@ -727,8 +729,8 @@ void cGibGobSynth::update()
             {
                 char path[40];
                 snprintf(path, sizeof(path), "%s", kAvatarFiles[k]);
-                av.address[k] = kAvatarAddress + (uint32_t)k * (kAvatarMax * kAvatarMax * 2);
-                if (display.readImgFromSd(path, av.address[k], kAvatarMax, kAvatarMax) == 0)
+                av.address[k] = kAvatarAddress + (uint32_t)k * kAvatarBytes;
+                if (display.readImgFromSd(path, av.address[k], kSingerW, kSingerH) == 0)
                     s_avatarBusy = true;
                 else
                     s_avatarNext++; // missing, too big or not a baseline JPEG
@@ -753,17 +755,25 @@ void cGibGobSynth::update()
     // the mouth: open while a note of this synth sounds
     int track = -1;
     const bool singing = s_noteOn || singerSinging(mtProject.values.lastUsedInstrument, track);
-    char word[8];
-    snprintf(word, sizeof(word), "%s", kSyllableNames[(s_noteOn || track < 0 ? g_liveSyllable : lastSyllable(track)) % kSyllables]);
     bool cat = false;
+    int picked = 0;
     for (int i = 0; i < (int)meta().params.size(); i++)
+    {
         if (meta().params[i].displayName == "Cat")
             cat = rawValue(i) > 0.5f;
-    if (singing != av.singing || cat != av.cat || (singing && strcmp(word, av.word) != 0))
+        if (meta().params[i].displayName == "Syllable")
+            picked = (int)lroundf(rawValue(i)) % kSyllables;
+    }
+    // Middle here sings the Syllable setting; a track sings its notes' syllables
+    const int sung = !singing ? -1 : (s_noteOn || track < 0 ? picked : lastSyllable(track) % kSyllables);
+    if (singing != av.singing || cat != av.cat || sung != av.sung || picked != av.picked)
     {
         av.singing = singing;
         av.cat = cat;
-        snprintf(av.word, sizeof(av.word), "%s", word);
+        av.sung = (int8_t)sung;
+        av.picked = (int8_t)picked;
+        av.names = kSyllableNames;
+        snprintf(av.word, sizeof(av.word), "%s", sung >= 0 ? kSyllableNames[sung] : "");
         refresh();
     }
 }

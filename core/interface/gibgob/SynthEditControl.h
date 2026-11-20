@@ -41,12 +41,13 @@ struct SynthGraph
 // the singer pictures (LILITRON): JPEGs decoded into the display's memory
 struct SynthAvatar
 {
+    // the singer alone, and with the cat (one picture each, mouth shut / open)
     enum Pic : uint8_t
     {
         kSinger = 0,
         kSingerSing,
-        kCat,
-        kCatSing,
+        kDuo,
+        kDuoSing,
         kPics
     };
     bool loaded[kPics];
@@ -54,7 +55,11 @@ struct SynthAvatar
     int16_t w[kPics], h[kPics];
     bool singing;  // the mouth is open (a note sounds)
     bool cat;      // the cat is on
-    char word[8];  // what is sung (a speech bubble while singing)
+    char word[8];  // what is sung
+    // the syllable tiles: names (8), the one picked (top buttons), the one sung
+    const char* const* names;
+    int8_t picked;
+    int8_t sung; // -1: quiet
 };
 
 struct SynthView
@@ -104,7 +109,10 @@ class SynthEditControl : public cDisplayControl
 
 namespace y2k
 {
-constexpr uint32_t kBg = 0x0B0420;
+// the background: exactly what a JPEG painted #0C0624 shows as on the Mini
+// (16-bit colour), so a singer picture with that background blends in
+constexpr uint32_t kBg = 0x080421;
+constexpr uint32_t kPictureBg = 0x0C0624; // the colour to paint picture backgrounds
 constexpr uint32_t kGrid = 0x1A0B3A;
 constexpr uint32_t kPanel = 0x150632;
 constexpr uint32_t kPanelEdge = 0x4A2390;
