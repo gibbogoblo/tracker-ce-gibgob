@@ -97,6 +97,7 @@ inline int clampInt(int v, int lo, int hi)
 struct Defaults
 {
     uint8_t sliceMap[kTracks][8];
+    uint8_t noteMap[kTracks][8]; // note + 1; 0 = not picked yet (the scale)
     uint8_t melodic[kTracks];
     uint8_t sound[kTracks];
     PaletteChord palette[kPaletteSize];
@@ -106,6 +107,7 @@ struct Defaults
 Defaults g_def = {
     { { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 },
       { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 }, { 0, 1, 2, 3, 4, 5, 6, 7 } },
+    {},
     { 0, 0, 0, 0, 1, 1, 1, 1 }, // tracks 1-4 drums, 5-8 melodic
     { 0, 1, 2, 3, 4, 5, 6, 7 },
     {
@@ -228,6 +230,7 @@ bool isBeatSliceSound(uint8_t instrument)
 // slot 124: byte i = slice of button i + 1 (0 = not set: the default). Only
 // read when the header's spare byte carries this marker.
 constexpr uint8_t kSliceMapMagic = 0xA5;
+constexpr uint8_t kNoteMapMagic = 0xA6; // the slot holds the top buttons' notes instead
 
 // ---------------- extras slot (seed, track length) ----------------
 struct Extras
@@ -895,6 +898,51 @@ void setSliceForButton(Sequencer::strPattern* p, int track, int button, int slic
     g_def.sliceMap[track][button] = (uint8_t)slice;
 }
 
+int buttonNote(const Sequencer::strPattern* p, int track, int button)
+{
+    static const int kMinor[8] = { 0, 2, 3, 5, 7, 8, 10, 12 };
+    button &= 7;
+    if (!validTrack(track))
+        return kDefaultBaseNote + kMinor[button];
+    if (p != nullptr)
+    {
+        Header h;
+        if (readHeader(p, track, h) && h.reserved == kNoteMapMagic)
+        {
+            const uint8_t* m = rawBytes(p, track) + kSlotSliceMap * kSlotBytes;
+            if (m[button] != 0)
+                return m[button] - 1;
+        }
+    }
+    if (g_def.noteMap[track][button] != 0)
+        return g_def.noteMap[track][button] - 1;
+    const int base = p != nullptr ? getSettings(p, track).baseNote : kDefaultBaseNote;
+    return clampInt(base + kMinor[button], 0, 127);
+}
+
+void setButtonNote(Sequencer::strPattern* p, int track, int button, int note)
+{
+    if (!validTrack(track) || p == nullptr)
+        return;
+    button &= 7;
+    note = clampInt(note, 0, 127);
+    uint8_t all[8];
+    for (int b = 0; b < 8; b++)
+        all[b] = (uint8_t)(b == button ? note : buttonNote(p, track, b));
+    AudioLock lock;
+    Header h = headerOrDefault(p, track);
+    // the first header write clears the track: do it before the map
+    writeHeaderLocked(p, track, h);
+    uint8_t* m = rawBytes(p, track) + kSlotSliceMap * kSlotBytes;
+    for (int b = 0; b < 8; b++)
+    {
+        m[b] = (uint8_t)(all[b] + 1);
+        g_def.noteMap[track][b] = m[b];
+    }
+    h.reserved = kNoteMapMagic;
+    writeHeaderLocked(p, track, h);
+}
+
 uint8_t getSound(const Sequencer::strPattern* p, int track)
 {
     if (!validTrack(track) || p == nullptr)
@@ -1107,6 +1155,12 @@ void adoptDefaults(const Sequencer::strPattern* p)
                 for (int b = 0; b < 8; b++)
                     if (m[b] != 0)
                         g_def.sliceMap[t][b] = (uint8_t)(m[b] - 1);
+            }
+            else if (h.reserved == kNoteMapMagic)
+            {
+                const uint8_t* m = rawBytes(p, t) + kSlotSliceMap * kSlotBytes;
+                for (int b = 0; b < 8; b++)
+                    g_def.noteMap[t][b] = m[b];
             }
         }
     }

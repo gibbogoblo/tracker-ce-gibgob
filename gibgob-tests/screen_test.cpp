@@ -323,6 +323,17 @@ int main()
         char nm[40]; snprintf(nm, 40, "piano roll, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
         render(pc, nm, kLimit);
         {
+            // the Edit menu (Shift + Note): quantize / humanize and the tool grid; a retuned row lit
+            PianoRollView ev = pv; ev.highlightPitch = 60; ev.highlightColor = 0x53B886;
+            ev.menu.active = true; ev.menu.cols = 2; ev.menu.rows = 1; ev.menu.toolCount = 9; ev.menu.toolCursor = 3;
+            snprintf(ev.menu.title, 48, "Edit  -  track 8");
+            for (int t = 0; t < 9; t++) snprintf(ev.menu.tool[t], 12, "Sel all");
+            for (int c = 0; c < 2; c++) { snprintf(ev.menu.colTitle[c], 14, "Humanize"); snprintf(ev.menu.row[c].label, 20, "Amount"); snprintf(ev.menu.row[c].value, 20, "10"); }
+            snprintf(ev.menu.hint, 64, "Left/Right: column  Down: amount, tools  7: Apply");
+            prop.data = &ev; PianoRollControl ec(&prop);
+            char enm[48]; snprintf(enm, 48, "piano roll + Edit menu, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
+            render(ec, enm, kLimit);
+            prop.data = &pv;
             // a singing synth: every note labelled with its syllable
             PianoRollView sv2 = pv; sv2.syllables = kSyllableNames; sv2.ghostSyllable = 3;
             prop.data = &sv2; PianoRollControl sc2(&prop);

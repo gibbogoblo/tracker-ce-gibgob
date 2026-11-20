@@ -282,6 +282,16 @@ void PianoRollControl::update()
 
     const bool overlay = view->menu.active || view->picker.active;
 
+    // ---- a top button being retuned: its row lit, under the notes ----
+    if (view->highlightPitch >= bottomPitch && view->highlightPitch <= view->topPitch && !overlay)
+    {
+        draw::color(view->highlightColor);
+        draw::alpha(70);
+        draw::rect(tickToX(firstTick), pitchToY(view->highlightPitch), tickToX(lastTick) - 1,
+                   pitchToY(view->highlightPitch) + rh - 1);
+        draw::alpha(255);
+    }
+
     // ---- notes: selected rims first, then bodies in three brightness passes ----
     if (view->pattern && !overlay)
     {
@@ -536,7 +546,10 @@ void PianoRollControl::update()
         const int rowH = 30;
         const int top = 96;
         int bodyRows = m.cols == 2 ? 2 : m.rows;
-        int y1 = top + 40 + bodyRows * rowH + 34;
+        const int toolH = 34, toolGap = 6;
+        const int toolsTop = top + 40 + bodyRows * rowH + 8;
+        const int toolRows = m.toolCount > 0 ? (m.toolCount + 4) / 5 : 0;
+        int y1 = top + 40 + bodyRows * rowH + (toolRows ? 8 + toolRows * (toolH + toolGap) : 0) + 34;
         draw::color(color::kPanel);
         draw::rect(x0, top, x1, y1);
         draw::color(m.accent);
@@ -600,6 +613,24 @@ void PianoRollControl::update()
                 draw::color(cur ? color::kTextDark : (m.row[r].isAction ? m.accent : color::kText));
                 draw::text(x0 + 20, ry, m.row[r].isAction || cur ? fBold : fRegular, OPT_CENTERY, m.row[r].label);
                 draw::text(x1 - 20, ry, fBold, OPT_CENTERY | OPT_RIGHTX, m.row[r].value);
+            }
+        }
+        if (toolRows)
+        {
+            // the tool buttons: the one under the cursor filled, a tool that is on outlined
+            const int tw = (x1 - x0 - 20 - 4 * toolGap) / 5;
+            for (int t = 0; t < m.toolCount; t++)
+            {
+                const int tx = x0 + 10 + (t % 5) * (tw + toolGap), ty = toolsTop + (t / 5) * (toolH + toolGap);
+                const bool cur = t == m.toolCursor;
+                draw::color(cur ? m.accent : (m.toolOn[t] ? scaleColor(m.accent, 45, 100) : color::kBg));
+                draw::rect(tx, ty, tx + tw - 1, ty + toolH - 1);
+            }
+            for (int t = 0; t < m.toolCount; t++)
+            {
+                const int tx = x0 + 10 + (t % 5) * (tw + toolGap), ty = toolsTop + (t / 5) * (toolH + toolGap);
+                draw::color(t == m.toolCursor ? color::kTextDark : color::kText);
+                draw::text(tx + tw / 2, ty + toolH / 2, fBold, OPT_CENTER, m.tool[t]);
             }
         }
         draw::color(color::kText);

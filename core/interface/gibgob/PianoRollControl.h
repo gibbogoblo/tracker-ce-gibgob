@@ -30,6 +30,12 @@ struct PianoMenuView
     int cursor = 0;          // -1 = column titles (two-column menus)
     char hint[64] = { 0 };
     uint32_t accent = 0xFFFFFF;
+    // two-column menus: a grid of tool buttons under the columns (2 rows of 5)
+    static constexpr int kMaxTools = 10;
+    int toolCount = 0;
+    char tool[kMaxTools][12] = {};
+    bool toolOn[kMaxTools] = {}; // a tool that is switched on (Ghosts)
+    int toolCursor = -1;         // the tool under the cursor (-1: none)
 };
 
 // a horizontal keyboard for picking notes
@@ -77,6 +83,9 @@ struct PianoRollView
     bool otherTracks = false;
     int8_t sliceButton[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; // slice of each top button
     bool shift = false;
+    // a top button being retuned: its row lit across the grid
+    int highlightPitch = -1;
+    uint32_t highlightColor = 0;
     // a singing synth (LILITRON): each note shows its syllable
     const char* const* syllables = nullptr;
     int ghostSyllable = 0;

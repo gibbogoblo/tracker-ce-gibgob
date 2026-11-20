@@ -211,6 +211,31 @@ int main()
         setNoteSyllable(c, 3); c.flags |= kNoteFlagAccent; CHECK(noteSyllable(c) == 3 && (c.flags & kNoteFlagAccent));
     }
 
+    // T1c: the top buttons' notes: a minor scale from the base note, then what was picked;
+    // a new pattern takes them over; the slice map and the notes share a slot without mixing
+    {
+        freshPattern();
+        resetDefaults();
+        setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 4);
+        static const int kMinor[8] = { 0, 2, 3, 5, 7, 8, 10, 12 };
+        bool scale = true;
+        for (int b = 0; b < 8; b++) scale = scale && buttonNote(&pat, 5, b) == kDefaultBaseNote + kMinor[b];
+        CHECK(scale);
+        setButtonNote(&pat, 5, 2, 64);
+        CHECK(buttonNote(&pat, 5, 2) == 64 && buttonNote(&pat, 5, 3) == kDefaultBaseNote + 5);
+        static Sequencer::strPattern other;
+        memcpy(&other, &pat, sizeof(other));
+        for (auto& t : other.track) for (auto& st : t.step) { st.note = -1; st.instrument = 0; }
+        adoptDefaults(&pat);
+        CHECK(buttonNote(&other, 5, 2) == 64); // an empty pattern: the track's picks
+        setSliceForButton(&pat, 5, 0, 3);      // the slot now holds a slice map
+        CHECK(sliceForButton(&pat, 5, 0) == 0 || sliceForButton(&pat, 5, 0) == 3);
+        CHECK(buttonNote(&pat, 5, 2) == 64);   // the notes fall back to the remembered picks
+        setButtonNote(&pat, 5, 7, 200);
+        CHECK(buttonNote(&pat, 5, 7) == 127);
+        resetDefaults();
+    }
+
     // T2: sample chord borrows voices of empty tracks
     freshPattern();
     setTrackType(&pat, 4, TrackType::Melodic); setSound(&pat, 4, 4);

@@ -44,7 +44,28 @@ static void functMenu(uint8_t state);
 static void functParams(uint8_t state);
 static void functCopy(uint8_t state);
 
-static bool s_otherTracks = false; // ghost notes (Shift + top 3)
+static bool s_otherTracks = false; // ghost notes (Edit menu)
+static int s_toolCol = 0;          // Edit menu: the tool column under the cursor
+
+// the Edit menu's tool buttons (Shift + Note), 2 rows of 5; values are utility() codes
+enum Tool : int8_t
+{
+    kToolOctDown = 0,
+    kToolOctUp,
+    kToolGhosts,
+    kToolSemiUp,
+    kToolSelectAll,
+    kToolReverse,
+    kToolDouble,
+    kToolLegato,
+    kToolSemiDown,
+    kToolNone = -1,
+};
+static const int8_t kToolGrid[2][5] = { { kToolOctDown, kToolOctUp, kToolSemiDown, kToolSemiUp, kToolGhosts },
+                                        { kToolSelectAll, kToolReverse, kToolDouble, kToolLegato, kToolNone } };
+static const char* const kToolNames[9] = { "Oct -",   "Oct +",   "Ghosts", "Semi +", "Sel all",
+                                           "Reverse", "Double",  "Legato", "Semi -" };
+static const uint32_t kButtonNoteColor = 0x53B886;
 
 static void markChanged()
 {
@@ -325,6 +346,18 @@ void cPianoRoll::refreshView()
                  view.cursorTick / kTicksPerStep + 1,
                  len / kTicksPerStep, (len % kTicksPerStep) * 100 / kTicksPerStep);
 
+    // a top button held: its note, its row lit (Up/Down / +/- retune it)
+    view.highlightPitch = -1;
+    for (int b = 0; b < 8; b++)
+        if (held[b] && heldIsNote[b])
+        {
+            const int note = buttonNote(p, track, b);
+            view.highlightPitch = note;
+            view.highlightColor = kButtonNoteColor;
+            snprintf(view.title, sizeof(view.title), "Top %d: %s   Up/Down, +/-: change it", b + 1, mtNotes[note]);
+            break;
+        }
+
     view.modeColor = color::kBox;
     if (g_recArmed)
     {
@@ -366,7 +399,7 @@ void cPianoRoll::refreshView()
     if (view.shift)
     {
         // what the coloured buttons do with Shift
-        static const char* const kShiftNames[4] = { "Quantize", "Acid", "Arp", "" };
+        static const char* const kShiftNames[4] = { "Edit", "Acid", "Arp", "" };
         for (int i = 0; i < 4; i++)
         {
             snprintf(view.params[i].label, sizeof(view.params[i].label), "%s", kShiftNames[i]);
@@ -375,17 +408,21 @@ void cPianoRoll::refreshView()
         view.selectedParam = -1;
     }
 
-    // bottom bar: Shift = utilities; sliced sample = slices; otherwise
-    // button 1 = single note and buttons 2-8 = the chord palette
-    static const char* const kUtility[8] = { "Oct -",   "Oct +",  "Ghosts", "Semi +",
-                                             "Sel all", "Reverse", "Double", "Legato" };
+    // bottom bar: the track's 8 notes (Shift: the chord palette); sliced
+    // sample = slices; singing synth = syllables
     for (int i = 0; i < 8; i++)
     {
-        if (view.shift)
+        if (view.shift && !pads)
         {
-            snprintf(barText[i], sizeof(barText[i]), "%s", kUtility[i]);
+            paletteChordName(getPaletteChord(p, i), barText[i], sizeof(barText[i]));
+            view.bar.fill[i] = color::kMelodic;
+            view.bar.highlighted[i] = (chordSlot == i);
+        }
+        else if (view.shift)
+        {
+            barText[i][0] = 0;
             view.bar.fill[i] = 0;
-            view.bar.highlighted[i] = (i == 2 && s_otherTracks); // lit while ghost notes are on
+            view.bar.highlighted[i] = false;
         }
         else if (sing)
         {
@@ -401,17 +438,12 @@ void cPianoRoll::refreshView()
             view.bar.fill[i] = color::kSlice;
             view.bar.highlighted[i] = (view.cursorPitch == kFirstSliceNote + s);
         }
-        else if (i == 0)
-        {
-            snprintf(barText[i], sizeof(barText[i]), "Note");
-            view.bar.fill[i] = color::kMelodic;
-            view.bar.highlighted[i] = (chordSlot < 0);
-        }
         else
         {
-            paletteChordName(getPaletteChord(p, i - 1), barText[i], sizeof(barText[i]));
+            const int note = buttonNote(p, track, i);
+            snprintf(barText[i], sizeof(barText[i]), "%s", mtNotes[note]);
             view.bar.fill[i] = color::kMelodic;
-            view.bar.highlighted[i] = (chordSlot == i - 1);
+            view.bar.highlighted[i] = held[i] || (chordSlot < 0 && view.cursorPitch == note);
         }
         view.bar.text[i] = barText[i];
     }
@@ -988,14 +1020,13 @@ void cPianoRoll::topButton(int button, bool pressed)
     }
 
     Sequencer::strPattern* p = current();
-    if (shiftActive())
-    {
-        utility(button);
-        return;
-    }
-    bool recording = g_recArmed && sequencer.isPlay();
     bool pads = padsMode();
-    int slot = button - 1; // buttons 2-8 = palette chords 1-7
+    const bool chords = shiftActive(); // Shift + top: the chord palette
+    if (chords && pads)
+        return; // a slice track has no chords
+    bool recording = g_recArmed && sequencer.isPlay();
+    int slot = button; // Shift + top 1-8 = palette chords 1-8
+    heldIsNote[button] = false;
 
     uint8_t notes[kMaxChordNotes];
     int n = 0;
@@ -1007,7 +1038,7 @@ void cPianoRoll::topButton(int button, bool pressed)
         chordSlot = -1;
         view.cursorPitch = pitch;
     }
-    else if (singMode())
+    else if (!chords && singMode())
     {
         // a singing synth: the button picks the syllable and sings it at C
         chordSlot = -1;
@@ -1017,12 +1048,14 @@ void cPianoRoll::topButton(int button, bool pressed)
         notes[0] = 60;
         n = 1;
     }
-    else if (button == 0)
+    else if (!chords)
     {
-        // single note at the cursor
+        // the button's own note; the ghost goes there, so Middle places it
         chordSlot = -1;
         inversion = 0;
-        notes[0] = (uint8_t)view.cursorPitch;
+        notes[0] = (uint8_t)buttonNote(p, track, button);
+        view.cursorPitch = notes[0];
+        heldIsNote[button] = true;
         n = 1;
     }
     else
@@ -1065,6 +1098,30 @@ void cPianoRoll::topButton(int button, bool pressed)
     refreshView();
 }
 
+bool cPianoRoll::retuneHeld(int semis)
+{
+    int b = -1;
+    for (int i = 0; i < 8; i++)
+        if (held[i] && heldIsNote[i])
+        {
+            b = i;
+            break;
+        }
+    if (b < 0 || heldRecording[b])
+        return false; // nothing held (or a note being recorded keeps its pitch)
+    Sequencer::strPattern* p = current();
+    const int note = clampInt(buttonNote(p, track, b) + semis, 0, 127);
+    setButtonNote(p, track, b, note);
+    markChanged();
+    // hear it: the old note off, the new one on, still held
+    auditionOff(track);
+    heldNotes[b][0] = (uint8_t)note;
+    auditionOn(track, (uint8_t)note, (uint8_t)velocity);
+    view.cursorPitch = note;
+    refreshView();
+    return true;
+}
+
 void cPianoRoll::releaseAllButtons()
 {
     for (int i = 0; i < 8; i++)
@@ -1092,13 +1149,14 @@ void cPianoRoll::utility(int button)
             s_otherTracks = !s_otherTracks;
             mtPopups.show(0, s_otherTracks ? "Ghost notes ON" : "Ghost notes OFF", 1);
             break;
-        case 0:
-        case 1:
-        case 3:
+        case kToolOctDown:
+        case kToolOctUp:
+        case kToolSemiUp:
+        case kToolSemiDown:
         {
-            static const int kShift[4] = { -12, 12, -1, 1 };
+            const int shift = button == kToolOctDown ? -12 : (button == kToolOctUp ? 12 : (button == kToolSemiUp ? 1 : -1));
             beginEdit(kEditTool);
-            transposeNotes(p, track, kShift[button]);
+            transposeNotes(p, track, shift);
             markChanged();
             break;
         }
@@ -1318,7 +1376,17 @@ void cPianoRoll::refreshMenu()
     {
         m.cols = 2;
         m.rows = 1;
-        snprintf(m.title, sizeof(m.title), "Quantize / Humanize  -  track %d", track + 1);
+        snprintf(m.title, sizeof(m.title), "Edit  -  track %d", track + 1);
+        m.toolCount = 9;
+        for (int t = 0; t < 10; t++)
+        {
+            const int tool = kToolGrid[t / 5][t % 5];
+            if (tool < 0)
+                continue;
+            snprintf(m.tool[t], sizeof(m.tool[t]), "%s", kToolNames[tool]);
+            m.toolOn[t] = tool == kToolGhosts && s_otherTracks;
+        }
+        m.toolCursor = s_menuRow >= 1 ? (s_menuRow - 1) * 5 + s_toolCol : -1;
         snprintf(m.colTitle[0], sizeof(m.colTitle[0]), "Quantize");
         snprintf(m.colTitle[1], sizeof(m.colTitle[1]), "Humanize");
         for (int i = 0; i < 2; i++)
@@ -1328,9 +1396,12 @@ void cPianoRoll::refreshMenu()
             m.row[i].isAction = false;
         }
         m.colCursor = quantCol;
-        m.cursor = s_menuRow < 0 ? -1 : 0;
+        m.cursor = s_menuRow < 0 ? -1 : (s_menuRow == 0 ? 0 : 99); // 99: in the tools
         m.accent = color::kNoteBtn;
-        snprintf(m.hint, sizeof(m.hint), "Left/Right: column  Down: amount  +/-: change  7: Apply");
+        if (s_menuRow >= 1)
+            snprintf(m.hint, sizeof(m.hint), "Middle: do it   Up: back to Quantize / Humanize");
+        else
+            snprintf(m.hint, sizeof(m.hint), "Left/Right: column  Down: amount, tools  7: Apply");
         view.bar.text[6] = "Apply";
         view.bar.fill[6] = color::kNoteBtn;
         view.bar.highlighted[6] = true;
@@ -1407,11 +1478,18 @@ void cPianoRoll::menuMove(int dCol, int dRow)
     {
         case Menu::Quantize:
             if (dCol != 0)
-                quantCol = clampInt(quantCol + dCol, 0, 1);
-            if (dRow > 0)
-                s_menuRow = 0;
-            if (dRow < 0)
-                s_menuRow = -1;
+            {
+                if (s_menuRow >= 1)
+                    s_toolCol = clampInt(s_toolCol + dCol, 0, s_menuRow == 2 ? 3 : 4);
+                else
+                    quantCol = clampInt(quantCol + dCol, 0, 1);
+            }
+            if (dRow != 0)
+            {
+                s_menuRow = clampInt(s_menuRow + dRow, -1, 2);
+                if (s_menuRow == 2 && s_toolCol > 3)
+                    s_toolCol = 3;
+            }
             break;
         case Menu::Acid: s_menuRow = clampInt(s_menuRow + dRow, 0, kAcidRowCount - 1); break;
         case Menu::Arp: s_menuRow = clampInt(s_menuRow + dRow, 0, kArpRowCount - 1); break;
@@ -1432,7 +1510,7 @@ void cPianoRoll::menuChange(int delta, bool big)
 {
     if (menu == Menu::Quantize)
     {
-        if (s_menuRow >= 0)
+        if (s_menuRow == 0)
             quantAmount[quantCol] = clampInt(quantAmount[quantCol] + delta * (big ? 5 : 1), 1, 10);
     }
     else if (menu == Menu::Acid)
@@ -1477,6 +1555,16 @@ static uint32_t newSeed()
 
 void cPianoRoll::menuMiddle()
 {
+    if (menu == Menu::Quantize && s_menuRow >= 1)
+    {
+        const int tool = kToolGrid[s_menuRow - 1][clampInt(s_toolCol, 0, 4)];
+        if (tool < 0)
+            return;
+        if (tool == kToolSelectAll)
+            menu = Menu::None; // the d-pad moves the notes now
+        utility(tool);
+        return;
+    }
     if (menu == Menu::Acid)
     {
         if (s_menuRow == kAcidNotes)
@@ -1679,7 +1767,7 @@ static void functUp(uint8_t s)
         return;
     if (inMenu())
         PR->menuMove(0, PR->menu == cPianoRoll::Menu::Picker ? 1 : -1);
-    else
+    else if (!PR->retuneHeld(1))
         PR->pressUp();
 }
 static void functDown(uint8_t s)
@@ -1688,7 +1776,7 @@ static void functDown(uint8_t s)
         return;
     if (inMenu())
         PR->menuMove(0, PR->menu == cPianoRoll::Menu::Picker ? -1 : 1);
-    else
+    else if (!PR->retuneHeld(-1))
         PR->pressDown();
 }
 static void functLeft(uint8_t s)
@@ -1771,6 +1859,8 @@ static void functEncoder(int16_t value)
         PR->menuChange(dir, big);
         return;
     }
+    if (PR->retuneHeld(big ? dir * 12 : dir))
+        return; // a held top button: its note (big: an octave)
     if (PR->paramHeld)
         PR->changeParam(value); // the held coloured button's value
     else if (big)

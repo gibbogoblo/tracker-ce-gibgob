@@ -274,43 +274,40 @@ void cGibGobPages::refresh()
     }
     else
     {
-        view.rows = 7;
+        view.rows = 8; // Shift + top 1-8 in the piano roll
         view.cols = 5;
         view.colX[0] = 24;
         view.colX[1] = 130;
         view.colX[2] = 240;
         view.colX[3] = 400;
         view.colX[4] = 540;
-        view.header[0] = "Button";
+        view.header[0] = "Shift+";
         view.header[1] = "Root";
         view.header[2] = "Type";
         view.header[3] = "Inversion";
         view.header[4] = "Voicing";
-        row = clampInt(row, 0, 6);
+        row = clampInt(row, 0, 7);
         col = clampInt(col, 1, 4);
         view.cursorRow = row;
         view.cursorCol = col;
 
         static const uint32_t kColColor[5] = { 0, color::kNoteBtn, color::kInstrBtn, color::kFx1Btn,
                                                color::kFx2Btn };
-        for (int r = 0; r < 7; r++)
+        for (int r = 0; r < 8; r++)
         {
             PaletteChord c = getPaletteChord(p, r);
-            snprintf(view.cell[r][0], 20, "%d", r + 2);
+            snprintf(view.cell[r][0], 20, "%d", r + 1);
             snprintf(view.cell[r][1], 20, "%s", mtNotes[c.root]);
             snprintf(view.cell[r][2], 20, "%s", chordType(c.type).label);
             snprintf(view.cell[r][3], 20, "%d", c.inversion % chordType(c.type).count);
             snprintf(view.cell[r][4], 20, "%s", kVoicingNames[c.voicing < kVoicingCount ? c.voicing : 0]);
             view.rowColor[r] = kColColor[col];
 
-            paletteChordName(c, s_barText[r + 1], sizeof(s_barText[r + 1]));
-            view.bar.text[r + 1] = s_barText[r + 1];
-            view.bar.fill[r + 1] = color::kMelodic;
-            view.bar.highlighted[r + 1] = (r == row);
+            paletteChordName(c, s_barText[r], sizeof(s_barText[r]));
+            view.bar.text[r] = s_barText[r];
+            view.bar.fill[r] = color::kMelodic;
+            view.bar.highlighted[r] = (r == row);
         }
-        view.bar.text[0] = "Note";
-        view.bar.fill[0] = 0;
-        view.bar.highlighted[0] = false;
 
         snprintf(view.title, sizeof(view.title), "Chord palette   (plays on track %d)", track + 1);
     }
@@ -524,7 +521,7 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
     }
     else
     {
-        row = clampInt(row + dRow, 0, 6);
+        row = clampInt(row + dRow, 0, 7);
         col = clampInt(col + dCol, 1, 4);
     }
     refresh();
@@ -663,9 +660,7 @@ void cGibGobPages::topButton(int button, bool pressed)
                 auditionOff(track);
             return;
         }
-        if (button < 1)
-            return; // button 1 is the single note in the piano roll
-        row = clampInt(button - 1, 0, 6);
+        row = clampInt(button, 0, 7); // the chord of Shift + this button in the piano roll
         PaletteChord c = getPaletteChord(p, row);
         uint8_t notes[kMaxChordNotes];
         int n = buildPaletteChord(c, notes, kMaxChordNotes);

@@ -147,6 +147,13 @@ int sliceCount(const Sequencer::strPattern* p, int track); // 0 when not a slice
 // the slice (0..) a top-row button plays (default: button 1 = slice 1 ...)
 int sliceForButton(const Sequencer::strPattern* p, int track, int button);
 void setSliceForButton(Sequencer::strPattern* p, int track, int button, int slice);
+
+// ---- the notes on the top buttons (melodic tracks) ----
+// Each melodic track has 8 notes on the top buttons, picked by the player;
+// until then a minor scale up from the track's base note. Kept like the slice
+// map: new patterns take them from the last pattern that had them.
+int buttonNote(const Sequencer::strPattern* p, int track, int button);
+void setButtonNote(Sequencer::strPattern* p, int track, int button, int note);
 // the note a track's own button / a new lane step plays: the base note, or on
 // a slice track the slice of top button 1
 uint8_t laneNote(const Sequencer::strPattern* p, int track);

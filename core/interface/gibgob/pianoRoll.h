@@ -58,7 +58,7 @@ class cPianoRoll : public ModuleBase
     void releaseAllButtons();
     void auditionGhost(bool on);
     void openTrackPage();
-    void utility(int button); // Shift + top row
+    void utility(int button); // an Edit menu tool (Shift + Note)
     void copyOrPaste();
 
     // helpers
@@ -71,6 +71,8 @@ class cPianoRoll : public ModuleBase
     int selectionCount();
     bool padsMode(); // sliced sample: the top row plays slices instead of chords
     bool singMode(); // the track's synth sings syllables (LILITRON): the top row picks them
+    // a held top button's note: up / down by `semis` (Up/Down, +/-); false if none is held
+    bool retuneHeld(int semis);
     int chordNoteCount();
     int findEditNote(int tick, int pitch); // note under the cursor (start within +-10, or covering)
 
@@ -108,6 +110,7 @@ class cPianoRoll : public ModuleBase
     int lastPlayheadDrawn = -2;
 
     bool held[8] = { false };
+    bool heldIsNote[8] = { false }; // held to play its own note (can be retuned while held)
     bool heldRecording[8] = { false };
     uint8_t heldNotes[8][gibgob::kMaxChordNotes];
     uint8_t heldCount[8] = { 0 };
