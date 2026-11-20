@@ -43,6 +43,16 @@ InstrumentImpl::~InstrumentImpl()
     }
 }
 
+bool InstrumentImpl::renderVoiceGraph(int voice, std::span<float> points)
+{
+    if (voice < 0 || voice >= static_cast<int>(voices.size()) || !voices[voice].voice)
+        return false;
+    if (!voices[voice].voice->isActive())
+        return false;
+    voices[voice].voice->renderGraph(points);
+    return true;
+}
+
 int InstrumentImpl::getVoiceCount() const
 {
     return static_cast<int>(voices.size());

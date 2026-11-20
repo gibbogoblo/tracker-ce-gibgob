@@ -632,6 +632,21 @@ void roundRect(int x1, int y1, int x2, int y2, int radius)
     s_used += 5;
 }
 
+void dots(const int16_t* xyr, int n)
+{
+    if (n <= 0 || !room(3 + 2 * n))
+        return;
+    endRects();
+    API_BEGIN(FTPOINTS);
+    for (int i = 0; i < n; i++)
+    {
+        API_POINT_SIZE((uint16_t)(xyr[3 * i + 2] * 16));
+        API_VERTEX2F(xyr[3 * i], xyr[3 * i + 1]);
+    }
+    API_END();
+    s_used += 2 + 2 * n;
+}
+
 void slantEnd(int x1, int y1, int x2, int y2, uint32_t under)
 {
     if (!room(11))

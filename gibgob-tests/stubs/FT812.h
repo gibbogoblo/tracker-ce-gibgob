@@ -8,6 +8,7 @@
 #define EDGE_STRIP_A 7
 #define EDGE_STRIP_B 8
 #define BITMAPS 1
+#define FTPOINTS 2
 #define RGB565 7
 #define SRC_ALPHA 2
 #define ONE_MINUS_SRC_ALPHA 4
@@ -21,6 +22,7 @@ void API_BEGIN(int prim);
 void API_END();
 void API_VERTEX2F(int16_t x, int16_t y);
 void API_LINE_WIDTH(int w);
+void API_POINT_SIZE(uint16_t size);
 void API_CMD_SETBITMAP(uint32_t source, uint16_t fmt, uint16_t w, uint16_t h);
 void API_BLEND_FUNC(int a, int b);
 void API_CMD_TEXT(int16_t x, int16_t y, int16_t font, uint16_t options, const char* s);

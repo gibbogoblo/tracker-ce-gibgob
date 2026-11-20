@@ -50,6 +50,7 @@ enum Graph : uint8_t
     kGraphDelay,
     kGraphReverb,
     kGraphAvatar, // a singer (a "Syllable" parameter): pictures with a mouth that opens
+    kGraphSample, // a page whose first column starts with a sample slot: the sample, playhead, grains
 };
 
 enum Role : uint8_t
@@ -122,6 +123,7 @@ struct PageModel
 struct SynthModel
 {
     bool valid; // the synth has the GibGob layout
+    char theme[12]; // the GibGob section's name: "Jungle" picks the night jungle look
     PageModel page[kPageCount];
     // Main page (set by the screen, not from the synth): the engine list
     uint8_t engineCount;
@@ -155,6 +157,7 @@ bool buildModel(const Meta& meta, SynthModel& out)
         }
     if (marker < 0)
         return false;
+    snprintf(out.theme, sizeof(out.theme), "%s", sections[marker].name.c_str());
 
     int16_t ids[kMaxRows * 4];
     const char* names[kMaxRows * 4];
@@ -311,6 +314,7 @@ static constexpr int kQuickY = 34;
 static constexpr int kQuickH = 28;
 static constexpr int kQuickW = 112;
 static constexpr int kQuickX0 = 334; // first quick box; then every 116
+static constexpr int kSampleViewH = 112; // the sample / grain view on top of a page
 // the singer picture (kStyleSinger): up to this size, in the bottom right corner
 static constexpr int kSingerW = 200;
 static constexpr int kSingerH = 250;

@@ -98,6 +98,8 @@ static void flushStrip()
 void API_BEGIN(int prim) { words++; inBegin = true; beginPrim = prim; g_stripN = 0; }
 void API_END() { words++; flushStrip(); inBegin = false; }
 void API_LINE_WIDTH(int w) { words++; g_lineW = w; }
+static int g_pointSize = 16;
+void API_POINT_SIZE(uint16_t s) { words++; g_pointSize = s; }
 void API_SAVE_CONTEXT() { words++; if (g_ctxN < 8) g_ctxStack[g_ctxN++] = { g_scX, g_scY, g_scW, g_scH, g_lineW, g_alpha, lastColor }; }
 void API_RESTORE_CONTEXT()
 {
@@ -126,6 +128,8 @@ void API_VERTEX2F(int16_t x, int16_t y)
     if (beginPrim == RECTS) verts++; // rectangles take vertices in pairs (a bitmap takes one)
     if (beginPrim == LINE_STRIP || beginPrim == EDGE_STRIP_R || beginPrim == EDGE_STRIP_L || beginPrim == EDGE_STRIP_B)
         if (g_stripN < 256) { g_strip[2 * g_stripN] = x; g_strip[2 * g_stripN + 1] = y; g_stripN++; }
+    if (g_svg && beginPrim == FTPOINTS)
+        fprintf(g_svg, "<circle cx='%d' cy='%d' r='%.1f' fill='#%06X' fill-opacity='%.2f'/>\n", x, y, g_pointSize / 16.0, lastColor & 0xFFFFFF, g_alpha / 255.0);
     if (g_svg && beginPrim == RECTS)
     {
         if (g_vn == 0) { g_vx = x; g_vy = y; g_vn = 1; }

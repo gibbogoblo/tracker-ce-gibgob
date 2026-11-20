@@ -87,6 +87,13 @@ class Synth
     bool loadSampleByIndex(int part, int slotId, int idx);
     bool loadSampleByPath(int part, int slotId, const std::string& fullSdPath);
     std::string getEngineSampleFolder(int part);
+    // GibGob OS grain view: each sounding voice's picture data, `perVoice`
+    // floats each, into `out` (up to `maxVoices`); returns how many voices
+    int readVoiceGraphs(int part, float* out, int perVoice, int maxVoices);
+    // the loudest point (0..255) in each of `bins` stretches of the slot's
+    // sample; returns the sample's data address (0: none) so callers can tell
+    // when it changed
+    uintptr_t samplePeaks(int part, int slotId, uint8_t* out, int bins);
 
     std::string getEnginePatchFolder(int part);
     [[nodiscard]] bool loadPatchByPath(int part, const std::string& fullSdPath);

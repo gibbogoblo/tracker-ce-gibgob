@@ -462,16 +462,23 @@ void layoutPage(const SynthModel& m, int page, int view, ViewLayout& out)
     }
     else
     {
-        // columns
+        // columns; a sample slot first: the sample (and grains) across the top
         out.style = kStyleColumns;
+        int colTop = top;
+        if (g0.count > 0 && isSampleItem(g0.id[0]))
+        {
+            const int sp = b.panel(10, top, 780, kSampleViewH, kGraphSample, -1);
+            b.graphArea(sp, 22, top + 8, 756, kSampleViewH - 16);
+            colTop = top + kSampleViewH + 8;
+        }
         const int gap = 10;
         const int colW = (780 - (count - 1) * gap) / count;
         for (int k = 0; k < count; k++)
         {
             const Group& g = p.groups[first + k];
             const int x = 10 + k * (colW + gap);
-            const int pi = b.panel(x, top, colW, bottom - top, g.graph, first + k);
-            int y = top + 30;
+            const int pi = b.panel(x, colTop, colW, bottom - colTop, g.graph, first + k);
+            int y = colTop + 30;
             if (g.graph != kGraphNone)
             {
                 b.graphArea(pi, x + 10, y, colW - 20, 70);

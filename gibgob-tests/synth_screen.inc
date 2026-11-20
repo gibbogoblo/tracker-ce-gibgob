@@ -205,6 +205,17 @@ static int synthTests(int limit)
                 if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) { printf("  synth grain: cells overlap\n"); fails++; }
             }
         }
+        if (l.panelCount != 4 || l.panel[0].graph != kGraphSample || l.panel[1].y < l.panel[0].y + l.panel[0].h)
+        { printf("  synth grain: no sample view on top\n"); fails++; }
+        if (strcmp(gm.theme, "Main") != 0) { printf("  synth grain: theme name not read\n"); fails++; }
+        // the busiest: 4 playheads, 48 grains, a loud sample
+        SynthGrainView& G = gv.grains;
+        G.hasSample = true;
+        for (int b = 0; b < SynthGrainView::kBins; b++) G.peaks[b] = (uint8_t)(255 - (b * 7) % 120);
+        G.heads = 4;
+        for (int k = 0; k < 4; k++) G.head[k] = 0.1f + k * 0.25f;
+        G.grains = SynthGrainView::kMaxGrains;
+        for (int i = 0; i < G.grains; i++) { G.pos[i] = (i * 37 % 100) / 100.0f; G.level[i] = (i % 5) / 4.0f; G.pan[i] = ((i * 13) % 21 - 10) / 10.0f; }
         snprintf(gv.synthName, sizeof(gv.synthName), "GORILLAGRAIN");
         snprintf(gv.headerInfo, sizeof(gv.headerInfo), "TRK 5 // GORILLA");
         snprintf(gv.title, sizeof(gv.title), "Grains");
@@ -224,10 +235,17 @@ static int synthTests(int limit)
         strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &gv;
         SynthEditControl sc(&prop);
         g_minY = 0;
-        render(sc, "synth GORILLAGRAIN grains", limit, false);
+        render(sc, "synth GORILLAGRAIN grains y2k", limit, false);
+        gv.cute = gv.jungle = true;
+        render(sc, "synth GORILLAGRAIN grains jungle", limit, false);
         gv.shift = true;
-        render(sc, "synth GORILLAGRAIN grains shift", limit, true);
+        render(sc, "synth GORILLAGRAIN jungle shift", limit, true);
         gv.shift = false;
+        G.hasSample = false;
+        render(sc, "synth GORILLAGRAIN no sample", limit, false);
+        G.hasSample = true;
+        // a quiet picture for the SVG: 2 notes, 14 fireflies
+        G.heads = 2; G.head[0] = 0.2f; G.head[1] = 0.62f; G.grains = 14;
         if (const char* dir = getenv("SYNTH_SVG"))
         {
             char path[256]; snprintf(path, sizeof(path), "%s/10_gorillagrain.svg", dir);
@@ -325,15 +343,31 @@ static int synthTests(int limit)
             strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &sv;
             SynthEditControl sc(&prop);
             g_minY = 0;
-            for (int shift = 0; shift < 4; shift++)
+            for (int shift = 0; shift < 6; shift++)
             {
-                sv.cute = shift >= 2; // 2, 3: the pink look
+                sv.cute = shift >= 2; // 2, 3: the pink look; 4, 5: the night jungle
+                sv.jungle = shift >= 4;
                 sv.shift = shift & 1;
                 for (int i = 0; i < 8; i++) { sv.tabText[i] = shift ? kTools[i] : kTabs[i]; sv.tabOn[i] = shift ? (i == 4 || i == 6) : (i == page); }
                 char nm[48];
-                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s%s", kPageNames[page], vi + 1, views, kStyleName[l.style], sv.cute ? " pink" : "", sv.shift ? " shift" : "");
+                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s%s", kPageNames[page], vi + 1, views, kStyleName[l.style], sv.jungle ? " jungle" : (sv.cute ? " pink" : ""), sv.shift ? " shift" : "");
                 render(sc, nm, limit, sv.shift);
                 if (g_ctxN != 0) { printf("  synth: save/restore not paired (%d)\n", g_ctxN); fails++; g_ctxN = 0; }
+            }
+            if (svgDir && (page == kPageAmp || page == kPageLfo || page == kPageFilter) && vi == 0)
+            {
+                // the night jungle on the other kinds of page
+                sv.shift = false; sv.cute = sv.jungle = true; sv.message[0] = 0; sv.cursor = 1;
+                for (int i = 0; i < 8; i++) { sv.tabText[i] = kTabs[i]; sv.tabOn[i] = (i == page); }
+                snprintf(sv.synthName, sizeof(sv.synthName), "GORILLAGRAIN");
+                char path[256]; snprintf(path, sizeof(path), "%s/11_jungle_%s.svg", svgDir, kPageNames[page]);
+                g_svg = fopen(path, "w");
+                fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                render(sc, "jungle page (svg)", limit, false);
+                fprintf(g_svg, "</svg>\n");
+                fclose(g_svg); g_svg = nullptr;
+                sv.jungle = false;
+                snprintf(sv.synthName, sizeof(sv.synthName), "MORPHANGUTAN");
             }
             if (svgDir)
             {

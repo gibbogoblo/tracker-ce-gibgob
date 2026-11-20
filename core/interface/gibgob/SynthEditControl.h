@@ -62,6 +62,23 @@ struct SynthAvatar
     int8_t sung; // -1: quiet
 };
 
+// the sample view on top of a page with a sample slot (GORILLAGRAIN): the
+// sample's shape, each sounding note's playhead, the grains sounding now
+struct SynthGrainView
+{
+    static constexpr int kBins = 80;
+    static constexpr int kMaxHeads = 4;
+    static constexpr int kMaxGrains = 48;
+    bool hasSample;
+    uint8_t peaks[kBins]; // 0..255
+    uint8_t heads;
+    float head[kMaxHeads]; // 0..1
+    uint8_t grains;
+    float pos[kMaxGrains];   // 0..1
+    float level[kMaxGrains]; // 0..1
+    float pan[kMaxGrains];   // -1..1
+};
+
 struct SynthView
 {
     synthui::ViewLayout layout;
@@ -70,6 +87,7 @@ struct SynthView
     char panelInfo[synthui::kMaxPanels][20];
     SynthGraph graph[synthui::kMaxPanels];
     SynthAvatar avatar;
+    SynthGrainView grains;
 
     char synthName[20];   // header, on the chrome
     char headerInfo[40];  // "// TRK 05 // HAIRY LEAD"
@@ -86,7 +104,8 @@ struct SynthView
     bool tabOn[8] = { false }; // the current page, or a tool that is on
     bool shift = false;
     bool editing = true; // false: the synth has no GibGob layout (message only)
-    bool cute = false;   // the bubbly pink look (LILITRON); Shift does not lighten it
+    bool cute = false;   // the round look (pink for LILITRON); Shift does not lighten it
+    bool jungle = false; // with cute: the night jungle colours (GORILLAGRAIN)
     char message[64];
     HelpView help;
 };
@@ -158,6 +177,32 @@ constexpr uint32_t kLemon = 0xFFF1A8;
 // pastel bubbles: pink, lilac, peach, mint
 constexpr uint32_t kBubble[4] = { 0xFF9ACD, 0xC9A7FF, 0xFFC4A3, 0x9CF2D8 };
 } // namespace cute
+
+// the night jungle (GORILLAGRAIN): the same round shapes as the pink look,
+// moonlit greens; the grains are fireflies
+namespace jungle
+{
+constexpr uint32_t kSkyTop = 0x0A1F26;
+constexpr uint32_t kSkyLow = 0x040C0A;
+constexpr uint32_t kPanel = 0x0B1E17;
+constexpr uint32_t kRing = 0x1E4A34;    // panel and tab edges
+constexpr uint32_t kTitle = 0x9FE0B5;   // panel titles
+constexpr uint32_t kRow = 0x10281E;
+constexpr uint32_t kSoft = 0x7FBF9F;    // labels
+constexpr uint32_t kText = 0xE8F7D0;    // values (moonlight)
+constexpr uint32_t kDark = 0x06140F;    // text on light fills
+constexpr uint32_t kFirefly = 0xD7F25A; // the cursor, the grains
+constexpr uint32_t kFireflyHi = 0xF2FF9E;
+constexpr uint32_t kSelFill = 0x2C3B17;
+constexpr uint32_t kLeafDark = 0x0F2D1E;
+constexpr uint32_t kLeaf = 0x3FA06A;
+constexpr uint32_t kTabOn = 0x2E7D4F;
+constexpr uint32_t kRiver = 0x0E3A3A;
+constexpr uint32_t kWave = 0x1E6B5A;
+constexpr uint32_t kMoon = 0xE8F7D0;
+// the coloured buttons (the Mini's own colours)
+constexpr uint32_t kButton[4] = { 0x53B886, 0xB8AA53, 0x7B6FD6, 0x5AC8FA };
+} // namespace jungle
 
 // points of a picture, for the drawing and the tests (returns how many)
 int envelopePoints(const SynthGraph& g, int x, int y, int w, int h, int16_t* xy, int max, int16_t handles[8]);

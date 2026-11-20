@@ -276,8 +276,30 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
 
     bool hasPostProcess() const final { return true; }
 
+    // The GibGob editor's grain view reads this: [0] the marker, [1] the
+    // playhead (0..1), [2] how many grains, then for each grain where (0..1),
+    // how loud (0..1) and its pan (-1..1). Smaller buffers get the old scope.
+    static constexpr float kGrainViewMarker = 62062.0f;
     void renderGraph(std::span<float> points) override
     {
+        constexpr int kMax = grain::Voice::kMaxGrains;
+        if (points.size() >= static_cast<size_t>(3 + 3 * kMax))
+        {
+            float pos[kMax], lvl[kMax], pan[kMax];
+            const int n = dsp.active() ? dsp.grainView(pos, lvl, pan, kMax) : 0;
+            points[0] = kGrainViewMarker;
+            points[1] = dsp.playhead();
+            points[2] = static_cast<float>(n);
+            for (int i = 0; i < n; ++i)
+            {
+                points[3 + i * 3] = pos[i];
+                points[4 + i * 3] = lvl[i];
+                points[5 + i * 3] = pan[i];
+            }
+            for (size_t i = 3 + static_cast<size_t>(n) * 3; i < points.size(); ++i)
+                points[i] = 0.0f;
+            return;
+        }
         for (size_t i = 0; i < points.size(); ++i)
         {
             const size_t s = (i * lastGraphSamples.size()) / std::max<size_t>(1, points.size());
@@ -506,7 +528,7 @@ void GorillaGrainVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
 
     metadata.layout33 = Patch::Metadata::EditorLayout{
         .sections = {
-          { .name = "Main", .shortName = "GibGob",
+          { .name = "Jungle", .shortName = "GibGob", // the name picks the night jungle look
             .elements = { el(GrainParamId::kPosition), el(GrainParamId::kScan), el(GrainParamId::kSize),
                           el(GrainParamId::kDensity), el(GrainParamId::kSpray), el(GrainParamId::kJitter),
                           el(GrainParamId::kSparkle), el(GrainParamId::kReverse), el(GrainParamId::kCutoff),

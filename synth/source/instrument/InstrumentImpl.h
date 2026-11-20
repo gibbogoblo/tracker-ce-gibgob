@@ -54,6 +54,7 @@ class InstrumentImpl final
     [[nodiscard]] int getVoiceCount() const override;
     void setVoiceCount(int voiceCount) override;
     void reset() override;
+    bool renderVoiceGraph(int voice, std::span<float> points) override;
 
     void assignPatch(std::shared_ptr<Patch> patch) override;
     void connect(MidiSource& midiSource) override;

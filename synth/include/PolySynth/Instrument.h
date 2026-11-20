@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include "MidiEvent.h"
 #include "PImpl.h"
@@ -32,6 +33,9 @@ class Instrument : public PImpl<InstrumentImpl>
     [[nodiscard]] virtual int getVoiceCount() const = 0;
     virtual void setVoiceCount(int voiceCount) = 0;
     virtual void reset() = 0;
+    // a sounding voice's picture data (the engine's renderGraph); false: that
+    // voice is not sounding (GibGob OS: GORILLAGRAIN's grain view)
+    virtual bool renderVoiceGraph(int /*voice*/, std::span<float> /*points*/) { return false; }
 
     virtual ~Instrument() = default;
 };

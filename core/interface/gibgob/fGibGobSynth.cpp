@@ -715,6 +715,43 @@ void cGibGobSynth::setDefaultScreenFunct()
 
 namespace
 {
+bool pageHasSampleView(const ViewLayout& l)
+{
+    for (int p = 0; p < l.panelCount; p++)
+        if (l.panel[p].graph == kGraphSample)
+            return true;
+    return false;
+}
+
+// the grain view: each sounding note's playhead and grains, as the engine
+// reports them (GORILLAGRAIN's renderGraph); true if anything changed
+constexpr int kGraphPerVoice = 40; // marker, playhead, count, 12 grains x 3
+constexpr float kGrainViewMarker = 62062.0f;
+__NOINIT(EXTERNAL_RAM) float s_graphBuf[SynthGrainView::kMaxHeads * kGraphPerVoice];
+bool readGrainView(int part, SynthGrainView& gv)
+{
+    const uint8_t oldHeads = gv.heads, oldGrains = gv.grains;
+    const int voices = gsynth()->readVoiceGraphs(part, s_graphBuf, kGraphPerVoice, SynthGrainView::kMaxHeads);
+    gv.heads = 0;
+    gv.grains = 0;
+    for (int k = 0; k < voices; k++)
+    {
+        const float* g = s_graphBuf + k * kGraphPerVoice;
+        if (g[0] != kGrainViewMarker)
+            continue;
+        gv.head[gv.heads++] = g[1];
+        const int n = clampi((int)g[2], 0, (kGraphPerVoice - 3) / 3);
+        for (int i = 0; i < n && gv.grains < SynthGrainView::kMaxGrains; i++)
+        {
+            gv.pos[gv.grains] = g[3 + i * 3];
+            gv.level[gv.grains] = g[4 + i * 3];
+            gv.pan[gv.grains] = g[5 + i * 3];
+            gv.grains++;
+        }
+    }
+    return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0;
+}
+
 bool pageHasAvatar(const ViewLayout& l)
 {
     for (int p = 0; p < l.panelCount; p++)
@@ -744,6 +781,17 @@ void cGibGobSynth::update()
     {
         s_message[0] = 0;
         refresh();
+    }
+    // the grain view moves while notes play (about 25 pictures a second)
+    if (pageHasSampleView(s->view.layout) && !s->view.help.active)
+    {
+        static elapsedMillis s_grainClock;
+        if (s_grainClock >= 40)
+        {
+            s_grainClock = 0;
+            if (readGrainView(part, s->view.grains))
+                display.refreshControl(control);
+        }
     }
     SynthAvatar& av = s->view.avatar;
     if (!pageHasAvatar(s->view.layout))
@@ -845,7 +893,14 @@ void cGibGobSynth::refresh()
     v.shift = shiftActive();
     v.editing = true;
     const bool singer = modelSings();
-    v.cute = singer;
+    v.jungle = !singer && strcasecmp(s->model.theme, "Jungle") == 0;
+    v.cute = singer || v.jungle;
+    if (pageHasSampleView(l))
+    {
+        // the sample's shape (only read again when the page is drawn anew)
+        v.grains.hasSample = gsynth()->samplePeaks(part, 0, v.grains.peaks, SynthGrainView::kBins) != 0;
+        readGrainView(part, v.grains);
+    }
 
     // header
     upper(v.synthName, sizeof(v.synthName), gsynth()->getInstrumentTypeName(engineIdx()).c_str());

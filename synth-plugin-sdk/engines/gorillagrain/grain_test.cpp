@@ -222,6 +222,31 @@ int main()
         CHECK(std::fabs(moved - 0.5f) < 0.02f);
     }
 
+    // T6b: the grain view: grains near the playhead, levels and pans in range
+    {
+        grain::Params p;
+        p.spray = 0.0f;
+        p.lfo[0].slot[0].dest = grain::kDestOff;
+        p.scan = 0.0f;
+        p.position = 0.5f;
+        grain::Voice v;
+        v.init(4);
+        v.noteOn(p, s, 57.0f, 1.0f);
+        float l[128], r[128];
+        for (int b = 0; b < 40; b++)
+            v.render(p, 120, 0, l, r, 128);
+        float pos[12], lvl[12], pan[12];
+        const int n = v.grainView(pos, lvl, pan, 12);
+        CHECK(n >= 1 && n <= 12);
+        for (int i = 0; i < n; i++)
+        {
+            CHECK(pos[i] >= 0.49f && pos[i] < 0.58f); // from the frozen playhead, plus up to 140 ms of travel (7 % of 2 s)
+            CHECK(lvl[i] >= 0.0f && lvl[i] <= 1.0f);
+            CHECK(pan[i] >= -1.01f && pan[i] <= 1.01f);
+        }
+        CHECK(v.grainView(pos, lvl, pan, 2) <= 2);
+    }
+
     // T7: the instrument FX take the grain settings (shimmer reverb on by default)
     {
         grain::Params p;

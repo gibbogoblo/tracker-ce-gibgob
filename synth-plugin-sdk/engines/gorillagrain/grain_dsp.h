@@ -378,6 +378,26 @@ class Voice
     // where the playhead is (0..1 of the sample), for a picture
     float playhead() const { return headNow; }
 
+    // for the screen: the grains sounding now (where in the sample 0..1, how
+    // loud 0..1, pan -1..1); returns how many
+    int grainView(float* pos, float* level, float* pan, int max) const
+    {
+        if (src.frames == 0)
+            return 0;
+        const float inv = 1.0f / (float)src.frames;
+        int n = 0;
+        for (const auto& g : grains)
+        {
+            if (!g.on || n >= max)
+                continue;
+            pos[n] = ((float)g.ipos + g.frac) * inv;
+            level[n] = windowAt(g.shape, (float)g.age * g.invLen);
+            pan[n] = (g.panR - g.panL) * 0.70710678f; // back to -1..1 (about)
+            n++;
+        }
+        return n;
+    }
+
   private:
     struct Grain
     {

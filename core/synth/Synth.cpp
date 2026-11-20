@@ -818,6 +818,54 @@ bool Synth::loadSampleByPath(int part, int slotId, const std::string& fullSdPath
     return false;
 }
 
+int Synth::readVoiceGraphs(int part, float* out, int perVoice, int maxVoices)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].instrument || out == nullptr || perVoice <= 0)
+        return 0;
+    auto& inst = *parts[part].instrument;
+    const int voices = inst.getVoiceCount();
+    int n = 0;
+    for (int v = 0; v < voices && n < maxVoices; ++v)
+    {
+        bool ok;
+        DISABLE_AUDIO_INTERRUPTS(); // the voice is not changed half way through
+        ok = inst.renderVoiceGraph(v, std::span<float>(out + n * perVoice, static_cast<size_t>(perVoice)));
+        ENABLE_AUDIO_INTERRUPTS();
+        if (ok)
+            ++n;
+    }
+    return n;
+}
+
+uintptr_t Synth::samplePeaks(int part, int slotId, uint8_t* out, int bins)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].patch || out == nullptr || bins <= 0)
+        return 0;
+    const auto* sample = parts[part].patch->getSample(slotId);
+    if (!sample || !sample->ready || sample->data.empty() || sample->format.channels < 1)
+        return 0;
+    const int ch = sample->format.channels;
+    const size_t frames = sample->data.size() / static_cast<size_t>(ch);
+    if (frames < static_cast<size_t>(bins))
+        return 0;
+    const auto* d = sample->data.data();
+    for (int b = 0; b < bins; ++b)
+    {
+        const size_t f0 = frames * static_cast<size_t>(b) / static_cast<size_t>(bins);
+        const size_t f1 = frames * static_cast<size_t>(b + 1) / static_cast<size_t>(bins);
+        // every 4th frame is plenty for a picture
+        int peak = 0;
+        for (size_t f = f0; f < f1; f += 4)
+        {
+            int a = d[f * static_cast<size_t>(ch)];
+            a = a < 0 ? -a : a;
+            peak = a > peak ? a : peak;
+        }
+        out[b] = static_cast<uint8_t>(peak > 32767 ? 255 : peak >> 7);
+    }
+    return reinterpret_cast<uintptr_t>(d);
+}
+
 std::string Synth::getEngineSampleFolder(int part)
 {
     if (part < 0 || part >= kSynthParts || !synth)

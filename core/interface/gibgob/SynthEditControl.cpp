@@ -38,6 +38,12 @@ void fit(char* out, int outLen, const char* in, int chars)
 uint32_t panelColor(const SynthView& v, int panel)
 {
     const ViewLayout& l = v.layout;
+    if (v.jungle)
+    {
+        static const uint32_t kJ[4] = { jungle::kFirefly, 0x6FD6A0, 0x9FE0B5, 0x5AC8FA };
+        const int g = l.panel[panel].group;
+        return kJ[(g < 0 ? panel : g) & 3];
+    }
     if (l.style == kStyleMain || l.style == kStylePatch)
         return panel == 0 ? y2k::kCyan : y2k::kPink;
     const int g = l.panel[panel].group;
@@ -220,6 +226,83 @@ struct Fonts
     int label, bold, big, small;
 };
 
+// the sample across the box: its shape, each playhead, the grains as
+// fireflies (jungle) or bubbles (any other look)
+void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fonts& f)
+{
+    const SynthGrainView& gv = v.grains;
+    const bool j = v.jungle;
+    const int w = x2 - x1 + 1, h = y2 - y1 + 1;
+    // the river
+    if (j)
+        draw::fadeRect(x1, y1, x2, y2, jungle::kRiver, 0x06201C, true);
+    else
+    {
+        draw::color(y2k::kGraphBg);
+        draw::rect(x1, y1, x2, y2);
+    }
+    const int mid = y1 + h / 2;
+    if (!gv.hasSample)
+    {
+        draw::color(j ? jungle::kSoft : y2k::kDim);
+        draw::text((x1 + x2) / 2, mid, f.small, OPT_CENTER, "No sample: Middle on Sample to pick one");
+        return;
+    }
+    // the sample's shape: one bar per stretch
+    const int bins = SynthGrainView::kBins;
+    const float bw = (float)(w - 8) / bins;
+    draw::color(j ? jungle::kWave : y2k::kPanelEdge);
+    for (int b = 0; b < bins; b++)
+    {
+        const int bh = 1 + gv.peaks[b] * (h / 2 - 6) / 255;
+        const int bx = x1 + 4 + (int)(b * bw);
+        draw::rect(bx, mid - bh, bx + (int)bw - 2, mid + bh);
+    }
+    if (j)
+    {
+        // moonlight on the water
+        draw::alpha(40);
+        draw::color(jungle::kMoon);
+        for (int k = 0; k < 5; k++)
+            draw::rect(x1 + 40 + k * 150, mid - 1, x1 + 80 + k * 150 - k * 4, mid);
+        draw::alpha(255);
+    }
+    // playheads
+    draw::color(j ? jungle::kMoon : y2k::kLime);
+    for (int k = 0; k < gv.heads && k < SynthGrainView::kMaxHeads; k++)
+    {
+        const int px = x1 + 4 + (int)(clampf(gv.head[k], 0, 1) * (w - 9));
+        draw::rect(px - 1, y1 + 6, px, y2 - 6);
+        draw::roundRect(px - 4, y1 + 2, px + 4, y1 + 10, 4);
+    }
+    // the grains: a soft glow, then the light (louder = bigger)
+    const int n = gv.grains < SynthGrainView::kMaxGrains ? gv.grains : SynthGrainView::kMaxGrains;
+    if (n > 0)
+    {
+        int16_t glow[3 * SynthGrainView::kMaxGrains], light[3 * SynthGrainView::kMaxGrains];
+        for (int i = 0; i < n; i++)
+        {
+            const int x = x1 + 4 + (int)(clampf(gv.pos[i], 0, 1) * (w - 9));
+            const int y = mid + (int)(clampf(gv.pan[i], -1, 1) * (h / 2 - 14));
+            const float lv = clampf(gv.level[i], 0, 1);
+            glow[3 * i] = light[3 * i] = (int16_t)x;
+            glow[3 * i + 1] = light[3 * i + 1] = (int16_t)y;
+            glow[3 * i + 2] = (int16_t)(6 + lv * 8);
+            light[3 * i + 2] = (int16_t)(2 + lv * 3);
+        }
+        draw::alpha(60);
+        draw::color(j ? jungle::kFirefly : y2k::kCyan);
+        draw::dots(glow, n);
+        draw::alpha(255);
+        draw::color(j ? jungle::kFireflyHi : 0xC8FAFF);
+        draw::dots(light, n);
+    }
+    char info[20];
+    snprintf(info, sizeof(info), j ? "%d fireflies" : "%d grains", n);
+    draw::color(j ? jungle::kSoft : y2k::kDim);
+    draw::text(x2 - 10, y2 - 12, f.small, OPT_CENTERY | OPT_RIGHTX, info);
+}
+
 void drawGraph(const SynthView& v, int pi, const Fonts& f)
 {
     const PanelPos& p = v.layout.panel[pi];
@@ -228,11 +311,16 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
     const SynthGraph& g = v.graph[pi];
     const uint32_t col = panelColor(v, pi);
     const int x1 = p.gx, y1 = p.gy, x2 = p.gx + p.gw - 1, y2 = p.gy + p.gh - 1;
+    if (p.graph == kGraphSample)
+    {
+        drawSampleView(v, x1, y1, x2, y2, f);
+        return;
+    }
     if (p.graph != kGraphAvatar)
     {
-        draw::color(y2k::kGraphBg);
+        draw::color(v.jungle ? 0x07171A : y2k::kGraphBg);
         draw::rect(x1, y1, x2, y2);
-        draw::color(y2k::kPanelEdge);
+        draw::color(v.jungle ? jungle::kRing : y2k::kPanelEdge);
         draw::frame(x1, y1, x2, y2, 1);
     }
 
@@ -632,7 +720,24 @@ void drawSinger(const SynthView& v)
         face(cx, cy, false);
 }
 
-// ---- the bubbly pink look ----
+// ---- the round look: pink (LILITRON) or night jungle (GORILLAGRAIN) ----
+struct RoundPalette
+{
+    uint32_t panel, ring, title, row, sel, selRing, selText, selLabel, soft, text, dark, lit, note, tabOn, tabOnShift;
+    uint32_t bubble[4];
+};
+const RoundPalette kPink = { cute::kPanel, cute::kRing, cute::kRing, cute::kRow, cute::kHot, cute::kText, cute::kText,
+                             cute::kText, cute::kSoft, cute::kText, cute::kDark, cute::kMint, cute::kLemon, cute::kHot,
+                             cute::kMint, { cute::kBubble[0], cute::kBubble[1], cute::kBubble[2], cute::kBubble[3] } };
+const RoundPalette kJungle = { jungle::kPanel, jungle::kRing, jungle::kTitle, jungle::kRow, jungle::kSelFill,
+                               jungle::kFirefly, jungle::kText, jungle::kFireflyHi, jungle::kSoft, jungle::kText,
+                               jungle::kDark, jungle::kLeaf, jungle::kFirefly, jungle::kTabOn, jungle::kFirefly,
+                               { jungle::kButton[0], jungle::kButton[1], jungle::kButton[2], jungle::kButton[3] } };
+inline const RoundPalette& pal(const SynthView& v)
+{
+    return v.jungle ? kJungle : kPink;
+}
+
 void cutePill(int x1, int y1, int x2, int y2, uint32_t fill)
 {
     draw::color(fill);
@@ -643,6 +748,33 @@ void cuteRingPill(int x1, int y1, int x2, int y2, uint32_t ring, uint32_t fill, 
 {
     cutePill(x1 - t, y1 - t, x2 + t, y2 + t, ring);
     cutePill(x1, y1, x2, y2, fill);
+}
+
+void jungleHeader(const SynthView& v, const Fonts& f)
+{
+    // leaves at the top left, the moon at the top right
+    draw::color(jungle::kLeafDark);
+    static const int16_t kLeaves[6][3] = { { 26, 13, 26 }, { 60, 11, 22 }, { 18, 44, 18 }, { 700, 8, 16 }, { 672, 6, 12 }, { 785, 72, 14 } };
+    for (const auto& l : kLeaves)
+        draw::roundRect(l[0] - l[2], l[1] - l[2] / 2, l[0] + l[2], l[1] + l[2] / 2, l[2] / 2);
+    draw::alpha(28);
+    draw::color(jungle::kMoon);
+    draw::roundRect(748 - 26, 14 - 26, 748 + 26, 14 + 26, 26);
+    draw::alpha(255);
+    draw::roundRect(748 - 11, 14 - 11, 748 + 11, 14 + 11, 11);
+    draw::color(jungle::kSkyTop);
+    draw::roundRect(754 - 10, 10 - 10, 754 + 10, 10 + 10, 10); // the shadow: a crescent
+    draw::color(jungle::kText);
+    draw::text(16, 15, f.big, OPT_CENTERY, v.synthName);
+    char info[24];
+    fit(info, sizeof(info), v.headerInfo, 20);
+    draw::color(jungle::kSoft);
+    draw::text(474, 14, f.small, OPT_CENTERY, info);
+    if (v.pageText[0])
+    {
+        draw::color(jungle::kFirefly);
+        draw::text(718, 14, f.bold, OPT_CENTERY | OPT_RIGHTX, v.pageText);
+    }
 }
 
 void cuteHeader(const SynthView& v, const Fonts& f)
@@ -677,19 +809,28 @@ void cuteHeader(const SynthView& v, const Fonts& f)
 void cutePanel(const SynthView& v, int pi, const Fonts& f)
 {
     const PanelPos& p = v.layout.panel[pi];
+    const RoundPalette& P = pal(v);
     const int x2 = p.x + p.w - 1, y2 = p.y + p.h - 1;
-    draw::color(cute::kRing);
+    draw::color(P.ring);
     draw::roundRect(p.x, p.y, x2, y2, 20);
-    draw::color(cute::kPanel);
+    draw::color(P.panel);
     draw::roundRect(p.x + 2, p.y + 2, x2 - 2, y2 - 2, 18);
     if (v.panelTitle[pi][0])
     {
-        draw::color(cute::kRing);
-        draw::text(p.x + 20, p.y + 16, f.bold, OPT_CENTERY, v.panelTitle[pi]);
+        int tx = p.x + 20;
+        if (v.jungle)
+        {
+            // a little leaf before the title
+            draw::color(jungle::kLeaf);
+            draw::roundRect(p.x + 14, p.y + 12, p.x + 32, p.y + 20, 4);
+            tx = p.x + 40;
+        }
+        draw::color(P.title);
+        draw::text(tx, p.y + 16, f.bold, OPT_CENTERY, v.panelTitle[pi]);
     }
     if (v.panelInfo[pi][0] && p.w >= 400)
     {
-        draw::color(cute::kSoft);
+        draw::color(P.soft);
         draw::text(x2 - 18, p.y + 16, f.small, OPT_CENTERY | OPT_RIGHTX, v.panelInfo[pi]);
     }
     drawGraph(v, pi, f);
@@ -699,13 +840,15 @@ void cuteCell(const SynthView& v, int i, const Fonts& f)
 {
     const CellPos& c = v.layout.cell[i];
     const SynthCellText& t = v.cells[i];
+    const RoundPalette& P = pal(v);
     const bool sel = i == v.cursor;
     const int x2 = c.x + c.w - 1, y2 = c.y + c.h - 1;
     char label[20], value[16];
-    // the selected one: hot pink with a white ring; the engine in use: mint
-    const uint32_t fill = sel ? cute::kHot : (t.lit ? cute::kMint : cute::kRow);
+    // the selected one: hot pink with a white ring (jungle: a firefly glow);
+    // the engine in use: mint (jungle: a leaf)
+    const uint32_t fill = sel ? P.sel : (t.lit ? P.lit : P.row);
     if (sel)
-        cuteRingPill(c.x, c.y, x2, y2, cute::kText, fill, 2);
+        cuteRingPill(c.x, c.y, x2, y2, P.selRing, fill, 2);
     else
         cutePill(c.x, c.y, x2, y2, fill);
     const bool light = !sel && t.lit;
@@ -717,23 +860,23 @@ void cuteCell(const SynthView& v, int i, const Fonts& f)
     if (c.kind == kCellChip)
     {
         static const char* const kName[4] = { "A", "D", "S", "R" };
-        draw::color(light ? cute::kDark : cute::kSoft);
+        draw::color(light ? P.dark : (sel ? P.selLabel : P.soft));
         draw::text(c.x + 16, c.y + c.h / 2, f.bold, OPT_CENTERY, kName[clampi(c.role - kRoleAttack, 0, 3)]);
     }
     else
     {
-        draw::color(light ? cute::kDark : (sel ? cute::kText : cute::kSoft));
+        draw::color(light ? P.dark : (sel ? P.selLabel : P.soft));
         draw::text(c.x + 18, c.y + c.h / 2, c.kind == kCellAction ? f.bold : f.label, OPT_CENTERY, label);
     }
-    draw::color(light ? cute::kDark : cute::kText);
+    draw::color(light ? P.dark : (sel ? P.selText : P.text));
     draw::text(x2 - 16, c.y + c.h / 2, c.kind == kCellAction ? f.small : f.bold, OPT_CENTERY | OPT_RIGHTX, value);
     if (c.kind == kCellGrid && t.fill >= 0)
     {
         // a little progress pill instead of lights
         const int bx1 = c.x + 14, bx2 = x2 - 14, by = y2 - 12;
-        cutePill(bx1, by, bx2, by + 6, cute::kPanel);
+        cutePill(bx1, by, bx2, by + 6, P.panel);
         if (t.fill > 2)
-            cutePill(bx1, by, bx1 + (bx2 - bx1) * t.fill / 100, by + 6, cute::kBubble[(i / 3) & 3]);
+            cutePill(bx1, by, bx1 + (bx2 - bx1) * t.fill / 100, by + 6, P.bubble[(i / 3) & 3]);
     }
 }
 
@@ -743,23 +886,24 @@ void cuteQuickBoxes(const SynthView& v, const Fonts& f)
     {
         const int x1 = kQuickX0 + k * 116, x2 = x1 + kQuickW - 1;
         const int y1 = kQuickY, y2 = kQuickY + kQuickH - 1;
-        const uint32_t col = cute::kBubble[k];
+        const RoundPalette& P = pal(v);
+        const uint32_t col = P.bubble[k];
         if (v.quick[k].label[0] == 0)
         {
-            cutePill(x1, y1, x2, y2, cute::kPanel);
+            cutePill(x1, y1, x2, y2, P.panel);
             continue;
         }
         const bool on = v.quickActive[k];
         if (on)
             cutePill(x1, y1, x2, y2, col);
         else
-            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, col, cute::kBg, 2);
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, col, v.jungle ? jungle::kPanel : cute::kBg, 2);
         char label[10], value[10];
         fit(value, sizeof(value), v.quick[k].value, 7);
         abbreviate(v.quick[k].label, label, clampi((86 - (int)strlen(value) * 8) * 2 / 13, 2, 8));
-        draw::color(on ? cute::kDark : col);
+        draw::color(on ? P.dark : col);
         draw::text(x1 + 12, (y1 + y2) / 2, f.small, OPT_CENTERY, label);
-        draw::color(on ? cute::kDark : cute::kText);
+        draw::color(on ? P.dark : P.text);
         draw::text(x2 - 10, (y1 + y2) / 2, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
     }
 }
@@ -772,14 +916,17 @@ void cuteTabs(const SynthView& v, const Fonts& f)
         const int x1 = 4 + i * (w + 4), x2 = x1 + w - 1;
         const int y1 = kTabsY + 2, y2 = kTabsY + kTabsH - 3;
         const bool on = v.tabOn[i];
-        // with Shift the tabs are the syllables: the one sung lights up mint
-        if (on)
-            cutePill(x1, y1, x2, y2, v.shift ? cute::kMint : cute::kHot);
+        const RoundPalette& P = pal(v);
+        // with Shift: the tools (a singer: the syllables, the one sung lights up)
+        if (on && v.jungle && !v.shift)
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, jungle::kFirefly, P.tabOn, 2);
+        else if (on)
+            cutePill(x1, y1, x2, y2, v.shift ? P.tabOnShift : P.tabOn);
         else
-            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, cute::kRing, cute::kPanel, 2);
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, P.ring, P.panel, 2);
         if (v.tabText[i] && v.tabText[i][0])
         {
-            draw::color(on ? (v.shift ? cute::kDark : cute::kText) : cute::kSoft);
+            draw::color(on ? (v.shift ? P.dark : (v.jungle ? jungle::kFireflyHi : P.text)) : P.soft);
             draw::text((x1 + x2) / 2, (y1 + y2) / 2, f.bold, OPT_CENTER, v.tabText[i]);
         }
     }
@@ -855,13 +1002,22 @@ void SynthEditControl::update()
     // the pink look keeps its colours under Shift (only the red frame shows)
     draw::setLighten(v.shift && !v.cute);
 
-    draw::color(y2k::kBg);
-    draw::rect(0, 0, kScreenW - 1, 479);
+    if (v.jungle)
+        draw::fadeRect(0, 0, kScreenW - 1, 479, jungle::kSkyTop, jungle::kSkyLow, true);
+    else
+    {
+        draw::color(y2k::kBg);
+        draw::rect(0, 0, kScreenW - 1, 479);
+    }
 
     if (v.cute)
     {
-        cuteHeader(v, f);
-        draw::color(cute::kText);
+        const RoundPalette& P = pal(v);
+        if (v.jungle)
+            jungleHeader(v, f);
+        else
+            cuteHeader(v, f);
+        draw::color(P.text);
         draw::text(12, kQuickY + kQuickH / 2, f.big, OPT_CENTERY, v.title);
         cuteQuickBoxes(v, f);
         cuteTabs(v, f);
@@ -877,14 +1033,14 @@ void SynthEditControl::update()
             drawSinger(v);
         if (v.hint[0] && v.layout.style != kStyleMain)
         {
-            draw::color(v.warn ? cute::kHot : cute::kSoft);
+            draw::color(v.warn ? (v.jungle ? jungle::kFirefly : cute::kHot) : P.soft);
             draw::text(28, 352, f.small, OPT_CENTERY, v.hint);
         }
         if (v.message[0])
         {
             const int w = (int)strlen(v.message) * 8 + 32;
-            cutePill(400 - w / 2, 394, 400 + w / 2, 422, cute::kLemon);
-            draw::color(cute::kDark);
+            cutePill(400 - w / 2, 394, 400 + w / 2, 422, P.note);
+            draw::color(P.dark);
             draw::text(400, 408, f.bold, OPT_CENTER, v.message);
         }
         draw::end();

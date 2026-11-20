@@ -172,6 +172,8 @@ void fadeRect(int x1, int y1, int x2, int y2, uint32_t c0, uint32_t c1, bool ver
 // a box with round corners of `radius` pixels (a circle when it is square
 // with radius = half its size); the chip rounds rectangles by the line width
 void roundRect(int x1, int y1, int x2, int y2, int radius);
+// round dots, cheap (2 words each): xyr = x0, y0, radius0, x1, ...
+void dots(const int16_t* xyr, int n);
 // box with its top-left and bottom-right corners cut off by `cut` pixels
 void cutBox(int x1, int y1, int x2, int y2, int cut, uint32_t fill, uint32_t under);
 // display list words one fade costs (the chip's ramp bitmap, up to 27)
