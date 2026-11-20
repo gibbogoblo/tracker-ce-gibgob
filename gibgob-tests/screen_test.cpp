@@ -401,6 +401,27 @@ int main()
             render(mc, "master fx page", kLimit);
             prop.data = &tv;
         }
+        {
+            // sample library: 10 rows of the longest cells, the 4 coloured boxes, a held one
+            TableView lv; lv.rows = 10; lv.cols = 4; lv.cursorRow = 9; lv.cursorCol = 0;
+            const char* lh[4] = { "Sample", "Genre", "Category", "Fav" };
+            const int lx[4] = { 24, 430, 560, 700 };
+            for (int c = 0; c < 4; c++) { lv.colX[c] = lx[c]; lv.header[c] = lh[c]; }
+            for (int r = 0; r < 10; r++)
+            {
+                snprintf(lv.cell[r][0], 20, "WWWWWWWWWWWWWWWWWWW"); snprintf(lv.cell[r][1], 20, "Hiphop");
+                snprintf(lv.cell[r][2], 20, "Snares"); snprintf(lv.cell[r][3], 20, "*"); lv.rowColor[r] = 0xFFFFFF;
+            }
+            snprintf(lv.title, sizeof(lv.title), "Track 8  Favourites > Vocals  (6000)"); snprintf(lv.mode, 12, "SCAN");
+            ParamBox lp[4];
+            const char* ll[4] = { "Genre", "Categ", "Fav", "Folders" };
+            for (int k = 0; k < 4; k++) { snprintf(lp[k].label, sizeof(lp[k].label), "%s", ll[k]); snprintf(lp[k].value, sizeof(lp[k].value), "%s", "Hiphop"); lp[k].color = 0x39A0E0; }
+            lv.params = lp; lv.selectedParam = 1;
+            lv.bar = bar;
+            prop.data = &lv; TableControl lc(&prop);
+            render(lc, "sample library", kLimit, false); // Shift only swaps the top row here: no frame
+            prop.data = &tv;
+        }
 
         TableView pv2; pv2.rows = 8; pv2.cols = 5; int cx[5] = { 24, 130, 240, 400, 540 };
         const char* hd[5] = { "Button", "Root", "Type", "Inversion", "Voicing" };

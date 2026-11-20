@@ -6,6 +6,7 @@
 #include "gibgob/gibbonVision.h"
 #include "gibgob/gibgobMasterFx.h"
 #include "gibgob/gibgobSynth.h"
+#include "gibgob/gibgobLibrary.h"
 #include "gibgob/MelodicTrack.h"
 #include <string.h>
 
@@ -63,7 +64,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 20;
+const uint8_t Interface::modulesCount = 21;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -85,6 +86,7 @@ const hModule Interface::modules[modulesCount] = {
     &gibbonVision,      // 17  GibGob OS Gibbon vision (performance view)
     &gibgobMasterFx,    // 18  GibGob OS Master FX page (4th Master page)
     &gibgobSynth,       // 19  GibGob OS synth editor (synths with the GibGob layout)
+    &gibgobLibrary,     // 20  GibGob OS sample library (track assign)
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;

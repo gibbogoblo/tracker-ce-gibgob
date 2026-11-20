@@ -76,7 +76,7 @@ void TableControl::update()
     if (view->keyboard)
     {
         // the keyboard draws itself on top; keep this light so both fit
-        drawInfoStrip(10, view->title, view->mode, view->modeColor, nullptr, -1, fRegular, fBold);
+        drawInfoStrip(10, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
         drawBottomBar(view->bar, fBold);
         draw::end();
         return;
@@ -100,7 +100,7 @@ void TableControl::update()
         draw::rect(view->colX[view->cursorCol] - 6, y1 + 1, colRight(view->cursorCol), y1 + rowH - 4);
     }
 
-    drawInfoStrip(10, view->title, view->mode, view->modeColor, nullptr, -1, fRegular, fBold);
+    drawInfoStrip(10, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular, fBold);
 
     if (hasHeader)
     {

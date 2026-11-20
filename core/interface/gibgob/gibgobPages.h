@@ -43,7 +43,12 @@ class cGibGobPages : public ModuleBase
     void switchPage(Page newPage);
     void setFeelMode(int mode); // the Chord Canopy: plain chord, strum, arp or human
     void pressMiddle();
-    void loadSample();
+    void loadSample();  // the folder browser
+    void openLibrary(); // the sample library (Middle on Sound)
+    void prepareImport();
+    // the library hands back: load this file onto the track / open the folders
+    static void queueImport(const char* fullPath);
+    static void queueFolderBrowser();
     void backToInstrumentEditor();
 
     Page page = kPageTrack;

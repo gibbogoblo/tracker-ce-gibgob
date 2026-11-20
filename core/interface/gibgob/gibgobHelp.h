@@ -90,7 +90,8 @@ static const char* const kHelpTrackPage[] = {
     "Up/Down: setting",
     "Middle on Name: rename (keyboard)",
     "Small +/-: change    Big +/-: bigger steps",
-    "Middle on Sound: load a sample",
+    "Middle on Sound: the sample library",
+    "  (in the library, FX2: the folders)",
     "Top row: choose the track",
     "Length, big +/-: 16/32/48/64/128",
     "Button 1: back",
@@ -209,6 +210,27 @@ static const char* const kHelpSynth[] = {
     "Button 2: Chord Canopy   Button 1: main",
     "Play: play / stop",
 };
+
+static const char* const kHelpLibrary[] = {
+    "Opens with Middle on a track's Sound row",
+    "Top 1-8: All Hiphop Garage Jungle Vocal",
+    "  Mine Favs Recent  (then: the categories)",
+    "Categories: Kicks Snares Hats Perc Bass",
+    "  Keys Vocals FX  (same one again: all)",
+    "Shift: back to the genres",
+    "Up/Down or +/-: move (it plays)",
+    "Left/Right or big +/-: a page",
+    "Middle: load it onto the track",
+    "Hold Note + +/-: its genre",
+    "Hold Instr + +/-: its category",
+    "FX1: favourite on / off",
+    "FX2: the folders (file browser)",
+    "Button 1: back (nothing loaded)",
+    "Mine: what you recorded on the Mini",
+    "Tags are kept in /GibGob/library.idx",
+    "Play: play / stop",
+};
+
 
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))
 

@@ -13,6 +13,7 @@
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
 #include "gibgob/gibgobHelp.h"
+#include "gibgob/gibgobLibrary.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "instrumentEditor/instrumentEditor.h"
@@ -35,6 +36,12 @@ static bool s_importPending = false;
 static bool s_inputsBlocked = false;
 static int s_importTrack = 0;
 static int s_importSlot = 0;
+
+// what the library asked for when it handed back to this page
+static std::string s_queuedImport;
+static bool s_queuedFolders = false;
+
+static void importFile(const std::string& fullPath);
 
 using namespace gibgob;
 
@@ -479,6 +486,22 @@ void cGibGobPages::refresh()
 
 void cGibGobPages::update()
 {
+    // the library handed back with something to do (done here, not in start())
+    if (!s_queuedImport.empty() && page == kPageTrack && !s_importPending)
+    {
+        const std::string path = s_queuedImport;
+        s_queuedImport.clear();
+        prepareImport();
+        importFile(path);
+        refresh();
+    }
+    else if (s_queuedFolders && page == kPageTrack)
+    {
+        s_queuedFolders = false;
+        loadSample();
+        return;
+    }
+
     if (page == kPagePalette && s_canopy != nullptr && view.canopy != nullptr)
     {
         uint8_t now[CanopyView::kMaxNotes];
@@ -537,20 +560,66 @@ void cGibGobPages::update()
 }
 
 // ---------------------------------------------------------------------------
-void cGibGobPages::loadSample()
+// a file picked in the library or the folder browser: load it onto the track
+static void importFile(const std::string& fullPath)
 {
-    if (s_importPending)
-        return;
-    Sequencer::strPattern* p = current();
+    auto slashPos = fullPath.find_last_of('/');
+    std::string dirStr = (slashPos != std::string::npos && slashPos > 0) ? fullPath.substr(0, slashPos) : "";
+    std::string fileStr = (slashPos != std::string::npos) ? fullPath.substr(slashPos + 1) : fullPath;
+    auto dotPos = fileStr.find_last_of('.');
+    if (dotPos != std::string::npos)
+        fileStr = fileStr.substr(0, dotPos);
 
+    char dirBuf[kMaxFilePathLen + 1]{};
+    char nameBuf[kMaxFileNameLen + 1]{};
+    strncpy(dirBuf, dirStr.c_str(), kMaxFilePathLen);
+    strncpy(nameBuf, fileStr.c_str(), kMaxFileNameLen);
+
+    newFileManager.flushWorkspaceSave();
+    if (newFileManager.importSampleToProject(dirBuf, nameBuf, (uint8_t)s_importSlot))
+        s_importPending = true;
+    else
+        mtPopups.show(0, "Can't load: file too long or sample memory full", 2);
+}
+
+void cGibGobPages::queueImport(const char* fullPath)
+{
+    s_queuedImport = fullPath != nullptr ? fullPath : "";
+    s_queuedFolders = false;
+}
+
+void cGibGobPages::queueFolderBrowser()
+{
+    s_queuedImport.clear();
+    s_queuedFolders = true;
+}
+
+void cGibGobPages::prepareImport()
+{
+    Sequencer::strPattern* p = current();
     // the track's own sample slot; a synth track gets the slot with its number
     uint8_t sound = getSound(p, track);
     s_importSlot = isSampleInstrument(sound) ? sound : track;
     s_importTrack = track;
-
     if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
         sequencer.stop(); // sample memory moves around while loading
     auditionOff(track);
+}
+
+void cGibGobPages::openLibrary()
+{
+    if (s_importPending)
+        return;
+    auditionOff(track);
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibgobLibrary, cGibGobLibrary::makeOptions(track, origin));
+}
+
+void cGibGobPages::loadSample()
+{
+    if (s_importPending)
+        return;
+    prepareImport();
 
     GlobalFileBrowserConfig cfg;
     cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
@@ -563,31 +632,7 @@ void cGibGobPages::loadSample()
     cfg.extensionFilter = ".wav";
     cfg.returnModule = this;
     cfg.returnModuleOptions = makeOptions(kPageTrack, origin, track);
-    cfg.onConfirm = [](const std::string& fullPath)
-    {
-        auto slashPos = fullPath.find_last_of('/');
-        std::string dirStr =
-          (slashPos != std::string::npos && slashPos > 0) ? fullPath.substr(0, slashPos) : "";
-        std::string fileStr = (slashPos != std::string::npos) ? fullPath.substr(slashPos + 1) : fullPath;
-        auto dotPos = fileStr.find_last_of('.');
-        if (dotPos != std::string::npos)
-            fileStr = fileStr.substr(0, dotPos);
-
-        char dirBuf[kMaxFilePathLen + 1]{};
-        char nameBuf[kMaxFileNameLen + 1]{};
-        strncpy(dirBuf, dirStr.c_str(), kMaxFilePathLen);
-        strncpy(nameBuf, fileStr.c_str(), kMaxFileNameLen);
-
-        newFileManager.flushWorkspaceSave();
-        if (newFileManager.importSampleToProject(dirBuf, nameBuf, (uint8_t)s_importSlot))
-        {
-            s_importPending = true;
-        }
-        else
-        {
-            mtPopups.show(0, "Can't load: file too long or sample memory full", 2);
-        }
-    };
+    cfg.onConfirm = [](const std::string& fullPath) { importFile(fullPath); };
 
     openGlobalFileBrowser(cfg);
 }
@@ -595,7 +640,7 @@ void cGibGobPages::loadSample()
 void cGibGobPages::pressMiddle()
 {
     if (page == kPageTrack && row == kRowSound)
-        loadSample();
+        openLibrary();
     else if (page == kPageTrack && row == kRowName)
         startNaming();
 }

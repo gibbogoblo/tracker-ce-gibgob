@@ -31,6 +31,8 @@ struct TableView
     BottomBar bar;
     HelpView help;
     const CanopyView* canopy = nullptr; // set: draw the Chord Canopy instead of the table
+    const ParamBox* params = nullptr;   // set: 4 coloured boxes in the info strip
+    int8_t selectedParam = -1;
 };
 
 class TableControl : public cDisplayControl
