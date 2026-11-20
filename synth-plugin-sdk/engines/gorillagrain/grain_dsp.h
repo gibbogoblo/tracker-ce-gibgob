@@ -375,7 +375,22 @@ class Voice
                 dbgNan = true;
 #endif
         }
+        // a broken number (should never happen): reset the filters, a silent block
+        bool ok = true;
+        for (int i = 0; i < n && ok; ++i)
+            ok = morph::finiteBits(outL[i]) && morph::finiteBits(outR[i]);
+        if (!ok)
+        {
+            svfL1.reset();
+            svfR1.reset();
+            svfL2.reset();
+            svfR2.reset();
+            for (int i = 0; i < n; ++i)
+                outL[i] = outR[i] = 0.0f;
+            ++repairs;
+        }
     }
+    uint32_t repairs = 0; // times the voice had to reset itself (tests)
 
     float fxMod[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // delay mix, delay fb, reverb mix, reverb decay
 #ifdef GORILLA_DIAG

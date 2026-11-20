@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 static int failures = 0;
@@ -253,6 +254,54 @@ int main()
         morph::Params fx;
         p.fillFx(fx);
         CHECK(fx.reverbType == morph::kReverbShimmer && fx.delayType == morph::kDelayOff);
+    }
+
+    // T8: a broken number fed to the shimmer reverb heals at once, the sound comes back
+    {
+        grain::Params p;
+        morph::Params fxp;
+        p.fillFx(fxp);
+        std::vector<uint8_t> mem(morph::Fx::kMemoryBytes);
+        morph::Fx fx;
+        fx.attach(mem.data());
+        float mod[4] = { 0, 0, 0, 0 };
+        float l[128], r[128];
+        for (int b = 0; b < 50; b++)
+        {
+            for (int i = 0; i < 128; i++)
+                l[i] = r[i] = 0.3f * std::sin(i * 0.1f + b);
+            if (b == 10)
+            {
+                l[5] = std::numeric_limits<float>::quiet_NaN();
+                r[7] = std::numeric_limits<float>::infinity();
+            }
+            fx.process(fxp, 120.0f, mod, l, r, 128);
+            for (int i = 0; i < 128; i++)
+                CHECK(std::isfinite(l[i]) && std::isfinite(r[i]));
+        }
+        float peak = 0;
+        for (int i = 0; i < 128; i++)
+            peak = std::fmax(peak, std::fabs(l[i]));
+        CHECK(peak > 0.05f); // still sounding after the bad block
+        // and a tank already full of NaN (memory spoiled behind its back) repairs itself
+        float* f = (float*)mem.data();
+        for (int i = 0; i < 2000; i++)
+            f[i] = std::numeric_limits<float>::quiet_NaN();
+        const uint32_t before = fx.repairs;
+        for (int b = 0; b < 12; b++) // the poison reaches the output within a few blocks
+        {
+            for (int i = 0; i < 128; i++)
+                l[i] = r[i] = 0.3f * std::sin(i * 0.1f);
+            fx.process(fxp, 120.0f, mod, l, r, 128);
+        }
+        CHECK(fx.repairs > before);
+        peak = 0;
+        for (int i = 0; i < 128; i++)
+        {
+            CHECK(std::isfinite(l[i]));
+            peak = std::fmax(peak, std::fabs(l[i]));
+        }
+        CHECK(peak > 0.05f);
     }
 
     printf(failures ? "FAILED: %d\n" : "ALL GORILLAGRAIN TESTS PASSED\n", failures);

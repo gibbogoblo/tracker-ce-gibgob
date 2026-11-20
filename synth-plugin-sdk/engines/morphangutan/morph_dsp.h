@@ -27,6 +27,15 @@ static constexpr int kControlRate = 16; // modulation is computed every 16 sampl
 
 // ------------------------------------------------------------------ math
 
+// true for a real number (not NaN, not infinite). Works under -ffast-math,
+// where x != x is optimised away.
+inline bool finiteBits(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, sizeof(u));
+    return (u & 0x7F800000u) != 0x7F800000u;
+}
+
 inline float clampf(float x, float lo, float hi)
 {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -1074,6 +1083,42 @@ class Fx
         {
             return;
         }
+        // a broken number must never reach the feedback loops: once inside a
+        // reverb tank it goes round for ever and the sound stays silent
+        if (l != nullptr && r != nullptr)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                if (!finiteBits(l[i]) || l[i] > 64.0f || l[i] < -64.0f)
+                    l[i] = 0.0f;
+                if (!finiteBits(r[i]) || r[i] > 64.0f || r[i] < -64.0f)
+                    r[i] = 0.0f;
+            }
+        }
+        processEffects(p, tempo, fxMod, l, r, n);
+        if (l != nullptr && r != nullptr)
+        {
+            bool ok = true;
+            for (int i = 0; i < n && ok; ++i)
+                ok = finiteBits(l[i]) && finiteBits(r[i]) && l[i] < 64.0f && l[i] > -64.0f && r[i] < 64.0f &&
+                     r[i] > -64.0f;
+            if (!ok)
+            {
+                // something went wrong anyway: empty the effects, a silent block
+                clearDelay();
+                clearReverb();
+                for (int i = 0; i < n; ++i)
+                    l[i] = r[i] = 0.0f;
+                ++repairs;
+            }
+        }
+    }
+    // how many times the effects had to clear themselves (tests, diagnosis)
+    uint32_t repairs = 0;
+
+  private:
+    void processEffects(const Params& p, float tempo, const float* fxMod, float* l, float* r, int n)
+    {
         if (p.delayType != kDelayOff)
         {
             processDelay(p, tempo, fxMod, l, r, n);
@@ -1092,7 +1137,6 @@ class Fx
         }
     }
 
-  private:
     static constexpr const int* kPreDiff = fxsize::kPreDiff;
     static constexpr const int* kTankAp1 = fxsize::kTankAp1;
     static constexpr const int* kTankDel1 = fxsize::kTankDel1;

@@ -32,8 +32,15 @@ struct Meta
     int slots = 0;
 } g_meta;
 
+bool g_inAudio = false; // inside a render call: no memory may be taken there
+int g_audioAllocs = 0;
+size_t g_biggest = 0;
 void* hAlloc(size_t size, size_t align)
 {
+    if (g_inAudio)
+        g_audioAllocs++;
+    if (size > g_biggest)
+        g_biggest = size;
     if (align < 8)
         align = 8;
     size = (size + align - 1) / align * align;
@@ -162,11 +169,18 @@ int main(int argc, char** argv)
         for (int i = 0; i < g_meta.paramCount; i++)
             if (g_meta.names[i] == mute)
                 g_patch.values[i] = 0.0f;
+    g_biggest = 0; // from here: what the plugin takes
     void* voice = api->create_voice(0);
     api->voice_set_patch(voice, &dummyPatch);
     for (int i = 0; i < g_meta.paramCount; i++)
         api->voice_on_param_change(voice, i, g_patch.has[i], g_patch.values[i]);
 
+    printf("biggest memory taken before the first note: %zu bytes\n", g_biggest);
+    if (g_biggest < (size_t)morph::Fx::kMemoryBytes)
+    {
+        printf("FAIL: the effects memory was not taken when the patch loaded\n");
+        fails++;
+    }
     PsynVoiceContext ctx{ 120.0f, 2.0f };
     PsynMidiEvent on{};
     on.type = PSYN_MIDI_NOTE_ON;
@@ -183,14 +197,18 @@ int main(int argc, char** argv)
     {
         std::fill(L.begin(), L.end(), 0.0f);
         std::fill(R.begin(), R.end(), 0.0f);
+        g_inAudio = true;
         api->voice_render_audio(voice, &ctx, L.data(), R.data(), nullptr, 0);
+        g_inAudio = false;
         for (int i = 0; i < n; i++)
         {
             nan = nan || !std::isfinite(L[i]) || !std::isfinite(R[i]);
             sum += L[i] * L[i] + R[i] * R[i];
         }
+        g_inAudio = true;
         if (api->voice_render_post_process)
             api->voice_render_post_process(voice, &ctx, L.data(), R.data());
+        g_inAudio = false;
         for (int i = 0; i < n; i++)
         {
             nanFx = nanFx || !std::isfinite(L[i]) || !std::isfinite(R[i]);
@@ -209,6 +227,27 @@ int main(int argc, char** argv)
     {
         printf("FAIL: silent after the effects\n");
         fails++;
+    }
+    if (g_audioAllocs != 0)
+    {
+        printf("FAIL: %d memory requests inside the audio\n", g_audioAllocs);
+        fails++;
+    }
+    // a second voice never takes effects memory
+    {
+        const size_t before = g_biggest;
+        g_biggest = 0;
+        void* v1 = api->create_voice(1);
+        api->voice_set_patch(v1, &dummyPatch);
+        for (int i = 0; i < g_meta.paramCount; i++)
+            api->voice_on_param_change(v1, i, g_patch.has[i], g_patch.values[i]);
+        if (g_biggest >= (size_t)morph::Fx::kMemoryBytes)
+        {
+            printf("FAIL: voice 1 took effects memory too\n");
+            fails++;
+        }
+        api->destroy_voice(v1);
+        g_biggest = before;
     }
     float graph[64];
     api->voice_render_graph(voice, graph, 64);

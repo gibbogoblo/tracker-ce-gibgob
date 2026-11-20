@@ -181,10 +181,21 @@ auto perSecondFormatter()
 class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainParamId>
 {
   public:
-    GorillaGrainVoice()
+    // the host creates the voices with their number; voice 0 runs the
+    // instrument's effects (see renderPostProcessAudio)
+    explicit GorillaGrainVoice(int index) : voiceIndex(index)
     {
         static uint32_t s_seed = 1;
         dsp.init(s_seed++);
+    }
+
+    // the effects' memory (402 KB): taken here, outside the audio, when the
+    // patch loads or an effect is switched on, never in the middle of the sound
+    void effectsChanged()
+    {
+        const bool wanted = params.delayType != morph::kDelayOff || params.reverbType != morph::kReverbOff;
+        if (wanted && voiceIndex == 0 && !fx.ready() && !fxAllocFailed)
+            takeFxMemory();
     }
 
     ~GorillaGrainVoice() { delete[] fxMemory; }
@@ -283,13 +294,7 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
             return;
         }
         if (!fx.ready() && !fxAllocFailed)
-        {
-            fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
-            if (fxMemory == nullptr)
-                fxAllocFailed = true;
-            else
-                fx.attach(fxMemory);
-        }
+            takeFxMemory(); // only if another voice runs the effects: the last resort
 #ifdef GORILLA_DIAG
         {
             // 5 the voice sounds but the mix handed to the effects is silent
@@ -394,6 +399,16 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     grain::Params params;
 
   private:
+    void takeFxMemory()
+    {
+        fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
+        if (fxMemory == nullptr)
+            fxAllocFailed = true;
+        else
+            fx.attach(fxMemory); // all clear
+    }
+    int voiceIndex = 0;
+
     void refreshSource()
     {
         const Sample* s = getPatch() != nullptr ? getPatch()->getSample(0) : nullptr;
@@ -575,7 +590,15 @@ void GorillaGrainVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
     ADD_ENV(2, 1, *MidiCCs::kUserEnv2Attack);
 
     // ---- FX (Shimmer reverb on by default: pads!)
-    ADD_ENUM(kDelayType, delayType, uint8_t, kDelayTypeNames, "Delay");
+    helper.addParam(GP(kDelayType),
+                    Param{ .displayName = "Delay", .defaultValue = d.delayType, .minValue = 0,
+                           .maxValue = morph::kDelayTypeCount - 1, .isEnum = true,
+                           .valueFormatter = enumFormatter(kDelayTypeNames) },
+                    [](auto& v, Patch::optional_paramvalue_t x)
+                    {
+                        v.params.delayType = static_cast<uint8_t>(toIndex(*x, morph::kDelayTypeCount));
+                        v.effectsChanged();
+                    });
     helper.addParam(GP(kDelayTime),
                     Param{ .displayName = "Delay time", .defaultValue = d.delayTime, .minValue = 0,
                            .maxValue = morph::kDelayTimeCount - 1, .isEnum = true,
@@ -586,8 +609,15 @@ void GorillaGrainVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& 
               .minValue = 0, .maxValue = 0.95f, .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kDelayMix, delayMix, .displayName = "Delay mix", .defaultValue = d.delayMix, .minValue = 0,
               .maxValue = 1, .midiCC = *MidiCCs::kDelaySend, .valueFormatter = createPercentFormatter());
-    ADD_ENUM(kReverbType, reverbType, uint8_t, kReverbTypeNames, "Reverb");
-    metadata.params.at(GP(kReverbType)).defaultValue = static_cast<float>(d.reverbType);
+    helper.addParam(GP(kReverbType),
+                    Param{ .displayName = "Reverb", .defaultValue = d.reverbType, .minValue = 0,
+                           .maxValue = morph::kReverbTypeCount - 1, .isEnum = true,
+                           .valueFormatter = enumFormatter(kReverbTypeNames) },
+                    [](auto& v, Patch::optional_paramvalue_t x)
+                    {
+                        v.params.reverbType = static_cast<uint8_t>(toIndex(*x, morph::kReverbTypeCount));
+                        v.effectsChanged();
+                    });
     ADD_FLOAT(kReverbDecay, reverbDecay, .displayName = "Rev decay", .defaultValue = d.reverbDecay, .minValue = 0,
               .maxValue = 1, .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kReverbTone, reverbTone, .displayName = "Rev tone", .defaultValue = d.reverbTone, .minValue = 0,
