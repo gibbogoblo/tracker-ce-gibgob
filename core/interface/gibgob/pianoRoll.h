@@ -70,6 +70,7 @@ class cPianoRoll : public ModuleBase
     void clearSelection();
     int selectionCount();
     bool padsMode(); // sliced sample: the top row plays slices instead of chords
+    bool singMode(); // the track's synth sings syllables (LILITRON): the top row picks them
     int chordNoteCount();
     int findEditNote(int tick, int pitch); // note under the cursor (start within +-10, or covering)
 
@@ -92,6 +93,7 @@ class cPianoRoll : public ModuleBase
 
     int track = 0;
     int chordSlot = -1; // palette slot of the ghost chord, -1 = single note
+    int syllable = 0;   // a singing synth: what the ghost (and the top buttons) sing
     int inversion = 0;
     int velocity = 100;
     int chance = 100; // % for new notes

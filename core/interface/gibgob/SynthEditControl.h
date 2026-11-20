@@ -38,6 +38,25 @@ struct SynthGraph
     float amount;
 };
 
+// the singer pictures (LILITRON): JPEGs decoded into the display's memory
+struct SynthAvatar
+{
+    enum Pic : uint8_t
+    {
+        kSinger = 0,
+        kSingerSing,
+        kCat,
+        kCatSing,
+        kPics
+    };
+    bool loaded[kPics];
+    uint32_t address[kPics];
+    int16_t w[kPics], h[kPics];
+    bool singing;  // the mouth is open (a note sounds)
+    bool cat;      // the cat is on
+    char word[8];  // what is sung (a speech bubble while singing)
+};
+
 struct SynthView
 {
     synthui::ViewLayout layout;
@@ -45,6 +64,7 @@ struct SynthView
     char panelTitle[synthui::kMaxPanels][18];
     char panelInfo[synthui::kMaxPanels][20];
     SynthGraph graph[synthui::kMaxPanels];
+    SynthAvatar avatar;
 
     char synthName[20];   // header, on the chrome
     char headerInfo[40];  // "// TRK 05 // HAIRY LEAD"

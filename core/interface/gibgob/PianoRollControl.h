@@ -77,6 +77,9 @@ struct PianoRollView
     bool otherTracks = false;
     int8_t sliceButton[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; // slice of each top button
     bool shift = false;
+    // a singing synth (LILITRON): each note shows its syllable
+    const char* const* syllables = nullptr;
+    int ghostSyllable = 0;
 
     char title[56] = { 0 };
     char mode[12] = { 0 };

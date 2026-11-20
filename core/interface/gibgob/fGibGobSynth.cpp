@@ -6,6 +6,7 @@
 #include "core/interfaceMenuPopup.h"
 #include "core/interfacePopups.h"
 #include "core/songTimer.h"
+#include "display.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobHome.h"
@@ -119,6 +120,16 @@ bool s_noteOn = false;
 elapsedMillis s_messageAge;
 char s_message[64];
 char s_tabNames[8][10];
+
+// the singer pictures (LILITRON) on the card, decoded one after the other
+// into the display's picture memory (shared with the image viewer and
+// Gibbon vision, so they load again each time this screen opens)
+const char* const kAvatarFiles[SynthAvatar::kPics] = { "GibGob/Lilitron/singer", "GibGob/Lilitron/singer_sing",
+                                                       "GibGob/Lilitron/cat", "GibGob/Lilitron/cat_sing" };
+constexpr int kAvatarMax = 150; // pixels, each way
+constexpr uint32_t kAvatarAddress = 350000;
+int s_avatarNext = 0;
+bool s_avatarBusy = false;
 uint32_t s_rand = 0x1234567;
 
 const char* const kTools[8] = { "INIT PG", "APE PG", "COPY PG", "PASTE PG", "COMPARE", "UNDO", "LATCH", "SAVE" };
@@ -504,6 +515,50 @@ void patchChanged()
 } // namespace
 
 // ---------------------------------------------------------------------------
+// which synth parts sing (read by the sequencer in the audio interrupt, so it
+// only looks at this table; the patches are checked here, in the UI loop)
+namespace
+{
+volatile bool s_sings[kSynthParts] = {};
+const void* s_singsPatch[kSynthParts] = {};
+int s_singsType[kSynthParts] = { -1, -1, -1 };
+
+bool singsSyllables(uint8_t instrument)
+{
+    const int p = instrument - SYNTH_INSTRUMENTS_START_IDX;
+    return p >= 0 && p < kSynthParts && s_sings[p];
+}
+} // namespace
+
+void gibgobSynthPoll()
+{
+    Synth* sy = IE->getSynth();
+    if (sy == nullptr)
+        return;
+    gibgob::g_singsSyllables = singsSyllables;
+    for (int p = 0; p < kSynthParts; p++)
+    {
+        if (!sy->hasPatch(p))
+        {
+            s_sings[p] = false;
+            s_singsPatch[p] = nullptr;
+            continue;
+        }
+        const polysynth::Patch& patch = sy->getPatch(p);
+        const int type = sy->getInstrumentTypeIdx(p);
+        // (a new patch can land at the old one's address: the engine counts too)
+        if (s_singsPatch[p] == &patch && s_singsType[p] == type)
+            continue;
+        s_singsPatch[p] = &patch;
+        s_singsType[p] = type;
+        bool sings = false;
+        for (const auto& prm : patch.getMetadata().params)
+            if (prm.displayName == "Syllable" && prm.midiCC.has_value() && *prm.midiCC == gibgob::kSyllableCC)
+                sings = true;
+        s_sings[p] = sings;
+    }
+}
+
 bool cGibGobSynth::handles(int instrument)
 {
     if (!isSynthInstrument(instrument))
@@ -554,6 +609,12 @@ void cGibGobSynth::start(uint32_t options)
     v.help.title = "Synth editor - shortcuts";
     v.help.lines = kHelpSynth;
     v.help.count = (int)(sizeof(kHelpSynth) / sizeof(kHelpSynth[0]));
+    // the display's picture memory may hold something else now: load again
+    for (int k = 0; k < SynthAvatar::kPics; k++)
+        v.avatar.loaded[k] = false;
+    v.avatar.singing = false;
+    s_avatarNext = 0;
+    s_avatarBusy = false;
 
     // another patch than last time: Compare and Undo start over
     if (s->snapPart != part || s->snapEngine != engineIdx() || strncmp(s->snapName, settings().patchName, 32) != 0)
@@ -620,11 +681,89 @@ void cGibGobSynth::setDefaultScreenFunct()
     ip->setPadsGlobal(functPads);
 }
 
+namespace
+{
+bool pageHasAvatar(const ViewLayout& l)
+{
+    for (int p = 0; p < l.panelCount; p++)
+        if (l.panel[p].graph == kGraphAvatar)
+            return true;
+    return false;
+}
+
+// is the singer singing: a note of this synth sounds on a track, or the preview
+bool singerSinging(int instrument, int& track)
+{
+    track = -1;
+    const Sequencer::strPattern* p = current();
+    for (int t = 0; t < 8; t++)
+        if (getSound(p, t) == instrument && isSounding(t))
+        {
+            track = t;
+            return true;
+        }
+    return false;
+}
+} // namespace
+
 void cGibGobSynth::update()
 {
     if (s_message[0] && s_messageAge > 1400)
     {
         s_message[0] = 0;
+        refresh();
+    }
+    SynthAvatar& av = s->view.avatar;
+    if (!pageHasAvatar(s->view.layout))
+        return;
+
+    // load the pictures (a missing one keeps its stand-in face)
+    if (s_avatarNext < SynthAvatar::kPics)
+    {
+        const int k = s_avatarNext;
+        if (!s_avatarBusy)
+        {
+            if (display.getImgLoadState() == 0 || display.getImgLoadState() == 3)
+            {
+                char path[40];
+                snprintf(path, sizeof(path), "%s", kAvatarFiles[k]);
+                av.address[k] = kAvatarAddress + (uint32_t)k * (kAvatarMax * kAvatarMax * 2);
+                if (display.readImgFromSd(path, av.address[k], kAvatarMax, kAvatarMax) == 0)
+                    s_avatarBusy = true;
+                else
+                    s_avatarNext++; // missing, too big or not a baseline JPEG
+            }
+        }
+        else if (display.isImgLoaded())
+        {
+            av.w[k] = (int16_t)getProps.Width;
+            av.h[k] = (int16_t)getProps.Height;
+            av.loaded[k] = true;
+            s_avatarBusy = false;
+            s_avatarNext++;
+            refresh();
+        }
+        else if (display.getImgLoadState() == 0)
+        {
+            s_avatarBusy = false; // the load failed
+            s_avatarNext++;
+        }
+    }
+
+    // the mouth: open while a note of this synth sounds
+    int track = -1;
+    const bool singing = s_noteOn || singerSinging(mtProject.values.lastUsedInstrument, track);
+    char word[8];
+    snprintf(word, sizeof(word), "%s", kSyllableNames[(s_noteOn || track < 0 ? g_liveSyllable : lastSyllable(track)) % kSyllables]);
+    bool cat = false;
+    for (int i = 0; i < (int)meta().params.size(); i++)
+        if (meta().params[i].displayName == "Cat")
+            cat = rawValue(i) > 0.5f;
+    if (singing != av.singing || cat != av.cat || (singing && strcmp(word, av.word) != 0))
+    {
+        av.singing = singing;
+        av.cat = cat;
+        snprintf(av.word, sizeof(av.word), "%s", word);
         refresh();
     }
 }
@@ -803,7 +942,12 @@ void cGibGobSynth::refresh()
     // bottom: pages, or with Shift the tools
     for (int i = 0; i < 8; i++)
     {
-        upper(s_tabNames[i], sizeof(s_tabNames[i]), kPageNames[i]);
+        // a section with its own short name names its tab (LILITRON: VOICE);
+        // "Oscillators", "LFOs" and the like keep the page's name
+        const char* t = s->model.page[i].title;
+        const size_t pn = strlen(kPageNames[i]);
+        const bool own = i > kPageMain && i < kPagePatch && t[0] && strlen(t) <= 6 && strncasecmp(t, kPageNames[i], pn) != 0;
+        upper(s_tabNames[i], sizeof(s_tabNames[i]), own ? t : kPageNames[i]);
         v.tabText[i] = v.shift ? kTools[i] : s_tabNames[i];
         v.tabOn[i] = v.shift ? ((i == 4 && s->comparing) || (i == 6 && s_latched)) : (i == page);
     }
@@ -1581,6 +1725,8 @@ static void functMenu(uint8_t state)
 }
 
 #else // no synths in this build
+
+void gibgobSynthPoll() {}
 
 bool cGibGobSynth::handles(int)
 {

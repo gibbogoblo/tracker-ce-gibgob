@@ -98,6 +98,7 @@ class Synth
 
     // use AudioCS when modyfing the patch object
     polysynth::Patch& getPatch(int part);
+    bool hasPatch(int part) const { return part >= 0 && part < kSynthParts && parts[part].patch != nullptr; }
 
     void triggerTestNote(int part, int note, bool noteOn);
 

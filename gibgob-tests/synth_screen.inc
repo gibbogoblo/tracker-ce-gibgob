@@ -95,6 +95,44 @@ static int synthTests(int limit)
         layoutPage(model, kPageAmp, 0, l);
         for (int k = 0; k < 4; k++) if (l.quick[k] < 0 || l.cell[l.quick[k]].role != kRoleAttack + k) { printf("  synth: Amp colour buttons are not A D S R\n"); fails++; break; }
     }
+    // a singer (LILITRON): the Voice page shows the avatar, big
+    {
+        synthfix::Meta lili;
+        lili.params = { { "Syllable", true }, { "Cat", true } };
+        lili.layout33.sections = { { "Main", "GibGob", {}, { { 1, 1 } } }, { "Voice", "Osc", { { "LILITRON", { { 1, 0 }, { 1, 1 } } } }, {} } };
+        static SynthModel lm;
+        if (!buildModel(lili, lm) || lm.page[kPageOsc].groups[0].graph != kGraphAvatar) { printf("  synth: singer has no avatar\n"); fails++; }
+        static SynthView av;
+        memset(&av, 0, sizeof(av));
+        layoutPage(lm, kPageOsc, 0, av.layout);
+        if (av.layout.style != kStyleGraphList) { printf("  synth: singer page style %d\n", av.layout.style); fails++; }
+        snprintf(av.synthName, sizeof(av.synthName), "LILITRON"); av.editing = true;
+        snprintf(av.title, sizeof(av.title), "Voice");
+        snprintf(av.panelTitle[0], 18, "LILITRON");
+        for (int i = 0; i < av.layout.cellCount; i++) { snprintf(av.cells[i].label, 20, i ? "Cat" : "Syllable"); snprintf(av.cells[i].value, 16, i ? "On" : "tah"); av.cells[i].fill = -1; }
+        static const char* const kTabs[8] = { "MAIN", "VOICE", "FILTER", "AMP", "LFO", "ENV", "FX", "PATCH" };
+        for (int i = 0; i < 8; i++) { av.tabText[i] = kTabs[i]; av.tabOn[i] = i == 1; }
+        strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &av;
+        SynthEditControl sc(&prop);
+        g_minY = 0;
+        for (int pic = 0; pic < 2; pic++)
+            for (int sing = 0; sing < 2; sing++)
+            {
+                av.avatar.cat = true; av.avatar.singing = sing; snprintf(av.avatar.word, 8, "umm");
+                for (int k = 0; k < SynthAvatar::kPics; k++) { av.avatar.loaded[k] = pic; av.avatar.address[k] = 350000 + k * 40000; av.avatar.w[k] = 140; av.avatar.h[k] = 140; }
+                av.shift = sing;
+                char nm[48]; snprintf(nm, 48, "synth singer, %s, %s", pic ? "pictures" : "stand-ins", sing ? "singing shift" : "quiet");
+                render(sc, nm, limit, sing);
+                if (getenv("SYNTH_SVG") && !pic && sing)
+                {
+                    av.shift = false;
+                    char path[256]; snprintf(path, sizeof(path), "%s/9_singer.svg", getenv("SYNTH_SVG"));
+                    g_svg = fopen(path, "w");
+                    if (g_svg) { fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n"); words = 0; sc.update(); fprintf(g_svg, "</svg>\n"); fclose(g_svg); g_svg = nullptr; }
+                }
+            }
+        g_minY = 27;
+    }
     // a long column is split, and 4+ columns make a second set
     {
         synthfix::Meta big = synthfix::morph();

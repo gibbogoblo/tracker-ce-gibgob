@@ -49,6 +49,7 @@ enum Graph : uint8_t
     kGraphLfo,
     kGraphDelay,
     kGraphReverb,
+    kGraphAvatar, // a singer (a "Syllable" parameter): pictures with a mouth that opens
 };
 
 enum Role : uint8_t
@@ -67,6 +68,7 @@ enum Role : uint8_t
     kRoleTime,
     kRoleMix,
     kRoleLevel,
+    kRoleSyllable,
 };
 // the role a parameter plays, from its name
 Role roleFromName(const char* name, bool isEnum);

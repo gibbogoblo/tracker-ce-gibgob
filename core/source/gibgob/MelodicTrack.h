@@ -239,6 +239,25 @@ void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
 // called (audio context) whenever the sequencer starts a note on a track
 extern void (*g_noteStartHook)(int track);
+// Singing synths (LILITRON): a note's syllable lives in the top half of its
+// flags (where sample notes keep their envelope variant). The UI sets this to
+// say which instruments sing; the syllable then goes out as MIDI CC 3 just
+// before the note.
+extern bool (*g_singsSyllables)(uint8_t instrument);
+static constexpr uint8_t kSyllableCC = 3;
+static constexpr int kSyllables = 8;
+inline int noteSyllable(const Note& n)
+{
+    return ((n.flags >> 4) & 0x0F) % kSyllables;
+}
+inline void setNoteSyllable(Note& n, int syllable)
+{
+    n.flags = (uint8_t)((n.flags & 0x0F) | ((((syllable % kSyllables) + kSyllables) % kSyllables) << 4));
+}
+// the syllable the top buttons sing live (auditions and live recording)
+extern int g_liveSyllable;
+extern const char* const kSyllableNames[kSyllables]; // LILITRON's, in order
+int lastSyllable(int track); // the syllable last sung on a track (for the singer picture)
 void stopTrack(int track);
 void markLegacyPlayed(int track); // an old tracker step sounded on this track
 int playheadTick(int track);      // micro steps inside the track, -1 when stopped

@@ -45,6 +45,8 @@ static const char* const kHelpPianoRoll[] = {
     "Delete on empty: ghost back to one note",
     "Top 1: single note   Top 2-8: chords",
     "Slice track: top = slices, hold top+Middle=assign",
+    "Singing synth: top = syllables (sung at C),",
+    "  hold FX2 + +/-: a note's syllable",
     "Hold Note/Instr/FX1/FX2 + +/-: Prob/Vel/Nud/Inv",
     "Small +/-: note length   Big +/-: zoom",
     "Rec: live rec (stopped: 1 bar count-in)",

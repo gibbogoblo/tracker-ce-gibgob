@@ -37,6 +37,7 @@ int instrumentIdxToMidiChannel(int) { return 1; }
 uint8_t playerEngine::noteOn(uint8_t, int8_t, int8_t, uint8_t, uint8_t, uint8_t, uint8_t) { return 1; }
 void playerEngine::noteOff(int8_t) {}
 void sendMidiNoteOn(uint8_t, uint8_t, uint8_t, bool) {}
+void sendCC(uint8_t, uint8_t, uint8_t, bool) {}
 void sendMidiNoteOff(uint8_t, uint8_t, uint8_t, bool) {}
 
 // ---- exact word counting, like the firmware's display list capture ----
@@ -312,6 +313,14 @@ int main()
         PianoRollControl pc(&prop);
         char nm[40]; snprintf(nm, 40, "piano roll, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
         render(pc, nm, kLimit);
+        {
+            // a singing synth: every note labelled with its syllable
+            PianoRollView sv2 = pv; sv2.syllables = kSyllableNames; sv2.ghostSyllable = 3;
+            prop.data = &sv2; PianoRollControl sc2(&prop);
+            char snm[48]; snprintf(snm, 48, "piano roll + syllables, %dx%d, full", pv.stepsVisible, pv.rowsVisible);
+            render(sc2, snm, kLimit);
+            prop.data = &pv;
+        }
         {
             // ghost notes on: every other melodic track full under this one
             PianoRollView gv = pv; gv.otherTracks = true;

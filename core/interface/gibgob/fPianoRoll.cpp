@@ -179,6 +179,11 @@ bool cPianoRoll::padsMode()
     return isSliceTrack(current(), track);
 }
 
+bool cPianoRoll::singMode()
+{
+    return !padsMode() && g_singsSyllables != nullptr && g_singsSyllables(getSound(current(), track));
+}
+
 int cPianoRoll::chordNoteCount()
 {
     if (chordSlot < 0)
@@ -239,8 +244,14 @@ void cPianoRoll::refreshView()
 
     // ghost: a single note, or the palette chord's shape on the cursor note
     bool pads = padsMode();
-    if (pads)
+    const bool sing = singMode();
+    if (pads || sing)
         chordSlot = -1;
+    syllable = ((syllable % kSyllables) + kSyllables) % kSyllables;
+    view.syllables = sing ? kSyllableNames : nullptr;
+    view.ghostSyllable = syllable;
+    if (sing)
+        g_liveSyllable = syllable;
     view.showGhost = (mode == Mode::Idle);
     view.ghostLength = lengthTicks;
     view.ghostNudge = nudge;
@@ -292,9 +303,11 @@ void cPianoRoll::refreshView()
         idx = findEditNote(view.cursorTick, view.cursorPitch);
 
     int pitch = view.cursorPitch, vel = velocity, nud = nudge, len = lengthTicks, chn = chance;
+    int syl = syllable;
     if (idx >= 0)
     {
         Note n = getNote(p, track, idx);
+        syl = noteSyllable(n);
         pitch = n.pitch;
         vel = n.velocity;
         chn = n.chance();
@@ -308,7 +321,8 @@ void cPianoRoll::refreshView()
                  (len % kTicksPerStep) * 100 / kTicksPerStep);
     else
         snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", mtNotes[pitch],
-                 chordSlot >= 0 ? chordType(ghostChord.type).label : "Note", view.cursorTick / kTicksPerStep + 1,
+                 sing ? kSyllableNames[syl] : (chordSlot >= 0 ? chordType(ghostChord.type).label : "Note"),
+                 view.cursorTick / kTicksPerStep + 1,
                  len / kTicksPerStep, (len % kTicksPerStep) * 100 / kTicksPerStep);
 
     view.modeColor = color::kBox;
@@ -335,8 +349,17 @@ void cPianoRoll::refreshView()
     snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
     snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
     view.params[2].color = color::kFx1Btn;
-    snprintf(view.params[3].label, sizeof(view.params[3].label), "Inv");
-    snprintf(view.params[3].value, sizeof(view.params[3].value), "%d", inversion);
+    if (sing)
+    {
+        // FX2 picks the syllable (of the note under the cursor, or of the next one)
+        snprintf(view.params[3].label, sizeof(view.params[3].label), "Syl");
+        snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", kSyllableNames[syl]);
+    }
+    else
+    {
+        snprintf(view.params[3].label, sizeof(view.params[3].label), "Inv");
+        snprintf(view.params[3].value, sizeof(view.params[3].value), "%d", inversion);
+    }
     view.params[3].color = color::kFx2Btn;
     view.selectedParam = paramHeld ? param : -1; // lit while its button is held
 
@@ -363,6 +386,13 @@ void cPianoRoll::refreshView()
             snprintf(barText[i], sizeof(barText[i]), "%s", kUtility[i]);
             view.bar.fill[i] = 0;
             view.bar.highlighted[i] = (i == 2 && s_otherTracks); // lit while ghost notes are on
+        }
+        else if (sing)
+        {
+            // a singing synth: the top row = the 8 syllables
+            snprintf(barText[i], sizeof(barText[i]), "%s", kSyllableNames[i]);
+            view.bar.fill[i] = color::kMelodic;
+            view.bar.highlighted[i] = (syllable == i);
         }
         else if (pads)
         {
@@ -542,6 +572,8 @@ static int collectTargets(int* out, int maxOut)
 
 void cPianoRoll::auditionGhost(bool on)
 {
+    if (on && singMode())
+        g_liveSyllable = syllable;
     if (on)
         auditionChord(track, view.ghostPitches, view.ghostCount, (uint8_t)velocity);
     else
@@ -609,6 +641,8 @@ void cPianoRoll::moveSelection(int dTicks, int dPitch)
     {
         // let you hear where the grabbed note went
         Note first = getNote(p, track, targets[0]);
+        if (singMode())
+            g_liveSyllable = noteSyllable(first);
         auditionOn(track, first.pitch, first.velocity);
         auditionOffAt = (uint32_t)s_clock + 200;
     }
@@ -667,6 +701,8 @@ void cPianoRoll::placeGhost()
         n.pitch = pitch;
         n.velocity = (uint8_t)velocity;
         n.setChance(chance);
+        if (singMode())
+            setNoteSyllable(n, syllable);
         if (addNote(p, track, n) < 0)
         {
             mtPopups.show(0, "Track is full (123 notes)", 1);
@@ -717,6 +753,8 @@ void cPianoRoll::pressMiddle()
             {
                 mode = Mode::Move; // grabbed a note
                 Note n = getNote(current(), track, idx);
+                if (singMode())
+                    g_liveSyllable = noteSyllable(n);
                 auditionOn(track, n.pitch, n.velocity);
             }
             else
@@ -819,7 +857,8 @@ void cPianoRoll::changeParam(int delta)
 {
     Sequencer::strPattern* p = current();
     int targets[kMaxNotes];
-    int n = (param == kParamInversion) ? 0 : collectTargets(targets, kMaxNotes);
+    const bool sing = singMode();
+    int n = (param == kParamInversion && !sing) ? 0 : collectTargets(targets, kMaxNotes);
 
     if (n == 0)
     {
@@ -833,6 +872,11 @@ void cPianoRoll::changeParam(int delta)
                 break;
             case kParamInversion:
             {
+                if (sing)
+                {
+                    syllable = ((syllable + delta) % kSyllables + kSyllables) % kSyllables; // the next note's syllable
+                    break;
+                }
                 int c = chordNoteCount();
                 inversion = ((inversion + delta) % c + c) % c;
                 break;
@@ -859,12 +903,21 @@ void cPianoRoll::changeParam(int delta)
             case kParamNudge:
                 note.start = (uint16_t)clampInt(note.start + delta, 0, view.patternTicks - 1);
                 break;
+            case kParamInversion: setNoteSyllable(note, noteSyllable(note) + delta); break; // a singing synth
             default: break;
         }
         setNote(p, track, targets[i], note);
     }
     markChanged();
     refreshView();
+    if (sing && param == kParamInversion && mode == Mode::Idle)
+    {
+        // hear the new syllable
+        Note first = getNote(p, track, targets[0]);
+        g_liveSyllable = noteSyllable(first);
+        auditionOn(track, first.pitch, first.velocity);
+        auditionOffAt = (uint32_t)s_clock + 250;
+    }
 }
 
 void cPianoRoll::changeLength(int deltaGrid)
@@ -953,6 +1006,16 @@ void cPianoRoll::topButton(int button, bool pressed)
         n = 1;
         chordSlot = -1;
         view.cursorPitch = pitch;
+    }
+    else if (singMode())
+    {
+        // a singing synth: the button picks the syllable and sings it at C
+        chordSlot = -1;
+        inversion = 0;
+        syllable = button;
+        g_liveSyllable = button;
+        notes[0] = 60;
+        n = 1;
     }
     else if (button == 0)
     {

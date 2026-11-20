@@ -135,3 +135,19 @@ The pictures come from the parameter names (any letter case):
 
 Pictures use the parameters' edit curves (as the stock editor's knobs do).
 Sample slots stay in the stock editor. See `engines/morphangutan.cpp`.
+
+### Singing engines (LILITRON)
+
+An enum parameter named `Syllable` with `midiCC = 3` makes an engine a singer:
+- Each note in the GibGob sequencer keeps a syllable (0-7). It is sent as CC 3
+  (`syllable * 127 / 7`) just before the note.
+- In the piano roll, the top buttons pick the syllable, and hold FX2 + +/-
+  changes a note's syllable.
+- The page holding the `Syllable` parameter shows the singer pictures from
+  `/GibGob/Lilitron/` (`singer`, `singer_sing`, `cat`, `cat_sing`.jpg: baseline
+  JPEG, up to 150x150). The mouth opens while a note of that synth sounds, and
+  a parameter named `Cat` shows the cat.
+
+The voice of LILITRON is `engines/lilitron/LILITRON.wav`, made by
+`engines/lilitron/make_voice.py`. On the card it goes in
+`/SynthSamples/LILI/LILITRON.wav`.

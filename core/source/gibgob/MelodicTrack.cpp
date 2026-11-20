@@ -19,6 +19,10 @@ namespace gibgob
 
 // told about every note the sequencer starts (the master duck listens)
 void (*g_noteStartHook)(int track) = nullptr;
+bool (*g_singsSyllables)(uint8_t instrument) = nullptr;
+int g_liveSyllable = 0;
+static volatile uint8_t s_lastSyllable[kTracks] = {};
+const char* const kSyllableNames[kSyllables] = { "tah", "dee", "umm", "lee", "aah", "bah", "so", "lah" };
 
 
 const uint8_t kArpRateTicks[kArpRateCount] = { 192, 96, 64, 48, 32, 24 };
@@ -459,10 +463,14 @@ void soundOffPoly(uint8_t instrument, uint8_t pitch)
     sendMidiNoteOff(pitch, 0, instrumentIdxToMidiChannel(instrument), toSynth);
 }
 
-void soundOnPoly(uint8_t instrument, uint8_t pitch, uint8_t velocity)
+void soundOnPoly(uint8_t instrument, uint8_t pitch, uint8_t velocity, int syllable = -1)
 {
     bool toSynth = isSynthInstrument(instrument);
-    sendMidiNoteOn(pitch, velocity, instrumentIdxToMidiChannel(instrument), toSynth);
+    const uint8_t channel = (uint8_t)instrumentIdxToMidiChannel(instrument);
+    // a singing synth: which syllable, just before the note
+    if (toSynth && syllable >= 0 && g_singsSyllables != nullptr && g_singsSyllables(instrument))
+        sendCC(kSyllableCC, (uint8_t)((syllable % kSyllables) * 127 / (kSyllables - 1)), channel, true);
+    sendMidiNoteOn(pitch, velocity, channel, toSynth);
 }
 
 void releaseActive(int track, ActiveNote& a)
@@ -632,7 +640,8 @@ void startNote(int track,
     }
     else
     {
-        soundOnPoly(instrument, pitch, velocity);
+        s_lastSyllable[track & (kTracks - 1)] = (uint8_t)(((noteFlags >> 4) & 0x0F) % kSyllables);
+        soundOnPoly(instrument, pitch, velocity, (noteFlags >> 4) & 0x0F);
     }
 }
 
@@ -1748,6 +1757,11 @@ int playheadTick(int track)
     return s_playTick[track];
 }
 
+int lastSyllable(int track)
+{
+    return validTrack(track) ? s_lastSyllable[track] : 0;
+}
+
 bool isSounding(int track)
 {
     if (!validTrack(track) || !initDone)
@@ -1802,7 +1816,8 @@ void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocit
         }
         else
         {
-            soundOnPoly(instrument, pitch, velocity);
+            s_lastSyllable[track & (kTracks - 1)] = (uint8_t)(g_liveSyllable % kSyllables);
+            soundOnPoly(instrument, pitch, velocity, g_liveSyllable);
         }
         a.pitches[a.count] = pitch;
         a.voices[a.count] = (int8_t)voice;
@@ -1872,6 +1887,8 @@ bool liveRecordOn(int track, const uint8_t* pitches, int count, uint8_t velocity
         n.pitch = pitches[i] > 127 ? 127 : pitches[i];
         n.velocity = velocity ? velocity : 100;
         n.flags = holdLength ? kNoteFlagRecording : 0;
+        if (g_singsSyllables != nullptr && g_singsSyllables(getSound(p, track)))
+            setNoteSyllable(n, g_liveSyllable);
         if (addNote(p, track, n) < 0)
             break;
         any = true;

@@ -44,6 +44,8 @@ int graphFor(int page, const Group& g)
 {
     if (g.isEnvelope())
         return kGraphEnv;
+    if (g.find(kRoleSyllable) >= 0)
+        return kGraphAvatar;
     char name[16];
     lower(g.name, name, sizeof(name));
     switch (page)
@@ -92,6 +94,8 @@ Role roleFromName(const char* name, bool isEnum)
 {
     char n[32];
     lower(name, n, sizeof(n));
+    if (contains(n, "syllable"))
+        return kRoleSyllable;
     if (contains(n, "attack"))
         return kRoleAttack;
     if (contains(n, "sustain"))

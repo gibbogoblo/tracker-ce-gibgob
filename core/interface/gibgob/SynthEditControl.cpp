@@ -311,6 +311,67 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
             }
             break;
         }
+        case kGraphAvatar:
+        {
+            // the singer (and the cat when it is on); the mouth opens on each note
+            const SynthAvatar& av = v.avatar;
+            const int cy = iy + ih / 2 + 16;
+            const int singerX = av.cat ? ix + iw * 33 / 100 : ix + iw / 2;
+            const int catX = ix + iw * 74 / 100;
+            auto face = [&](int cx, int pic, bool catFace)
+            {
+                const int k = pic + (av.singing ? 1 : 0);
+                if (av.loaded[k])
+                {
+                    draw::bitmap(av.address[k], av.w[k], av.h[k], cx - av.w[k] / 2, cy - av.h[k] / 2);
+                    return;
+                }
+                // no picture on the card: a little stand-in face
+                const int r = 56;
+                draw::color(catFace ? 0xFFB347 : 0xFF9AD5);
+                if (catFace)
+                {
+                    draw::rect(cx - r, cy - r - 18, cx - r + 26, cy - r + 6); // ears
+                    draw::rect(cx + r - 26, cy - r - 18, cx + r, cy - r + 6);
+                }
+                else
+                {
+                    draw::color(y2k::kPurple); // hair
+                    draw::rect(cx - r - 6, cy - r - 10, cx + r + 6, cy - r + 22);
+                    draw::color(0xFFD9EC);
+                }
+                draw::rect(cx - r, cy - r, cx + r, cy + r);
+                draw::color(y2k::kDark);
+                draw::rect(cx - 26, cy - 18, cx - 14, cy - 2); // eyes
+                draw::rect(cx + 14, cy - 18, cx + 26, cy - 2);
+                if (av.singing)
+                {
+                    draw::color(0xC0304F);
+                    draw::rect(cx - 12, cy + 14, cx + 12, cy + 36); // open mouth
+                }
+                else
+                    draw::rect(cx - 12, cy + 22, cx + 12, cy + 25);
+            };
+            face(singerX, SynthAvatar::kSinger, false);
+            if (av.cat)
+                face(catX, SynthAvatar::kCat, true);
+            if (av.singing && av.word[0])
+            {
+                // a speech bubble with the syllable
+                const int bx = singerX + 30, by = iy + 4;
+                draw::slant(bx, by, bx + 92, by + 30, 8, y2k::kLime, y2k::kGraphBg);
+                draw::color(y2k::kDark);
+                draw::text(bx + 46, by + 15, f.bold, OPT_CENTER, av.word);
+                if (av.cat)
+                {
+                    const int cx2 = catX + 26;
+                    draw::slant(cx2, by, cx2 + 92, by + 30, 8, 0xFFB347, y2k::kGraphBg);
+                    draw::color(y2k::kDark);
+                    draw::text(cx2 + 46, by + 15, f.bold, OPT_CENTER, "nyaa");
+                }
+            }
+            break;
+        }
         case kGraphReverb:
         {
             // a tail of reflections, longer with the decay

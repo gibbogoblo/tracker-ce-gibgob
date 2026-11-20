@@ -339,6 +339,27 @@ void PianoRollControl::update()
         }
     }
 
+    // ---- syllables on the notes (a singing synth), where a note is wide enough ----
+    if (view->syllables && view->pattern && !overlay && rh >= 12)
+    {
+        const int fSmall = fonts[4].handle;
+        int count = noteCount(view->pattern, view->track);
+        draw::color(color::kTextDark);
+        for (int i = 0; i < count; i++)
+        {
+            const Note n = getNote(view->pattern, view->track, i);
+            if (n.pitch > view->topPitch || n.pitch < bottomPitch)
+                continue;
+            int s = n.start, e = n.start + n.length;
+            if (e <= firstTick || s >= lastTick || s < firstTick)
+                continue;
+            const int x1 = tickToX(s), x2 = tickToX(e > lastTick ? lastTick : e) - pad;
+            if (x2 - x1 < 26 || !draw::room(14 + kReserve))
+                continue;
+            draw::text(x1 + 3, pitchToY(n.pitch) + rh / 2, fSmall, OPT_CENTERY, view->syllables[noteSyllable(n)]);
+        }
+    }
+
     // ---- the other melodic tracks' notes: faint, behind nothing, dropped first ----
     if (view->otherTracks && view->pattern && !overlay)
     {
@@ -402,6 +423,17 @@ void PianoRollControl::update()
             draw::rect(x1, y1, x2, y2);
         }
         draw::alpha(255);
+        // the syllable the ghost will sing
+        if (view->syllables && rh >= 12 && view->ghostCount > 0)
+        {
+            const int p = view->ghostPitches[0];
+            if (p <= view->topPitch && p >= bottomPitch && gs >= firstTick && gs < lastTick)
+            {
+                draw::color(color::kSelect);
+                draw::text(tickToX(gs) + 3, pitchToY(p) + rh / 2, fonts[4].handle, OPT_CENTERY,
+                           view->syllables[view->ghostSyllable & 7]);
+            }
+        }
     }
 
     // ---- box selection ----

@@ -54,6 +54,11 @@ void sendMidiNoteOn(uint8_t note, uint8_t velo, uint8_t ch, bool)
     events.push_back({nowTick, 'M', ch, note});
     synthOn[ch * 128 + note]++;
 }
+void sendCC(uint8_t index, uint8_t value, uint8_t ch, bool toSynth)
+{
+    if (!toSynth || value > 127) { printf("FAIL bad cc %d %d\n", index, value); failures++; }
+    events.push_back({nowTick, 'C', ch, value});
+}
 void sendMidiNoteOff(uint8_t note, uint8_t, uint8_t ch, bool)
 {
     events.push_back({nowTick, 'm', ch, note});
@@ -176,6 +181,35 @@ int main()
     CHECK(countKind('M') == 8 && countKind('m') == 8);
     CHECK(stuckSynth() == 0);
     for (auto& e : events) if (e.kind == 'm') CHECK(e.tick % 768 == 96);
+
+    // T1b: a singing synth gets each note's syllable as CC 3 just before the note
+    freshPattern();
+    setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 65);
+    {
+        Note a = mk(0, 96, 60); setNoteSyllable(a, 2); addNote(&pat, 5, a);
+        Note b = mk(4 * 48, 96, 67); setNoteSyllable(b, 7); addNote(&pat, 5, b);
+        g_singsSyllables = [](uint8_t instr) { return instr == 65; };
+        runTicks(0, 16 * 48);
+        int ccs = 0; bool ok = true;
+        for (size_t i = 0; i < events.size(); i++)
+            if (events[i].kind == 'C')
+            {
+                ccs++;
+                const bool nextIsNote = i + 1 < events.size() && events[i + 1].kind == 'M' && events[i + 1].tick == events[i].tick;
+                const int want = events[i + 1].b == 60 ? 2 * 127 / 7 : 127;
+                if (!nextIsNote || events[i].b != want) ok = false;
+            }
+        CHECK(ccs == 2 && ok);
+        // other synths get no CC
+        g_singsSyllables = [](uint8_t) { return false; };
+        events.clear(); stopAll();
+        runTicks(0, 16 * 48);
+        CHECK(countKind('C') == 0 && countKind('M') == 2);
+        g_singsSyllables = nullptr;
+        CHECK(stuckSynth() == 0);
+        Note c{}; setNoteSyllable(c, 13); CHECK(noteSyllable(c) == 5);
+        setNoteSyllable(c, 3); c.flags |= kNoteFlagAccent; CHECK(noteSyllable(c) == 3 && (c.flags & kNoteFlagAccent));
+    }
 
     // T2: sample chord borrows voices of empty tracks
     freshPattern();

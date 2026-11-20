@@ -56,4 +56,8 @@ class cGibGobSynth : public ModuleBase
 
 extern cGibGobSynth gibgobSynth;
 
+// Called from the interface loop: keeps the sequencer told which synth parts
+// sing syllables (an engine with a "Syllable" parameter on CC 3, LILITRON).
+void gibgobSynthPoll();
+
 #endif

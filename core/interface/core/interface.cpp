@@ -148,6 +148,9 @@ void Interface::update()
 {
     processOperatingMode();
 
+    if (operatingMode == mtOperatingModeRun)
+        gibgobSynthPoll(); // which synths sing syllables (LILITRON)
+
     if (onScreenModule != nullptr && onScreenModule->moduleRefresh)
         onScreenModule->update();
 
