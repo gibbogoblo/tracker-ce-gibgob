@@ -247,6 +247,9 @@ static int synthTests(int limit)
         render(sc, "synth GORILLAGRAIN diagnosis", limit, false);
         G.hasDiag = false; G.grains = busy;
         gv.shift = false;
+        G.recording = true; G.recSeconds = 12.3f; G.recMaxSeconds = 20.0f; G.recLevel = 0.95f;
+        render(sc, "synth GORILLAGRAIN recording", limit, false);
+        G.recording = false;
         G.hasSample = false;
         render(sc, "synth GORILLAGRAIN no sample", limit, false);
         G.hasSample = true;

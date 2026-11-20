@@ -7,6 +7,7 @@
 #include "core/interfacePopups.h"
 #include "core/songTimer.h"
 #include "display.h"
+#include "gibgob/GrainRecorder.h"
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobHome.h"
@@ -58,6 +59,7 @@ static void functMiddle(uint8_t state);
 static void functDelete(uint8_t state);
 static void functTopRow(uint8_t button, uint8_t state);
 static void functColour(uint8_t button, uint8_t state);
+static void functRec(uint8_t state);
 static void functEncoder(int16_t value);
 static void functPattern(uint8_t state);
 static void functParams(uint8_t state);
@@ -660,6 +662,8 @@ void cGibGobSynth::start(uint32_t options)
 
 void cGibGobSynth::stop()
 {
+    if (grainrec::state().active)
+        finishRecording(); // leaving the screen keeps the take
     releaseNotes();
     restoreCompare();
     moduleRefresh = 0;
@@ -708,6 +712,7 @@ void cGibGobSynth::setDefaultScreenFunct()
     bindModuleSwitchButtons(ip, functSwitchModule);
     ip->setButtonObj(interfaceButtonPattern, functPattern);
     ip->setButtonObj(interfaceButtonParams, functParams);
+    ip->setButtonObj(interfaceButtonRec, functRec);
 
     ip->setPotObj(interfacePot0, functEncoder, false);
     ip->setPadsGlobal(functPads);
@@ -781,6 +786,23 @@ bool readGrainView(int part, SynthGrainView& gv)
     }
     if (oldHeads == 0 && gv.heads != 0)
         gv.partPeak = gv.postPeak = 0.0f; // a new note: measure afresh
+    const grainrec::State& rs = grainrec::state();
+    if (rs.active)
+    {
+        gv.recording = true;
+        gv.hasSample = true;
+        static_assert(grainrec::kPeakBins == SynthGrainView::kBins, "the same number of bars");
+        memcpy(gv.peaks, rs.peaks, sizeof(gv.peaks));
+        gv.recSeconds = rs.frames / 44100.0f;
+        gv.recMaxSeconds = rs.maxFrames / 44100.0f;
+        gv.recLevel = rs.level;
+        return true;
+    }
+    if (gv.recording)
+    {
+        gv.recording = false;
+        return true;
+    }
     return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0 || gv.hasDiag;
 }
 
@@ -813,6 +835,13 @@ void cGibGobSynth::update()
     {
         s_message[0] = 0;
         refresh();
+    }
+    // recording into the sample: follow it, stop on its own when full
+    if (grainrec::state().active)
+    {
+        grainrec::poll();
+        if (grainrec::state().full)
+            finishRecording();
     }
     // the grain view moves while notes play (about 25 pictures a second)
     if (pageHasSampleView(s->view.layout) && !s->view.help.active)
@@ -930,7 +959,8 @@ void cGibGobSynth::refresh()
     if (pageHasSampleView(l))
     {
         // the sample's shape (only read again when the page is drawn anew)
-        v.grains.hasSample = gsynth()->samplePeaks(part, 0, v.grains.peaks, SynthGrainView::kBins) != 0;
+        if (!grainrec::state().active)
+            v.grains.hasSample = gsynth()->samplePeaks(part, 0, v.grains.peaks, SynthGrainView::kBins) != 0;
         readGrainView(part, v.grains);
     }
 
@@ -1581,6 +1611,60 @@ void cGibGobSynth::applyEngine()
     newFileManager.setProjectStructChanged();
 }
 
+// Rec on a page with a Sample row: record into it (again: stop and keep it)
+void cGibGobSynth::recKey()
+{
+    if (grainrec::state().active)
+    {
+        finishRecording();
+        return;
+    }
+    if (!pageHasSampleView(s->view.layout))
+    {
+        say("Rec records into the Sample (Grains page)");
+        refresh();
+        return;
+    }
+    char why[48];
+    if (!grainrec::start(why, sizeof(why)))
+    {
+        say(why);
+        refresh();
+        return;
+    }
+    say("Recording - Rec again to stop");
+    refresh();
+}
+
+void cGibGobSynth::finishRecording()
+{
+    char path[96], why[48];
+    releaseNotes();
+    sequencer.stopManualNotes();
+    const bool saved = grainrec::stopAndSave(gsynth()->getEngineSampleFolder(part).c_str(), path, sizeof(path), why,
+                                              sizeof(why));
+    if (!saved)
+    {
+        say(why);
+        refresh();
+        return;
+    }
+    gsynth()->silencePart(part);
+    if (gsynth()->loadSampleByPath(part, 0, path))
+    {
+        markDirty();
+        const char* leaf = strrchr(path, '/');
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Saved %s - playing it now", leaf ? leaf + 1 : path);
+        say(msg);
+    }
+    else
+    {
+        say("Saved, but no room to load it (sample memory)");
+    }
+    rebuild();
+}
+
 // a sample slot: +/- steps through the samples in the engine's folder
 void cGibGobSynth::stepSample(int slot, int dir)
 {
@@ -1922,6 +2006,12 @@ static void functTopRow(uint8_t button, uint8_t state)
         GS->goToPage(idx);
 }
 
+static void functRec(uint8_t state)
+{
+    if (state == buttonPress && !s->view.help.active)
+        GS->recKey();
+}
+
 static void functColour(uint8_t button, uint8_t state)
 {
     if (state != buttonPress)
@@ -2019,6 +2109,8 @@ void cGibGobSynth::goApe(bool) {}
 void cGibGobSynth::applyEngine() {}
 void cGibGobSynth::releaseNotes() {}
 void cGibGobSynth::restoreCompare() {}
+void cGibGobSynth::recKey() {}
+void cGibGobSynth::finishRecording() {}
 void cGibGobSynth::stepSample(int, int) {}
 void cGibGobSynth::pickSample(int) {}
 

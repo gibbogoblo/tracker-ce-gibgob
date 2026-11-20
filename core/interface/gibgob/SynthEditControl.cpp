@@ -258,6 +258,28 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
         const int bx = x1 + 4 + (int)(b * bw);
         draw::rect(bx, mid - bh, bx + (int)bw - 2, mid + bh);
     }
+    if (gv.recording)
+    {
+        // recording: the take so far (above), a red light, the time and the input level
+        draw::color(0xFF3B30);
+        draw::roundRect(x1 + 10, y1 + 8, x1 + 24, y1 + 22, 7);
+        char t[32];
+        snprintf(t, sizeof(t), "REC %.1f / %.0f s", (double)gv.recSeconds, (double)gv.recMaxSeconds);
+        draw::color(0xFFFFFF);
+        draw::text(x1 + 32, y1 + 15, f.bold, OPT_CENTERY, t);
+        const int lx1 = x1 + 200, lx2 = x1 + 360, ly = y1 + 11;
+        draw::color(j ? jungle::kRow : y2k::kOff);
+        draw::rect(lx1, ly, lx2, ly + 8);
+        const float lv = clampf(gv.recLevel, 0, 1);
+        if (lv > 0.0f)
+        {
+            draw::color(lv > 0.9f ? 0xFF3B30 : (j ? jungle::kFirefly : y2k::kLime));
+            draw::rect(lx1, ly, lx1 + (int)((lx2 - lx1) * lv), ly + 8);
+        }
+        draw::color(j ? jungle::kSoft : y2k::kDim);
+        draw::text(x2 - 10, y2 - 12, f.small, OPT_CENTERY | OPT_RIGHTX, "Rec: stop and keep");
+        return;
+    }
     if (j)
     {
         // moonlight on the water

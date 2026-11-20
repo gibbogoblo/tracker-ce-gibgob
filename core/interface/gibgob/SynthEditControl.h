@@ -86,6 +86,9 @@ struct SynthGrainView
     float postPeak;     // after the part's volume
     float gainDb;       // the part's volume as used
     float panL, panR;   // the pan stage before the mixer
+    // recording into the sample (Rec): the picture is the take so far
+    bool recording;
+    float recSeconds, recMaxSeconds, recLevel;
 };
 
 struct SynthView

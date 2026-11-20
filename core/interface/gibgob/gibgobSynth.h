@@ -38,6 +38,8 @@ class cGibGobSynth : public ModuleBase
     void tool(int button);
     void singKey(int k, bool pressed); // a singer, Shift on: a top button sings its syllable
     void say(const char* text);
+    void recKey();          // Rec: record into the sample slot (a page with a Sample row)
+    void finishRecording(); // stop, save as REC_nn.wav, load it into the slot
 
     // the patch
     void loadPatch();

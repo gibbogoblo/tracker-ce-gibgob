@@ -199,6 +199,7 @@ static const char* const kHelpSynth[] = {
     "LILITRON: Shift+top sings the syllables",
     "Sample row: +/- next sample, Middle: browse",
     "  (Delete: the engine's own sample)",
+    "Rec: record into it (again: stop, keep)",
     "Patch: Middle on Load/Save/Init/GO APE!",
     "Ape amount: how far Go Ape shakes it",
     "Main: engine list, Middle twice: switch",
