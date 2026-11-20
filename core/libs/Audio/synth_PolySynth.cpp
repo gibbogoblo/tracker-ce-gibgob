@@ -16,6 +16,12 @@
 //#include "util_math.h"
 //#include <cr_section_macros.h>
 
+// GibGob OS: what each synth part puts out (the editor's diagnosis line
+// reads and clears these) and how often the synths were muted for running late
+volatile float g_gibgobPartPeak[kSynthParts] = {};
+volatile uint32_t g_gibgobSynthOverloads = 0;
+volatile uint32_t g_gibgobSynthLateUs = 0; // the longest synth update, microseconds
+
 AUDIO_CORE_RAM void PolySynth::update(void)
 {
     if (isBlocked)
@@ -85,6 +91,7 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         if (partIdx > 0 && timer != nullptr && (timer->clockCycles() - startCycles) > maxCycles)
         {
             overloadCooldownBlocks = kOverloadCooldownBlocks;
+            g_gibgobSynthOverloads = g_gibgobSynthOverloads + 1;
             return;
         }
 
@@ -139,6 +146,22 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         if (budgetExceeded)
         {
             overloadCooldownBlocks = kOverloadCooldownBlocks;
+            g_gibgobSynthOverloads = g_gibgobSynthOverloads + 1;
+        }
+        {
+            float peak = g_gibgobPartPeak[partIdx];
+            for (const float v : tempBufSendsCommonLeft)
+            {
+                const float a = v < 0.0f ? -v : v;
+                peak = a > peak ? a : peak;
+            }
+            g_gibgobPartPeak[partIdx] = peak;
+            if (timer != nullptr)
+            {
+                const uint32_t us = (timer->clockCycles() - startCycles) / timer->clockCyclesPerUs();
+                if (us > g_gibgobSynthLateUs)
+                    g_gibgobSynthLateUs = us;
+            }
         }
 
         if (!hasSends && !isStereo)

@@ -215,6 +215,7 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
 #ifdef GORILLA_DIAG
         dsp.dbgReset();
         diagBlocks = 0;
+        diagHostPeak = diagPostIn = diagPostOut = 0.0f;
 #endif
     }
 
@@ -256,6 +257,8 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
         // 1 the grains are silent  2 the filter kills them  3 the envelope / volume is 0
         // 4 broken numbers (NaN)
         lastVoicePeak = dsp.dbgOut;
+        for (int i = 0; i < n; ++i)
+            diagHostPeak = std::max(diagHostPeak, std::fabs(left[i]));
         if (gate && ++diagBlocks > 100)
         {
             int code = 0;
@@ -287,6 +290,15 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     void renderPostProcessAudio(const InstrumentVoiceContext& ctx, AudioBufferStereoRef outputBuffer) final
     {
         params.fillFx(fxParams);
+#ifdef GORILLA_DIAG
+        {
+            auto pl = outputBuffer[0];
+            for (size_t i = 0; i < pl.size(); ++i)
+                diagPostIn = std::max(diagPostIn, std::fabs(pl[i]));
+            if (fxParams.delayType == morph::kDelayOff && fxParams.reverbType == morph::kReverbOff)
+                diagPostOut = diagPostIn; // nothing changes it
+        }
+#endif
         if (fxParams.delayType == morph::kDelayOff && fxParams.reverbType == morph::kReverbOff)
         {
             if (fx.ready())
@@ -321,6 +333,7 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
                         bad = true;
                     outPeak = std::max(outPeak, std::fabs(left[i]));
                 }
+                diagPostOut = std::max(diagPostOut, outPeak);
                 if (bad || (inPeak > 1e-3f && outPeak < 1e-6f))
                     fxBroken = true;
                 if (fxBroken)
@@ -358,6 +371,7 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     }
     uint32_t diagSamples = 0, diagBlocks = 0;
     float diagPhase = 0.0f, lastVoicePeak = 0.0f;
+    float diagHostPeak = 0.0f, diagPostIn = 0.0f, diagPostOut = 0.0f;
     bool fxBroken = false;
 #endif
 
@@ -369,8 +383,13 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     static constexpr float kGrainViewMarker = 62062.0f;
     void renderGraph(std::span<float> points) override
     {
+#ifdef GORILLA_DIAG
+        // diagnosis: 8 grains at most, then the measurements in [28..39]
+        constexpr int kMax = 8;
+#else
         constexpr int kMax = grain::Voice::kMaxGrains;
-        if (points.size() >= static_cast<size_t>(3 + 3 * kMax))
+#endif
+        if (points.size() >= static_cast<size_t>(3 + 3 * grain::Voice::kMaxGrains))
         {
             float pos[kMax], lvl[kMax], pan[kMax];
             const int n = dsp.active() ? dsp.grainView(pos, lvl, pan, kMax) : 0;
@@ -385,6 +404,22 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
             }
             for (size_t i = 3 + static_cast<size_t>(n) * 3; i < points.size(); ++i)
                 points[i] = 0.0f;
+#ifdef GORILLA_DIAG
+            points[0] = kGrainViewMarker + 1.0f; // 62063: with measurements
+            float* d = points.data() + 28;
+            d[0] = dsp.dbgGrains;
+            d[1] = dsp.dbgFilter;
+            d[2] = dsp.dbgEnv;
+            d[3] = dsp.dbgOut;
+            d[4] = diagHostPeak;
+            d[5] = static_cast<float>(dsp.repairs);
+            d[6] = static_cast<float>(fx.repairs);
+            d[7] = fxAllocFailed ? 2.0f : (fx.ready() ? 1.0f : 0.0f);
+            d[8] = params.cutoff;
+            d[9] = params.volume;
+            d[10] = diagPostIn;
+            d[11] = diagPostOut;
+#endif
             return;
         }
         for (size_t i = 0; i < points.size(); ++i)

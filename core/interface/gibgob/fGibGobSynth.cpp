@@ -713,6 +713,11 @@ void cGibGobSynth::setDefaultScreenFunct()
     ip->setPadsGlobal(functPads);
 }
 
+// the synth stage's measurements (libs/Audio/synth_PolySynth.cpp)
+extern volatile float g_gibgobPartPeak[];
+extern volatile uint32_t g_gibgobSynthOverloads;
+extern volatile uint32_t g_gibgobSynthLateUs;
+
 namespace
 {
 bool pageHasSampleView(const ViewLayout& l)
@@ -731,13 +736,29 @@ __NOINIT(EXTERNAL_RAM) float s_graphBuf[SynthGrainView::kMaxHeads * kGraphPerVoi
 bool readGrainView(int part, SynthGrainView& gv)
 {
     const uint8_t oldHeads = gv.heads, oldGrains = gv.grains;
+    // the synth stage's own view of this part (the diagnosis line)
+    {
+        const float peak = g_gibgobPartPeak[part];
+        g_gibgobPartPeak[part] = 0.0f;
+        gv.partPeak = peak > gv.partPeak ? peak : gv.partPeak;
+        gv.overloads = g_gibgobSynthOverloads;
+        gv.lateUs = g_gibgobSynthLateUs;
+    }
     const int voices = gsynth()->readVoiceGraphs(part, s_graphBuf, kGraphPerVoice, SynthGrainView::kMaxHeads);
     gv.heads = 0;
     gv.grains = 0;
     for (int k = 0; k < voices; k++)
     {
         const float* g = s_graphBuf + k * kGraphPerVoice;
-        if (g[0] != kGrainViewMarker)
+        if (g[0] == kGrainViewMarker + 1.0f)
+        {
+            // a diagnosis build: its measurements ride along in [28..39]
+            if (!gv.hasDiag || k == 0)
+                for (int d = 0; d < 12; d++)
+                    gv.diag[d] = g[28 + d];
+            gv.hasDiag = true;
+        }
+        else if (g[0] != kGrainViewMarker)
             continue;
         gv.head[gv.heads++] = g[1];
         const int n = clampi((int)g[2], 0, (kGraphPerVoice - 3) / 3);
@@ -749,7 +770,9 @@ bool readGrainView(int part, SynthGrainView& gv)
             gv.grains++;
         }
     }
-    return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0;
+    if (oldHeads == 0 && gv.heads != 0)
+        gv.partPeak = 0.0f; // a new note: measure afresh
+    return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0 || gv.hasDiag;
 }
 
 bool pageHasAvatar(const ViewLayout& l)

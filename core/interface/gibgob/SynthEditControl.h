@@ -77,6 +77,12 @@ struct SynthGrainView
     float pos[kMaxGrains];   // 0..1
     float level[kMaxGrains]; // 0..1
     float pan[kMaxGrains];   // -1..1
+    // a diagnosis build of the engine: its measurements (kept after the note)
+    bool hasDiag;
+    float diag[12];
+    float partPeak;     // what the Mini's synth stage got from this part (since the note began)
+    uint32_t overloads; // times all synths were muted for running late
+    uint32_t lateUs;    // the longest synth update (2100 us is the limit)
 };
 
 struct SynthView
