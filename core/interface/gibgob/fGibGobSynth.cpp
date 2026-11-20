@@ -117,6 +117,7 @@ int s_engineFirst = 0;      // Main page: the first engine row shown
 bool s_latched = false;
 bool s_middleDown = false;
 bool s_noteOn = false;
+int s_singKey = -1;         // a singer: the top button (Shift) singing now
 elapsedMillis s_messageAge;
 char s_message[64];
 char s_tabNames[8][10];
@@ -293,6 +294,27 @@ int pageParams(int pg, int16_t* ids, int max)
         for (int i = 0; i < p.groups[g].count && n < max; i++)
             ids[n++] = p.groups[g].id[i];
     return n;
+}
+
+// the synth sings (a "Syllable" parameter): the pink look, Shift + top sings
+bool modelSings()
+{
+    for (int pg = 0; pg < kPageCount; pg++)
+        for (int g = 0; g < s->model.page[pg].groupCount; g++)
+            if (s->model.page[pg].groups[g].find(kRoleSyllable) >= 0)
+                return true;
+    return false;
+}
+
+int paramNamed(const char* a, const char* b = nullptr)
+{
+    for (int i = 0; i < (int)meta().params.size(); i++)
+    {
+        const std::string& n = meta().params[i].displayName;
+        if (n == a || (b != nullptr && n == b))
+            return i;
+    }
+    return -1;
 }
 
 bool isVolume(int id)
@@ -643,6 +665,7 @@ void cGibGobSynth::releaseNotes()
     s_noteOn = false;
     s_latched = false;
     s_middleDown = false;
+    s_singKey = -1;
 }
 
 void cGibGobSynth::restoreCompare()
@@ -759,7 +782,7 @@ void cGibGobSynth::update()
     int picked = 0;
     for (int i = 0; i < (int)meta().params.size(); i++)
     {
-        if (meta().params[i].displayName == "Cat")
+        if (meta().params[i].displayName == "BAB-MODE" || meta().params[i].displayName == "Cat")
             cat = rawValue(i) > 0.5f;
         if (meta().params[i].displayName == "Syllable")
             picked = (int)lroundf(rawValue(i)) % kSyllables;
@@ -814,6 +837,8 @@ void cGibGobSynth::refresh()
     v.cursor = s_cursor[page];
     v.shift = shiftActive();
     v.editing = true;
+    const bool singer = modelSings();
+    v.cute = singer;
 
     // header
     upper(v.synthName, sizeof(v.synthName), gsynth()->getInstrumentTypeName(engineIdx()).c_str());
@@ -958,6 +983,13 @@ void cGibGobSynth::refresh()
         const size_t pn = strlen(kPageNames[i]);
         const bool own = i > kPageMain && i < kPagePatch && t[0] && strlen(t) <= 6 && strncasecmp(t, kPageNames[i], pn) != 0;
         upper(s_tabNames[i], sizeof(s_tabNames[i]), own ? t : kPageNames[i]);
+        if (singer && v.shift)
+        {
+            // a singer: Shift turns the top buttons into the syllables
+            v.tabText[i] = kSyllableNames[i];
+            v.tabOn[i] = (s_singKey == i);
+            continue;
+        }
         v.tabText[i] = v.shift ? kTools[i] : s_tabNames[i];
         v.tabOn[i] = v.shift ? ((i == 4 && s->comparing) || (i == 6 && s_latched)) : (i == page);
     }
@@ -1202,6 +1234,31 @@ void cGibGobSynth::middle(bool pressed)
         s_noteOn = false;
         IE->playSynthNoteByPad(kPreviewPad, buttonRelease);
     }
+}
+
+// a singer with Shift on: the top buttons sing their syllable while held
+void cGibGobSynth::singKey(int k, bool pressed)
+{
+    const int syl = paramNamed("Syllable");
+    if (pressed)
+    {
+        if (s_noteOn)
+            IE->playSynthNoteByPad(kPreviewPad, buttonRelease); // one note at a time
+        if (syl >= 0)
+            setRaw(syl, (float)k);
+        IE->playSynthNoteByPad(kPreviewPad, buttonPress);
+        s_noteOn = true;
+        s_singKey = k;
+        s_latched = false;
+        s_middleDown = false;
+    }
+    else if (s_singKey == k)
+    {
+        IE->playSynthNoteByPad(kPreviewPad, buttonRelease);
+        s_noteOn = false;
+        s_singKey = -1;
+    }
+    refresh();
 }
 
 // Shift + top row
@@ -1661,9 +1718,18 @@ static void functDelete(uint8_t state)
 static void functTopRow(uint8_t button, uint8_t state)
 {
     const int idx = button - interfaceButton0;
-    if (state != buttonPress || idx < 0 || idx >= 8)
+    if (idx < 0 || idx >= 8)
         return;
-    if (shiftActive())
+    if (s_singKey == idx && state == buttonRelease)
+    {
+        GS->singKey(idx, false); // let go of a sung syllable, Shift or not
+        return;
+    }
+    if (state != buttonPress)
+        return;
+    if (shiftActive() && modelSings())
+        GS->singKey(idx, true);
+    else if (shiftActive())
         GS->tool(idx);
     else
         GS->goToPage(idx);
@@ -1756,6 +1822,7 @@ void cGibGobSynth::setDefault() {}
 void cGibGobSynth::colourButton(int) {}
 void cGibGobSynth::middle(bool) {}
 void cGibGobSynth::tool(int) {}
+void cGibGobSynth::singKey(int, bool) {}
 void cGibGobSynth::say(const char*) {}
 void cGibGobSynth::loadPatch() {}
 void cGibGobSynth::savePatch() {}

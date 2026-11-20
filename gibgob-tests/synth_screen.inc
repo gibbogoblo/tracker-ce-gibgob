@@ -124,6 +124,7 @@ static int synthTests(int limit)
         for (int pic = 0; pic < 2; pic++)
             for (int sing = 0; sing < 2; sing++)
             {
+                av.cute = true;
                 av.avatar.cat = pic; av.avatar.singing = sing; av.avatar.sung = sing ? 4 : -1;
                 for (int k = 0; k < SynthAvatar::kPics; k++) { av.avatar.loaded[k] = pic; av.avatar.address[k] = 350000 + k * 100000; av.avatar.w[k] = 200; av.avatar.h[k] = 250; }
                 av.shift = sing;
@@ -131,10 +132,19 @@ static int synthTests(int limit)
                 render(sc, nm, limit, sing);
                 if (getenv("SYNTH_SVG") && pic && !sing)
                 {
-                    av.shift = false; av.avatar.cat = false; av.avatar.sung = 4; av.avatar.singing = true;
-                    char path[256]; snprintf(path, sizeof(path), "%s/9_singer.svg", getenv("SYNTH_SVG"));
-                    g_svg = fopen(path, "w");
-                    if (g_svg) { fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n"); words = 0; sc.update(); fprintf(g_svg, "</svg>\n"); fclose(g_svg); g_svg = nullptr; }
+                    // pictures: quiet; singing "aah" in BAB-MODE with Shift (the syllables on the tabs)
+                    static const char* const kSyl[8] = { "tah", "dee", "umm", "lee", "aah", "bah", "so", "lah" };
+                    for (int shot = 0; shot < 2; shot++)
+                    {
+                        av.shift = shot == 1; av.avatar.cat = shot == 1; av.avatar.singing = shot == 1; av.avatar.sung = shot ? 4 : -1;
+                        snprintf(av.cells[1].value, 16, shot ? "On" : "Off");
+                        snprintf(av.cells[1].label, 20, "BAB-MODE");
+                        for (int i = 0; i < 8; i++) { av.tabText[i] = shot ? kSyl[i] : kTabs[i]; av.tabOn[i] = shot ? i == 4 : i == 1; }
+                        char path[256]; snprintf(path, sizeof(path), "%s/9_singer_%d.svg", getenv("SYNTH_SVG"), shot + 1);
+                        g_svg = fopen(path, "w");
+                        if (g_svg) { fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n"); words = 0; sc.update(); fprintf(g_svg, "</svg>\n"); fclose(g_svg); g_svg = nullptr; }
+                    }
+                    for (int i = 0; i < 8; i++) { av.tabText[i] = kTabs[i]; av.tabOn[i] = i == 1; }
                 }
             }
         g_minY = 27;
@@ -245,19 +255,20 @@ static int synthTests(int limit)
             strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &sv;
             SynthEditControl sc(&prop);
             g_minY = 0;
-            for (int shift = 0; shift < 2; shift++)
+            for (int shift = 0; shift < 4; shift++)
             {
-                sv.shift = shift;
+                sv.cute = shift >= 2; // 2, 3: the pink look
+                sv.shift = shift & 1;
                 for (int i = 0; i < 8; i++) { sv.tabText[i] = shift ? kTools[i] : kTabs[i]; sv.tabOn[i] = shift ? (i == 4 || i == 6) : (i == page); }
                 char nm[48];
-                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s", kPageNames[page], vi + 1, views, kStyleName[l.style], shift ? " shift" : "");
-                render(sc, nm, limit, shift);
+                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s%s", kPageNames[page], vi + 1, views, kStyleName[l.style], sv.cute ? " pink" : "", sv.shift ? " shift" : "");
+                render(sc, nm, limit, sv.shift);
                 if (g_ctxN != 0) { printf("  synth: save/restore not paired (%d)\n", g_ctxN); fails++; g_ctxN = 0; }
             }
             if (svgDir)
             {
                 // a picture: no Shift, a short note off, the cursor on the second box
-                sv.shift = false; sv.message[0] = 0; sv.cursor = l.cellCount > 1 ? 1 : 0;
+                sv.shift = false; sv.cute = false; sv.message[0] = 0; sv.cursor = l.cellCount > 1 ? 1 : 0;
                 for (int i = 0; i < 8; i++) { sv.tabText[i] = kTabs[i]; sv.tabOn[i] = (i == page); }
                 for (int i = 0; i < l.cellCount; i++)
                     if (isEngineItem(l.cell[i].id))

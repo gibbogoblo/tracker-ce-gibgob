@@ -10,6 +10,7 @@
 //   top 1-8      : Main, Osc, Filter, Amp, LFO, Env, FX, Patch
 //                  (the same button again: the page's next columns)
 //   Shift + top  : Init pg, Ape pg, Copy pg, Paste pg, Compare, Undo, Latch, Save
+//                  (a singer, LILITRON: the 8 syllables, sung while held)
 //   colour btns  : jump to the 4 boxes at the top (again: back)
 //   hold Middle  : play a note
 class cGibGobSynth : public ModuleBase
@@ -35,6 +36,7 @@ class cGibGobSynth : public ModuleBase
     void colourButton(int k);
     void middle(bool pressed);
     void tool(int button);
+    void singKey(int k, bool pressed); // a singer, Shift on: a top button sings its syllable
     void say(const char* text);
 
     // the patch

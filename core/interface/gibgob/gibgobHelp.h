@@ -190,6 +190,7 @@ static const char* const kHelpSynth[] = {
     "Shift+5: Compare   saved sound / your edits",
     "Shift+6: Undo   Shift+7: Latch (note holds)",
     "Shift+8: Save",
+    "LILITRON: Shift+top sings the syllables",
     "Patch page: Middle on Load / Save / Save as /",
     "  Init / GO APE! runs it",
     "Ape amount: how far Go Ape shakes it",

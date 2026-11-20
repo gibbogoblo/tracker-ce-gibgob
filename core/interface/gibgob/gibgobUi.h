@@ -169,6 +169,9 @@ void slantEnd(int x1, int y1, int x2, int y2, uint32_t under);
 void slantOutline(int x1, int y1, int x2, int y2, int slantPx, uint32_t c, int sixteenths);
 // a box with a fade (vertical: top to bottom, else left to right)
 void fadeRect(int x1, int y1, int x2, int y2, uint32_t c0, uint32_t c1, bool vertical);
+// a box with round corners of `radius` pixels (a circle when it is square
+// with radius = half its size); the chip rounds rectangles by the line width
+void roundRect(int x1, int y1, int x2, int y2, int radius);
 // box with its top-left and bottom-right corners cut off by `cut` pixels
 void cutBox(int x1, int y1, int x2, int y2, int cut, uint32_t fill, uint32_t under);
 // display list words one fade costs (the chip's ramp bitmap, up to 27)

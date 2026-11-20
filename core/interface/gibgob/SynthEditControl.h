@@ -86,6 +86,7 @@ struct SynthView
     bool tabOn[8] = { false }; // the current page, or a tool that is on
     bool shift = false;
     bool editing = true; // false: the synth has no GibGob layout (message only)
+    bool cute = false;   // the bubbly pink look (LILITRON); Shift does not lighten it
     char message[64];
     HelpView help;
 };
@@ -137,6 +138,26 @@ constexpr uint32_t kFx1 = 0xB36BFF;
 constexpr uint32_t kFx2 = 0x3DD6FF;
 constexpr uint32_t kAccent[4] = { kCyan, kPurple, kPink, kLime };
 } // namespace y2k
+
+// the bubbly pink look (LILITRON): round shapes, pastel pinks on the same
+// night background as the y2k look (the singer pictures blend into it)
+namespace cute
+{
+constexpr uint32_t kBg = y2k::kBg;
+constexpr uint32_t kPanel = 0x2A0E33;
+constexpr uint32_t kRing = 0xFF8FC8;
+constexpr uint32_t kRow = 0x41164A;
+constexpr uint32_t kHot = 0xFF6FB5;   // the selected thing
+constexpr uint32_t kSoft = 0xFFC2E2;  // labels
+constexpr uint32_t kText = 0xFFFFFF;
+constexpr uint32_t kDark = 0x3A0A2E;  // text on light fills
+constexpr uint32_t kHeader = 0xFF9ACD;
+constexpr uint32_t kHeaderHi = 0xFFD3EA;
+constexpr uint32_t kMint = 0x9CF2D8;
+constexpr uint32_t kLemon = 0xFFF1A8;
+// pastel bubbles: pink, lilac, peach, mint
+constexpr uint32_t kBubble[4] = { 0xFF9ACD, 0xC9A7FF, 0xFFC4A3, 0x9CF2D8 };
+} // namespace cute
 
 // points of a picture, for the drawing and the tests (returns how many)
 int envelopePoints(const SynthGraph& g, int x, int y, int w, int h, int16_t* xy, int max, int16_t handles[8]);

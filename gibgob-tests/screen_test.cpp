@@ -52,7 +52,15 @@ static int g_alpha = 255, g_vx = 0, g_vy = 0, g_vn = 0;
 static uint32_t g_bmpAddr = 0; static int g_bmpW = 0, g_bmpH = 0;
 static const char* bitmapFile(uint32_t a)
 {
-    return a == 350000 ? "frame1.jpg" : (a == 410000 ? "frame2.jpg" : "logo.jpg");
+    switch (a)
+    {
+        case 350000: return "frame1.jpg"; // vision frames / the singer pictures
+        case 410000: return "frame2.jpg";
+        case 450000: return "singer_sing.jpg";
+        case 550000: return "duo.jpg";
+        case 650000: return "duo_sing.jpg";
+        default: return "logo.jpg";
+    }
 }
 void API_COLOR(uint32_t col) { words++; lastColor = col; }
 void API_COLOR_A(uint8_t a) { words++; g_alpha = a; }
@@ -123,8 +131,9 @@ void API_VERTEX2F(int16_t x, int16_t y)
         if (g_vn == 0) { g_vx = x; g_vy = y; g_vn = 1; }
         else
         {
-            fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' fill='#%06X' fill-opacity='%.2f'/>\n", std::min<int>(g_vx, x),
-                    std::min<int>(g_vy, y), std::abs(x - g_vx) + 1, std::abs(y - g_vy) + 1, lastColor & 0xFFFFFF, g_alpha / 255.0);
+            const int r = g_lineW > 16 ? g_lineW / 16 : 0; // grown and rounded by the line width
+            fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' rx='%d' fill='#%06X' fill-opacity='%.2f'/>\n", std::min<int>(g_vx, x) - r,
+                    std::min<int>(g_vy, y) - r, std::abs(x - g_vx) + 1 + 2 * r, std::abs(y - g_vy) + 1 + 2 * r, r, lastColor & 0xFFFFFF, g_alpha / 255.0);
             g_vn = 0;
         }
     }

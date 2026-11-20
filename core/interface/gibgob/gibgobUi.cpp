@@ -609,6 +609,29 @@ void slantFade(int x1, int y1, int x2, int y2, int slantPx, uint32_t c0, uint32_
     unclip(c, hc, a, lw);
 }
 
+void roundRect(int x1, int y1, int x2, int y2, int radius)
+{
+    if (x2 < x1 || y2 < y1)
+        return;
+    const int maxR = ((x2 - x1) < (y2 - y1) ? (x2 - x1) : (y2 - y1)) / 2;
+    if (radius > maxR)
+        radius = maxR;
+    if (radius < 1)
+        radius = 1;
+    if (!room(6))
+        return;
+    // the chip draws a rectangle grown by the line width, its corners rounded
+    // by it: shrink the corners in by the radius
+    endRects();
+    API_LINE_WIDTH((uint16_t)(radius * 16));
+    API_BEGIN(RECTS);
+    API_VERTEX2F((int16_t)(x1 + radius), (int16_t)(y1 + radius));
+    API_VERTEX2F((int16_t)(x2 - radius), (int16_t)(y2 - radius));
+    API_END();
+    s_lineWidth = radius * 16;
+    s_used += 5;
+}
+
 void slantEnd(int x1, int y1, int x2, int y2, uint32_t under)
 {
     if (!room(11))

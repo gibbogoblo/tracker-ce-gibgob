@@ -1,6 +1,6 @@
 // LILITRON - GibGob OS gag singer (.psyn).
-// A tiny robot girl sings one of 8 syllables on any note; the cat joins in a
-// fifth higher with "nyaa" when it is switched on. The voice comes from
+// A tiny robot girl sings one of 8 syllables on any note; in BAB-MODE the cat
+// joins in a fifth higher with "nyaa". The voice comes from
 // /SynthSamples/LILI/LILITRON.wav (made by lilitron/make_voice.py); where each
 // syllable starts and loops is in lilitron/lilitron_table.h.
 // The syllable of a note arrives as MIDI CC 3 just before it (the GibGob
@@ -257,7 +257,7 @@ void LilitronVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& meta
                            .midiCC = kSyllableCC, .valueFormatter = enumFormatter(kSyllableNames) },
                     [](auto& v, Patch::optional_paramvalue_t x) { v.params.syllable = toIndex(*x, 8); });
     helper.addParam(LP(kCat),
-                    Param{ .displayName = "Cat", .defaultValue = 0, .minValue = 0, .maxValue = 1, .isEnum = true,
+                    Param{ .displayName = "BAB-MODE", .defaultValue = 0, .minValue = 0, .maxValue = 1, .isEnum = true,
                            .valueFormatter = enumFormatter(kCatNames) },
                     [](auto& v, Patch::optional_paramvalue_t x) { v.params.cat = toIndex(*x, 2) == 1; });
 

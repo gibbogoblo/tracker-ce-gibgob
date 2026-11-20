@@ -324,6 +324,36 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
             const int cols = 4, gap = 10;
             const int tw = (p.gw - (cols - 1) * gap) / cols;
             const int th = (p.gh - gap) / 2;
+            if (v.cute)
+            {
+                // round bubbles in pastels; the sung one bright, the picked one ringed
+                for (int k = 0; k < 8; k++)
+                {
+                    const int x1 = p.gx + (k % cols) * (tw + gap), y1 = p.gy + (k / cols) * (th + gap);
+                    const int x2 = x1 + tw - 1, y2 = y1 + th - 1;
+                    const bool lit = av.sung == k;
+                    const uint32_t bubble = cute::kBubble[k & 3];
+                    if (av.picked == k)
+                    {
+                        draw::color(cute::kText);
+                        draw::roundRect(x1 - 3, y1 - 3, x2 + 3, y2 + 3, 34);
+                    }
+                    draw::color(lit ? cute::kHot : cute::kRow);
+                    draw::roundRect(x1, y1, x2, y2, 30);
+                    if (!lit)
+                    {
+                        // a little shine, top left
+                        draw::color(bubble);
+                        draw::roundRect(x1 + 14, y1 + 12, x1 + 30, y1 + 22, 5);
+                    }
+                    char num[4];
+                    snprintf(num, sizeof(num), "%d", k + 1);
+                    draw::color(lit ? cute::kText : bubble);
+                    draw::text(x2 - 18, y1 + 18, f.small, OPT_CENTER, num);
+                    draw::text((x1 + x2) / 2, (y1 + y2) / 2 + 4, f.big, OPT_CENTER, av.names[k]);
+                }
+                break;
+            }
             for (int k = 0; k < 8; k++)
             {
                 const int x1 = p.gx + (k % cols) * (tw + gap), y1 = p.gy + (k / cols) * (th + gap);
@@ -554,14 +584,14 @@ void drawSinger(const SynthView& v)
         const int w = av.w[k] < kSingerW ? av.w[k] : kSingerW;
         const int h = av.h[k] < kSingerH ? av.h[k] : kSingerH;
         const int x = kSingerRight - w + 1, y = kSingerBottom - h + 1;
-        if (v.shift)
+        if (v.shift && !v.cute)
         {
             draw::setLighten(false);
             draw::color(y2k::kBg);
             draw::rect(x, y, kSingerRight, kSingerBottom);
         }
         draw::bitmap(av.address[k], w, h, x, y);
-        draw::setLighten(v.shift);
+        draw::setLighten(v.shift && !v.cute);
         return;
     }
     // no picture on the card: little stand-in faces
@@ -600,6 +630,159 @@ void drawSinger(const SynthView& v)
     }
     else
         face(cx, cy, false);
+}
+
+// ---- the bubbly pink look ----
+void cutePill(int x1, int y1, int x2, int y2, uint32_t fill)
+{
+    draw::color(fill);
+    draw::roundRect(x1, y1, x2, y2, (y2 - y1) / 2);
+}
+
+void cuteRingPill(int x1, int y1, int x2, int y2, uint32_t ring, uint32_t fill, int t)
+{
+    cutePill(x1 - t, y1 - t, x2 + t, y2 + t, ring);
+    cutePill(x1, y1, x2, y2, fill);
+}
+
+void cuteHeader(const SynthView& v, const Fonts& f)
+{
+    // a pink pill with a light top, the synth's name; bubbles floating right
+    cutePill(4, 2, 460, 27, cute::kHeader);
+    draw::color(cute::kHeaderHi);
+    draw::roundRect(14, 5, 70, 10, 2); // a little gloss
+    draw::roundRect(76, 5, 86, 10, 2);
+    draw::color(cute::kDark);
+    draw::text(20, 15, f.big, OPT_CENTERY, v.synthName);
+    char info[24];
+    fit(info, sizeof(info), v.headerInfo, 20);
+    draw::color(cute::kSoft);
+    draw::text(474, 14, f.small, OPT_CENTERY, info);
+    static const int16_t kBubbles[5][3] = { { 700, 10, 5 }, { 722, 19, 3 }, { 745, 9, 7 }, { 768, 20, 4 }, { 786, 11, 3 } };
+    draw::alpha(150);
+    for (int i = 0; i < 5; i++)
+    {
+        draw::color(cute::kBubble[i & 3]);
+        draw::roundRect(kBubbles[i][0] - kBubbles[i][2], kBubbles[i][1] - kBubbles[i][2], kBubbles[i][0] + kBubbles[i][2],
+                        kBubbles[i][1] + kBubbles[i][2], kBubbles[i][2]);
+    }
+    draw::alpha(255);
+    if (v.pageText[0])
+    {
+        draw::color(cute::kHot);
+        draw::text(690, 14, f.bold, OPT_CENTERY | OPT_RIGHTX, v.pageText);
+    }
+}
+
+void cutePanel(const SynthView& v, int pi, const Fonts& f)
+{
+    const PanelPos& p = v.layout.panel[pi];
+    const int x2 = p.x + p.w - 1, y2 = p.y + p.h - 1;
+    draw::color(cute::kRing);
+    draw::roundRect(p.x, p.y, x2, y2, 20);
+    draw::color(cute::kPanel);
+    draw::roundRect(p.x + 2, p.y + 2, x2 - 2, y2 - 2, 18);
+    if (v.panelTitle[pi][0])
+    {
+        draw::color(cute::kRing);
+        draw::text(p.x + 20, p.y + 16, f.bold, OPT_CENTERY, v.panelTitle[pi]);
+    }
+    if (v.panelInfo[pi][0] && p.w >= 400)
+    {
+        draw::color(cute::kSoft);
+        draw::text(x2 - 18, p.y + 16, f.small, OPT_CENTERY | OPT_RIGHTX, v.panelInfo[pi]);
+    }
+    drawGraph(v, pi, f);
+}
+
+void cuteCell(const SynthView& v, int i, const Fonts& f)
+{
+    const CellPos& c = v.layout.cell[i];
+    const SynthCellText& t = v.cells[i];
+    const bool sel = i == v.cursor;
+    const int x2 = c.x + c.w - 1, y2 = c.y + c.h - 1;
+    char label[20], value[16];
+    // the selected one: hot pink with a white ring; the engine in use: mint
+    const uint32_t fill = sel ? cute::kHot : (t.lit ? cute::kMint : cute::kRow);
+    if (sel)
+        cuteRingPill(c.x, c.y, x2, y2, cute::kText, fill, 2);
+    else
+        cutePill(c.x, c.y, x2, y2, fill);
+    const bool light = !sel && t.lit;
+    const int chars = c.w / 8;
+    int lc = chars - (int)strlen(t.value) - 1;
+    lc = lc > 18 ? 18 : (lc < 6 ? 6 : lc);
+    fit(label, sizeof(label), t.label, c.kind == kCellChip ? 2 : lc);
+    fit(value, sizeof(value), t.value, chars - lc - 1 > 4 ? chars - lc - 1 : 4);
+    if (c.kind == kCellChip)
+    {
+        static const char* const kName[4] = { "A", "D", "S", "R" };
+        draw::color(light ? cute::kDark : cute::kSoft);
+        draw::text(c.x + 16, c.y + c.h / 2, f.bold, OPT_CENTERY, kName[clampi(c.role - kRoleAttack, 0, 3)]);
+    }
+    else
+    {
+        draw::color(light ? cute::kDark : (sel ? cute::kText : cute::kSoft));
+        draw::text(c.x + 18, c.y + c.h / 2, c.kind == kCellAction ? f.bold : f.label, OPT_CENTERY, label);
+    }
+    draw::color(light ? cute::kDark : cute::kText);
+    draw::text(x2 - 16, c.y + c.h / 2, c.kind == kCellAction ? f.small : f.bold, OPT_CENTERY | OPT_RIGHTX, value);
+    if (c.kind == kCellGrid && t.fill >= 0)
+    {
+        // a little progress pill instead of lights
+        const int bx1 = c.x + 14, bx2 = x2 - 14, by = y2 - 12;
+        cutePill(bx1, by, bx2, by + 6, cute::kPanel);
+        if (t.fill > 2)
+            cutePill(bx1, by, bx1 + (bx2 - bx1) * t.fill / 100, by + 6, cute::kBubble[(i / 3) & 3]);
+    }
+}
+
+void cuteQuickBoxes(const SynthView& v, const Fonts& f)
+{
+    for (int k = 0; k < 4; k++)
+    {
+        const int x1 = kQuickX0 + k * 116, x2 = x1 + kQuickW - 1;
+        const int y1 = kQuickY, y2 = kQuickY + kQuickH - 1;
+        const uint32_t col = cute::kBubble[k];
+        if (v.quick[k].label[0] == 0)
+        {
+            cutePill(x1, y1, x2, y2, cute::kPanel);
+            continue;
+        }
+        const bool on = v.quickActive[k];
+        if (on)
+            cutePill(x1, y1, x2, y2, col);
+        else
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, col, cute::kBg, 2);
+        char label[10], value[10];
+        fit(value, sizeof(value), v.quick[k].value, 7);
+        abbreviate(v.quick[k].label, label, clampi((86 - (int)strlen(value) * 8) * 2 / 13, 2, 8));
+        draw::color(on ? cute::kDark : col);
+        draw::text(x1 + 12, (y1 + y2) / 2, f.small, OPT_CENTERY, label);
+        draw::color(on ? cute::kDark : cute::kText);
+        draw::text(x2 - 10, (y1 + y2) / 2, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
+    }
+}
+
+void cuteTabs(const SynthView& v, const Fonts& f)
+{
+    const int w = (kScreenW - 8 - 7 * 4) / 8;
+    for (int i = 0; i < 8; i++)
+    {
+        const int x1 = 4 + i * (w + 4), x2 = x1 + w - 1;
+        const int y1 = kTabsY + 2, y2 = kTabsY + kTabsH - 3;
+        const bool on = v.tabOn[i];
+        // with Shift the tabs are the syllables: the one sung lights up mint
+        if (on)
+            cutePill(x1, y1, x2, y2, v.shift ? cute::kMint : cute::kHot);
+        else
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, cute::kRing, cute::kPanel, 2);
+        if (v.tabText[i] && v.tabText[i][0])
+        {
+            draw::color(on ? (v.shift ? cute::kDark : cute::kText) : cute::kSoft);
+            draw::text((x1 + x2) / 2, (y1 + y2) / 2, f.bold, OPT_CENTER, v.tabText[i]);
+        }
+    }
 }
 
 void drawQuickBoxes(const SynthView& v, const Fonts& f)
@@ -669,10 +852,44 @@ void SynthEditControl::update()
         draw::end();
         return;
     }
-    draw::setLighten(v.shift);
+    // the pink look keeps its colours under Shift (only the red frame shows)
+    draw::setLighten(v.shift && !v.cute);
 
     draw::color(y2k::kBg);
     draw::rect(0, 0, kScreenW - 1, 479);
+
+    if (v.cute)
+    {
+        cuteHeader(v, f);
+        draw::color(cute::kText);
+        draw::text(12, kQuickY + kQuickH / 2, f.big, OPT_CENTERY, v.title);
+        cuteQuickBoxes(v, f);
+        cuteTabs(v, f);
+        if (v.shift)
+            drawShiftBorder();
+        for (int p = 0; p < v.layout.panelCount; p++)
+            cutePanel(v, p, f);
+        if (v.layout.style == kStyleMain)
+            drawMainExtras(v, f);
+        for (int i = 0; i < v.layout.cellCount; i++)
+            cuteCell(v, i, f);
+        if (v.layout.style == kStyleSinger)
+            drawSinger(v);
+        if (v.hint[0] && v.layout.style != kStyleMain)
+        {
+            draw::color(v.warn ? cute::kHot : cute::kSoft);
+            draw::text(28, 352, f.small, OPT_CENTERY, v.hint);
+        }
+        if (v.message[0])
+        {
+            const int w = (int)strlen(v.message) * 8 + 32;
+            cutePill(400 - w / 2, 394, 400 + w / 2, 422, cute::kLemon);
+            draw::color(cute::kDark);
+            draw::text(400, 408, f.bold, OPT_CENTER, v.message);
+        }
+        draw::end();
+        return;
+    }
 
     // header: a chrome bar with a slanted end
     draw::fadeRect(0, 0, 459, 28, y2k::kChromeHi, y2k::kChromeLo, true);
