@@ -177,8 +177,11 @@ void WorkspaceProjectLoad::loadProjectFromWorkspaceFinish()
     newFileManager.getSynth()->updateToSettings(mtProject.values, true);
     for (int part = 0; part < kSynthParts; part++)
     {
-        if (!newFileManager.getSynth()->loadPatchFromWorkspace(part))
+        const bool fresh = newFileManager.getSynth()->takeMacrosNeedInit(part);
+        if (!newFileManager.getSynth()->loadPatchFromWorkspace(part) || fresh)
         {
+            // no saved patch, or a new project: the macros' resting places come
+            // from this part's own engine (a bipolar one rests in the middle)
             newFileManager.getSynth()->initSynthPartMacrosValues(part,
                                                                  mtProject.values.synthPart[part]);
         }

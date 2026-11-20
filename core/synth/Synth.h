@@ -113,6 +113,16 @@ class Synth
 
     void initSynthPartSettings(int part, SynthPartSettings& settings);
     void initSynthPartMacrosValues(int part, SynthPartSettings& settings);
+    // A new project sets the macros up before the part's engine is loaded (so
+    // with the previous engine's bipolar flags). True once per such part: the
+    // project load then sets them up again with the right engine.
+    bool takeMacrosNeedInit(int part)
+    {
+        if (part < 0 || part >= kSynthParts || !macrosNeedInit[part])
+            return false;
+        macrosNeedInit[part] = false;
+        return true;
+    }
     void initSynthPartMacroValue(int part, int macroIdx, SynthPartSettings& settings);
     void validateSynthPartSettings(int part, SynthPartSettings& settings);
 
@@ -138,6 +148,7 @@ class Synth
         int sampleSlotCount = 0;
     };
     std::array<Part, kSynthParts> parts;
+    std::array<bool, kSynthParts> macrosNeedInit{};
     std::shared_ptr<polysynth::Synth> synth;
     std::unique_ptr<polysynth::PatchPool> patchPool;
     std::shared_ptr<polysynth::SampleStore> sampleStore;

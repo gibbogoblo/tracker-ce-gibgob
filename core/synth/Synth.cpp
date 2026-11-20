@@ -1655,6 +1655,8 @@ void Synth::initSynthPartSettings(int part, SynthPartSettings& settings)
     }
 
     initSynthPartMacrosValues(part, settings);
+    if (part >= 0 && part < kSynthParts)
+        macrosNeedInit[part] = true; // set up again once this part's engine is loaded
 
     snprintf(settings.patchName, std::size(settings.patchName), "%s", kInitPatchName);
 }
