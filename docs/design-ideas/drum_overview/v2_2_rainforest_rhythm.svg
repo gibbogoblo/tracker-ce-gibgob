@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0C3527"/><stop offset="1" stop-color="#03140D"/></linearGradient><linearGradient id="lf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5BE39C"/><stop offset="1" stop-color="#0E7650"/></linearGradient><radialGradient id="drop" cx=".38" cy=".6" r=".7"><stop offset="0" stop-color="#F0FFFB"/><stop offset=".55" stop-color="#9CF5DA"/><stop offset="1" stop-color="#3CB7A0"/></radialGradient></defs>
+<rect width="800" height="480" fill="url(#bg)"/>
+<line x1="194" y1="50" x2="191" y2="62" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="127" y1="32" x2="124" y2="45" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="753" y1="384" x2="750" y2="401" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="182" y1="258" x2="179" y2="269" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="142" y1="51" x2="139" y2="62" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="761" y1="398" x2="758" y2="416" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="656" y1="93" x2="653" y2="105" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="514" y1="351" x2="511" y2="370" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="722" y1="42" x2="719" y2="57" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="551" y1="243" x2="548" y2="253" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="388" y1="43" x2="385" y2="62" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="710" y1="263" x2="707" y2="274" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="745" y1="275" x2="742" y2="293" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="695" y1="244" x2="692" y2="257" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="491" y1="207" x2="488" y2="217" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="250" y1="390" x2="247" y2="399" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="38" y1="301" x2="35" y2="312" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="438" y1="226" x2="435" y2="238" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="818" y1="94" x2="815" y2="107" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="166" y1="304" x2="163" y2="315" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="292" y1="359" x2="289" y2="370" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="458" y1="434" x2="455" y2="443" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="51" y1="110" x2="48" y2="127" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="505" y1="114" x2="502" y2="126" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="146" y1="220" x2="143" y2="229" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="572" y1="430" x2="569" y2="450" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="603" y1="461" x2="600" y2="469" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="237" y1="464" x2="234" y2="481" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="337" y1="453" x2="334" y2="468" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="671" y1="141" x2="668" y2="151" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="364" y1="65" x2="361" y2="78" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="789" y1="159" x2="786" y2="167" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="37" y1="81" x2="34" y2="99" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="297" y1="139" x2="294" y2="149" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="805" y1="203" x2="802" y2="214" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="49" y1="27" x2="46" y2="37" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="555" y1="72" x2="552" y2="80" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="402" y1="120" x2="399" y2="140" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="100" y1="254" x2="97" y2="271" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="336" y1="474" x2="333" y2="488" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="198" y1="197" x2="195" y2="206" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="345" y1="119" x2="342" y2="138" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="681" y1="239" x2="678" y2="248" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="209" y1="116" x2="206" y2="127" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="190" y1="417" x2="187" y2="427" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="42" y1="445" x2="39" y2="460" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="812" y1="193" x2="809" y2="212" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="536" y1="380" x2="533" y2="397" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="405" y1="45" x2="402" y2="55" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="717" y1="432" x2="714" y2="451" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="276" y1="315" x2="273" y2="333" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="527" y1="391" x2="524" y2="405" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="537" y1="329" x2="534" y2="340" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="757" y1="459" x2="754" y2="468" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="796" y1="462" x2="793" y2="478" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="37" y1="432" x2="34" y2="441" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="794" y1="320" x2="791" y2="329" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="137" y1="305" x2="134" y2="320" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="612" y1="445" x2="609" y2="456" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="3" y1="443" x2="-0" y2="451" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="719" y1="56" x2="716" y2="73" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="642" y1="421" x2="639" y2="436" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="721" y1="97" x2="718" y2="113" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="271" y1="428" x2="268" y2="445" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="387" y1="253" x2="384" y2="261" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="28" y1="285" x2="25" y2="299" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="709" y1="292" x2="706" y2="302" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="297" y1="368" x2="294" y2="383" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="9" y1="402" x2="6" y2="420" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="70" y1="261" x2="67" y2="273" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="646" y1="149" x2="643" y2="160" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="399" y1="464" x2="396" y2="473" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="94" y1="298" x2="91" y2="317" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="420" y1="208" x2="417" y2="227" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="637" y1="32" x2="634" y2="51" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="161" y1="145" x2="158" y2="163" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="346" y1="383" x2="343" y2="393" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="717" y1="85" x2="714" y2="94" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="405" y1="163" x2="402" y2="177" stroke="#BFF5E0" stroke-opacity=".16"/>
+<line x1="741" y1="341" x2="738" y2="349" stroke="#BFF5E0" stroke-opacity=".16"/>
+<text x="16" y="24" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="24" fill="#E2FFF0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="3">RAINFOREST</text>
+<text x="16" y="47" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="11" fill="#6FC49E" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="2">RHYTHM  ·  PATTERN 03  ·  128 BPM</text>
+<rect x="432" y="9" width="82" height="40" rx="6" fill="#06231A" stroke="#7CF2C4" stroke-width="1.5"/>
+<text x="442" y="21" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#7CF2C4" text-anchor="start" font-weight="700" dominant-baseline="middle" letter-spacing="1.5">PROB</text>
+<text x="504" y="36" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#F2FFF8" text-anchor="end" font-weight="800" dominant-baseline="middle" >1:2</text>
+<rect x="522" y="9" width="82" height="40" rx="6" fill="#06231A" stroke="#F2E27C" stroke-width="1.5"/>
+<text x="532" y="21" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2E27C" text-anchor="start" font-weight="700" dominant-baseline="middle" letter-spacing="1.5">VEL</text>
+<text x="594" y="36" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#F2FFF8" text-anchor="end" font-weight="800" dominant-baseline="middle" >96</text>
+<rect x="612" y="9" width="82" height="40" rx="6" fill="#06231A" stroke="#7CC8F2" stroke-width="1.5"/>
+<text x="622" y="21" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#7CC8F2" text-anchor="start" font-weight="700" dominant-baseline="middle" letter-spacing="1.5">NUD</text>
+<text x="684" y="36" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#F2FFF8" text-anchor="end" font-weight="800" dominant-baseline="middle" >0</text>
+<rect x="702" y="9" width="82" height="40" rx="6" fill="#06231A" stroke="#C9A2F2" stroke-width="1.5"/>
+<text x="712" y="21" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#C9A2F2" text-anchor="start" font-weight="700" dominant-baseline="middle" letter-spacing="1.5">PITCH</text>
+<text x="774" y="36" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#F2FFF8" text-anchor="end" font-weight="800" dominant-baseline="middle" >0</text>
+<rect x="8" y="59" width="784" height="142" rx="10" fill="#021009" opacity=".5"/>
+<rect x="626" y="59" width="64" height="142" fill="#7CF2C4" opacity=".08"/>
+<text x="24" y="70.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">KICK</text>
+<line x1="112" y1="70.5" x2="776" y2="70.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="154.0" cy="70.5" rx="10.0" ry="4.0" transform="rotate(-25 154.0 70.5)" fill="#5BE39C"/>
+<ellipse cx="490.0" cy="70.5" rx="9.5" ry="3.9" transform="rotate(-25 490.0 70.5)" fill="#5BE39C"/>
+<ellipse cx="658.0" cy="70.5" rx="8.0" ry="3.4" transform="rotate(-25 658.0 70.5)" fill="#5BE39C"/>
+<rect x="8" y="79" width="784" height="17" fill="#2FB69A" opacity=".28"/>
+<path d="M10 82.5 L 17 87.5 L 10 92.5 Z" fill="#7CF2C4"/>
+<text x="24" y="87.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#7CF2C4" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1.5">SNARE</text>
+<line x1="112" y1="87.5" x2="776" y2="87.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="490.0" cy="87.5" rx="10.0" ry="4.0" transform="rotate(-25 490.0 87.5)" fill="#E2FFF0"/>
+<ellipse cx="742.0" cy="87.5" rx="7.0" ry="3.1" transform="rotate(-25 742.0 87.5)" fill="#E2FFF0"/>
+<text x="24" y="104.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">HAT</text>
+<line x1="112" y1="104.5" x2="776" y2="104.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="154.0" cy="104.5" rx="9.0" ry="3.7" transform="rotate(-25 154.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="238.0" cy="104.5" rx="7.0" ry="3.1" transform="rotate(-25 238.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="322.0" cy="104.5" rx="8.5" ry="3.5" transform="rotate(-25 322.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="406.0" cy="104.5" rx="7.0" ry="3.1" transform="rotate(-25 406.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="490.0" cy="104.5" rx="9.0" ry="3.7" transform="rotate(-25 490.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="574.0" cy="104.5" rx="7.0" ry="3.1" transform="rotate(-25 574.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="658.0" cy="104.5" rx="8.5" ry="3.5" transform="rotate(-25 658.0 104.5)" fill="#5BE39C"/>
+<ellipse cx="742.0" cy="104.5" rx="7.5" ry="3.2" transform="rotate(-25 742.0 104.5)" fill="#5BE39C"/>
+<text x="24" y="121.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">RIM</text>
+<line x1="112" y1="121.5" x2="776" y2="121.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="322.0" cy="121.5" rx="8.5" ry="3.5" transform="rotate(-25 322.0 121.5)" fill="#5BE39C"/>
+<ellipse cx="658.0" cy="121.5" rx="8.0" ry="3.4" transform="rotate(-25 658.0 121.5)" fill="#5BE39C"/>
+<text x="24" y="138.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">WOOD</text>
+<line x1="112" y1="138.5" x2="776" y2="138.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="238.0" cy="138.5" rx="7.5" ry="3.2" transform="rotate(-25 238.0 138.5)" fill="#5BE39C"/>
+<ellipse cx="406.0" cy="138.5" rx="8.0" ry="3.4" transform="rotate(-25 406.0 138.5)" fill="#5BE39C"/>
+<ellipse cx="658.0" cy="138.5" rx="7.5" ry="3.2" transform="rotate(-25 658.0 138.5)" fill="#5BE39C"/>
+<text x="24" y="155.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">CLAP</text>
+<line x1="112" y1="155.5" x2="776" y2="155.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="490.0" cy="155.5" rx="10.0" ry="4.0" transform="rotate(-25 490.0 155.5)" fill="#5BE39C"/>
+<text x="24" y="172.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#3B6153" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">RAIN</text>
+<line x1="112" y1="172.5" x2="776" y2="172.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="154.0" cy="172.5" rx="7.5" ry="3.2" transform="rotate(-25 154.0 172.5)" fill="#3B6153"/>
+<ellipse cx="238.0" cy="172.5" rx="6.5" ry="3.0" transform="rotate(-25 238.0 172.5)" fill="#3B6153"/>
+<ellipse cx="322.0" cy="172.5" rx="7.5" ry="3.2" transform="rotate(-25 322.0 172.5)" fill="#3B6153"/>
+<ellipse cx="406.0" cy="172.5" rx="6.5" ry="3.0" transform="rotate(-25 406.0 172.5)" fill="#3B6153"/>
+<ellipse cx="490.0" cy="172.5" rx="7.5" ry="3.2" transform="rotate(-25 490.0 172.5)" fill="#3B6153"/>
+<ellipse cx="574.0" cy="172.5" rx="6.5" ry="3.0" transform="rotate(-25 574.0 172.5)" fill="#3B6153"/>
+<ellipse cx="658.0" cy="172.5" rx="7.5" ry="3.2" transform="rotate(-25 658.0 172.5)" fill="#3B6153"/>
+<ellipse cx="742.0" cy="172.5" rx="6.5" ry="3.0" transform="rotate(-25 742.0 172.5)" fill="#3B6153"/>
+<text x="24" y="189.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#89BFA7" text-anchor="start" font-weight="600" dominant-baseline="middle" letter-spacing="1.5">PERC</text>
+<line x1="112" y1="189.5" x2="776" y2="189.5" stroke="#1F5A44" stroke-width="1"/>
+<ellipse cx="658.0" cy="189.5" rx="9.5" ry="3.9" transform="rotate(-25 658.0 189.5)" fill="#5BE39C"/>
+<ellipse cx="742.0" cy="189.5" rx="9.5" ry="3.9" transform="rotate(-25 742.0 189.5)" fill="#5BE39C"/>
+<path d="M0 214 Q 100 204 200 214 T 400 214 T 600 214 T 800 214" stroke="#2F7A62" stroke-width="3" fill="none"/>
+<ellipse cx="40" cy="206" rx="9" ry="4" transform="rotate(30 40 212)" fill="#2F7A62"/>
+<ellipse cx="130" cy="218" rx="9" ry="4" transform="rotate(-30 130 212)" fill="#2F7A62"/>
+<ellipse cx="220" cy="206" rx="9" ry="4" transform="rotate(30 220 212)" fill="#2F7A62"/>
+<ellipse cx="310" cy="218" rx="9" ry="4" transform="rotate(-30 310 212)" fill="#2F7A62"/>
+<ellipse cx="400" cy="206" rx="9" ry="4" transform="rotate(30 400 212)" fill="#2F7A62"/>
+<ellipse cx="490" cy="218" rx="9" ry="4" transform="rotate(-30 490 212)" fill="#2F7A62"/>
+<ellipse cx="580" cy="206" rx="9" ry="4" transform="rotate(30 580 212)" fill="#2F7A62"/>
+<ellipse cx="670" cy="218" rx="9" ry="4" transform="rotate(-30 670 212)" fill="#2F7A62"/>
+<ellipse cx="760" cy="206" rx="9" ry="4" transform="rotate(30 760 212)" fill="#2F7A62"/>
+<text x="16" y="240" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="30" fill="#E2FFF0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="2">SNARE</text>
+<text x="140" y="242" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="13" fill="#6FC49E" text-anchor="start" font-weight="500" dominant-baseline="middle" >snr_jungle_04</text>
+<text x="784" y="240" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#6FC49E" text-anchor="end" font-weight="700" dominant-baseline="middle" letter-spacing="1.5">STEPS 1–8 / 64   ▸ PAGE 1 OF 8</text>
+<path d="M53.5 282 C 90.7 310.56 84.7 361.56 53.5 384 C 22.299999999999997 361.56 16.299999999999997 310.56 53.5 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<path d="M152.0 282 C 189.2 310.56 183.2 361.56 152.0 384 C 120.8 361.56 114.8 310.56 152.0 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<path d="M250.5 282 C 287.7 310.56 281.7 361.56 250.5 384 C 219.3 361.56 213.3 310.56 250.5 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<path d="M349.0 282 C 386.2 310.56 380.2 361.56 349.0 384 C 317.8 361.56 311.8 310.56 349.0 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<path d="M447.5 264 C 493.38 299.84000000000003 485.98 363.84 447.5 392 C 409.02 363.84 401.62 299.84000000000003 447.5 264 Z" fill="url(#lf)"/>
+<path d="M447.5 272 L 447.5 392" stroke="#0A4A33" stroke-width="2"/>
+<path d="M447.5 303.7674418604651 L 469.5 293.7674418604651" stroke="#0A4A33" stroke-width="1.5"/><path d="M447.5 303.7674418604651 L 425.5 293.7674418604651" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M447.5 333.5348837209302 L 469.5 323.5348837209302" stroke="#0A4A33" stroke-width="1.5"/><path d="M447.5 333.5348837209302 L 425.5 323.5348837209302" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M447.5 363.30232558139534 L 469.5 353.30232558139534" stroke="#0A4A33" stroke-width="1.5"/><path d="M447.5 363.30232558139534 L 425.5 353.30232558139534" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M447.5 313.28000000000003 C 452.3 324.48 461.9 335.68 461.9 343.68 A 14.4 14.4 0 0 1 433.1 343.68 C 433.1 335.68 442.7 324.48 447.5 313.28000000000003 Z" fill="url(#drop)"/><circle cx="442.7" cy="340.5" r="3.2" fill="#FFFFFF" opacity=".85"/>
+<text x="447.5" y="380" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="11" fill="#E2FFF0" text-anchor="middle" font-weight="800" dominant-baseline="middle" >100</text>
+<path d="M447.5 258 C 502.06 297.2 493.26 367.2 447.5 398 C 401.74 367.2 392.94 297.2 447.5 258 Z" fill="none" stroke="#F2FFF8" stroke-width="3"/>
+<path d="M546.0 282 C 583.2 310.56 577.2 361.56 546.0 384 C 514.8 361.56 508.8 310.56 546.0 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<line x1="626.5" y1="250" x2="624.5" y2="268" stroke="#BFF5E0" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+<line x1="644.5" y1="250" x2="642.5" y2="268" stroke="#BFF5E0" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+<line x1="662.5" y1="250" x2="660.5" y2="268" stroke="#BFF5E0" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+<path d="M644.5 282 C 681.7 310.56 675.7 361.56 644.5 384 C 613.3 361.56 607.3 310.56 644.5 282 Z" fill="#0B2E23" fill-opacity=".7" stroke="#24684F" stroke-width="1.5"/>
+<ellipse cx="644.5" cy="292" rx="14" ry="9" fill="#9BE86A"/><circle cx="636.5" cy="284" r="5" fill="#9BE86A"/><circle cx="652.5" cy="284" r="5" fill="#9BE86A"/><circle cx="636.5" cy="284" r="2.2" fill="#04201A"/><circle cx="652.5" cy="284" r="2.2" fill="#04201A"/>
+<path d="M743.0 264 C 788.88 299.84000000000003 781.48 363.84 743.0 392 C 704.52 363.84 697.12 299.84000000000003 743.0 264 Z" fill="url(#lf)"/>
+<path d="M743.0 272 L 743.0 392" stroke="#0A4A33" stroke-width="2"/>
+<path d="M743.0 303.7674418604651 L 765.0 293.7674418604651" stroke="#0A4A33" stroke-width="1.5"/><path d="M743.0 303.7674418604651 L 721.0 293.7674418604651" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M743.0 333.5348837209302 L 765.0 323.5348837209302" stroke="#0A4A33" stroke-width="1.5"/><path d="M743.0 333.5348837209302 L 721.0 323.5348837209302" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M743.0 363.30232558139534 L 765.0 353.30232558139534" stroke="#0A4A33" stroke-width="1.5"/><path d="M743.0 363.30232558139534 L 721.0 353.30232558139534" stroke="#0A4A33" stroke-width="1.5"/>
+<path d="M743.0 320.84000000000003 C 746.18 328.26 752.54 335.68 752.54 340.98 A 9.540000000000001 9.540000000000001 0 0 1 733.46 340.98 C 733.46 335.68 739.82 328.26 743.0 320.84000000000003 Z" fill="url(#drop)"/><circle cx="739.8" cy="338.9" r="2.1" fill="#FFFFFF" opacity=".85"/>
+<text x="743.0" y="380" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="11" fill="#E2FFF0" text-anchor="middle" font-weight="800" dominant-baseline="middle" >40</text>
+<rect x="723.0" y="396" width="40" height="15" rx="4" fill="#F2E27C"/>
+<text x="743.0" y="404" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#04201A" text-anchor="middle" font-weight="800" dominant-baseline="middle" >50%</text>
+<rect x="8.0" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="53.5" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >1</text>
+<rect x="106.5" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="152.0" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >2</text>
+<rect x="205.0" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="250.5" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >3</text>
+<rect x="303.5" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="349.0" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >4</text>
+<rect x="402.0" y="430" width="91" height="42" rx="8" fill="#2FB69A" stroke="#7CF2C4" stroke-width="1.5"/>
+<text x="447.5" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#04201A" text-anchor="middle" font-weight="900" dominant-baseline="middle" >5</text>
+<rect x="500.5" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="546.0" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >6</text>
+<rect x="599.0" y="430" width="91" height="42" rx="8" fill="#06231A" stroke="#1F5A44" stroke-width="1.5"/>
+<text x="644.5" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#4E8A72" text-anchor="middle" font-weight="900" dominant-baseline="middle" >7</text>
+<rect x="697.5" y="430" width="91" height="42" rx="8" fill="#2FB69A" stroke="#7CF2C4" stroke-width="1.5"/>
+<text x="743.0" y="451" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#04201A" text-anchor="middle" font-weight="900" dominant-baseline="middle" >8</text>
+</svg>

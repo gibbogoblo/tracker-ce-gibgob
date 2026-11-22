@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="3" height="8" fill="#FFE9B8" opacity=".35"/></pattern></defs>
+<rect width="800" height="480" fill="#F6C76B"/>
+<circle cx="640" cy="30" r="22" fill="#FCE6A8"/>
+<path d="M0 62 L 120 50 L 210 56 L 330 44 L 470 54 L 600 46 L 800 56 V 70 H 0 Z" fill="#E3A35A"/>
+<text x="14" y="24" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="27" fill="#2A1008" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="-0.5">SAFARI CLIFFS</text>
+<text x="15" y="47" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#7A3416" text-anchor="start" font-weight="700" dominant-baseline="middle" letter-spacing="1">PTN 03 / 1–8 OF 64 / 128 BPM</text>
+<path d="M392 64 L 396 34 L 384 26 M396 34 L 406 24" stroke="#2A1008" stroke-width="4" fill="none"/><path d="M360 26 L 432 26 L 420 18 L 372 18 Z" fill="#2A1008"/>
+<g fill="#2A1008"><path d="M260.3 66.0 Q 239.9 60.9 243.3 40.5 Q 245.0 28.6 233.1 32.0" stroke="#2A1008" stroke-width="3.4" fill="none" stroke-linecap="round"/><ellipse cx="262.0" cy="52.4" rx="11.049999999999999" ry="14.45" transform="rotate(-12 262.0 52.4)"/><circle cx="268.8" cy="35.400000000000006" r="7.6499999999999995"/><ellipse cx="276.45" cy="37.95" rx="6.8" ry="3.8249999999999997" transform="rotate(18 276.45 37.95)"/><ellipse cx="260.3" cy="64.3" rx="11.9" ry="3.4"/></g><g fill="#2A1008"><path d="M305.24 66.0 Q 320.12 62.28 317.64 47.4 Q 316.4 38.72 325.08 41.2" stroke="#2A1008" stroke-width="2.48" fill="none" stroke-linecap="round"/><ellipse cx="304.0" cy="56.08" rx="8.06" ry="10.54" transform="rotate(12 304.0 56.08)"/><circle cx="299.04" cy="43.68" r="5.58"/><ellipse cx="293.46" cy="45.54" rx="4.96" ry="2.79" transform="rotate(-18 293.46 45.54)"/><ellipse cx="305.24" cy="64.76" rx="8.68" ry="2.48"/></g><g fill="#2A1008"><path d="M339.0 66.0 Q 327.0 63.0 329.0 51.0 Q 330.0 44.0 323.0 46.0" stroke="#2A1008" stroke-width="2.0" fill="none" stroke-linecap="round"/><ellipse cx="340.0" cy="58.0" rx="6.5" ry="8.5" transform="rotate(-12 340.0 58.0)"/><circle cx="344.0" cy="48.0" r="4.5"/><ellipse cx="348.5" cy="49.5" rx="4.0" ry="2.25" transform="rotate(18 348.5 49.5)"/><ellipse cx="339.0" cy="65.0" rx="7.0" ry="2.0"/></g>
+<path d="M456 5 H 520 L 528 13 V 33 L 520 41 H 456 L 448 33 V 13 Z" fill="#FBE7C0"/><rect x="448" y="12" width="6" height="22" fill="#B8451F"/>
+<text x="462" y="16" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#B8451F" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1">PROB</text>
+<text x="520" y="30" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#2A1008" text-anchor="end" font-weight="900" dominant-baseline="middle" >1:2</text>
+<path d="M542 5 H 606 L 614 13 V 33 L 606 41 H 542 L 534 33 V 13 Z" fill="#FBE7C0"/><rect x="534" y="12" width="6" height="22" fill="#C98A12"/>
+<text x="548" y="16" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#C98A12" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1">VEL</text>
+<text x="606" y="30" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#2A1008" text-anchor="end" font-weight="900" dominant-baseline="middle" >96</text>
+<path d="M628 5 H 692 L 700 13 V 33 L 692 41 H 628 L 620 33 V 13 Z" fill="#FBE7C0"/><rect x="620" y="12" width="6" height="22" fill="#5E7A2A"/>
+<text x="634" y="16" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#5E7A2A" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1">NUD</text>
+<text x="692" y="30" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#2A1008" text-anchor="end" font-weight="900" dominant-baseline="middle" >0</text>
+<path d="M714 5 H 778 L 786 13 V 33 L 778 41 H 714 L 706 33 V 13 Z" fill="#FBE7C0"/><rect x="706" y="12" width="6" height="22" fill="#7A4A8E"/>
+<text x="720" y="16" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#7A4A8E" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1">PITCH</text>
+<text x="778" y="30" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="17" fill="#2A1008" text-anchor="end" font-weight="900" dominant-baseline="middle" >0</text>
+<rect x="0" y="66" width="800" height="414" fill="#4A1E0E"/>
+<path d="M0 73 L 0 72 L 50 74 L 100 72 L 150 72 L 200 70 L 250 70 L 300 74 L 350 70 L 400 72 L 450 74 L 500 72 L 550 74 L 600 70 L 650 72 L 700 74 L 750 74 L 800 74 L 800 104 L 0 104 Z" fill="#A0522D"/>
+<rect x="0" y="101" width="800" height="3" fill="#2A1008"/>
+<path d="M0 107 L 0 104 L 50 108 L 100 106 L 150 104 L 200 108 L 250 106 L 300 108 L 350 106 L 400 104 L 450 104 L 500 104 L 550 104 L 600 104 L 650 104 L 700 108 L 750 108 L 800 104 L 800 168 L 0 168 Z" fill="#B8653A"/>
+<rect x="0" y="165" width="800" height="3" fill="#2A1008"/>
+<path d="M0 171 L 0 172 L 50 170 L 100 172 L 150 168 L 200 170 L 250 168 L 300 172 L 350 168 L 400 172 L 450 170 L 500 168 L 550 170 L 600 168 L 650 170 L 700 170 L 750 170 L 800 168 L 800 202 L 0 202 Z" fill="#A0522D"/>
+<rect x="0" y="199" width="800" height="3" fill="#2A1008"/>
+<path d="M0 205 L 0 202 L 50 206 L 100 202 L 150 204 L 200 202 L 250 204 L 300 204 L 350 202 L 400 202 L 450 202 L 500 204 L 550 206 L 600 202 L 650 206 L 700 202 L 750 202 L 800 206 L 800 236 L 0 236 Z" fill="#93492A"/>
+<rect x="0" y="233" width="800" height="3" fill="#2A1008"/>
+<path d="M0 239 L 0 236 L 50 236 L 100 238 L 150 236 L 200 236 L 250 236 L 300 240 L 350 236 L 400 240 L 450 236 L 500 240 L 550 238 L 600 240 L 650 236 L 700 238 L 750 236 L 800 238 L 800 270 L 0 270 Z" fill="#A0522D"/>
+<rect x="0" y="267" width="800" height="3" fill="#2A1008"/>
+<path d="M0 273 L 0 270 L 50 274 L 100 270 L 150 274 L 200 274 L 250 270 L 300 270 L 350 274 L 400 274 L 450 270 L 500 270 L 550 272 L 600 274 L 650 274 L 700 274 L 750 270 L 800 274 L 800 304 L 0 304 Z" fill="#93492A"/>
+<rect x="0" y="301" width="800" height="3" fill="#2A1008"/>
+<path d="M0 307 L 0 306 L 50 308 L 100 308 L 150 304 L 200 304 L 250 308 L 300 306 L 350 304 L 400 304 L 450 308 L 500 308 L 550 304 L 600 308 L 650 306 L 700 308 L 750 308 L 800 308 L 800 338 L 0 338 Z" fill="#A0522D"/>
+<rect x="0" y="335" width="800" height="3" fill="#2A1008"/>
+<path d="M0 341 L 0 342 L 50 342 L 100 338 L 150 340 L 200 338 L 250 342 L 300 340 L 350 340 L 400 338 L 450 340 L 500 338 L 550 342 L 600 342 L 650 338 L 700 340 L 750 342 L 800 340 L 800 372 L 0 372 Z" fill="#93492A"/>
+<rect x="0" y="369" width="800" height="3" fill="#2A1008"/>
+<rect x="631.0" y="70" width="71.5" height="302" fill="url(#hatch)"/>
+<g fill="#2A1008"><path d="M659.75 68.0 Q 647.75 65.0 649.75 53.0 Q 650.75 46.0 643.75 48.0" stroke="#2A1008" stroke-width="2.0" fill="none" stroke-linecap="round"/><ellipse cx="660.75" cy="60.0" rx="6.5" ry="8.5" transform="rotate(-12 660.75 60.0)"/><circle cx="664.75" cy="50.0" r="4.5"/><ellipse cx="669.25" cy="51.5" rx="4.0" ry="2.25" transform="rotate(18 669.25 51.5)"/><ellipse cx="659.75" cy="67.0" rx="7.0" ry="2.0"/></g>
+<path d="M16 75 H 108 L 114 81 V 92 L 108 98 H 16 L 10 92 V 81 Z" fill="#4A1E0E"/>
+<text x="18" y="86.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">KICK</text>
+<path d="M147.75 75 H 183.75 L 188.75 80 V 90 L 183.75 95 H 147.75 L 142.75 90 V 80 Z" fill="#5E2A14"/>
+<rect x="142.75" y="75.0" width="46" height="20.0" fill="#FFD27A"/>
+<rect x="142.75" y="75.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M231.25 75 H 267.25 L 272.25 80 V 90 L 267.25 95 H 231.25 L 226.25 90 V 80 Z" fill="#5E2A14"/>
+<path d="M314.75 75 H 350.75 L 355.75 80 V 90 L 350.75 95 H 314.75 L 309.75 90 V 80 Z" fill="#5E2A14"/>
+<path d="M398.25 75 H 434.25 L 439.25 80 V 90 L 434.25 95 H 398.25 L 393.25 90 V 80 Z" fill="#5E2A14"/>
+<path d="M481.75 75 H 517.75 L 522.75 80 V 90 L 517.75 95 H 481.75 L 476.75 90 V 80 Z" fill="#5E2A14"/>
+<rect x="476.75" y="77.0" width="46" height="18.0" fill="#F2A93B"/>
+<rect x="476.75" y="77.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M565.25 75 H 601.25 L 606.25 80 V 90 L 601.25 95 H 565.25 L 560.25 90 V 80 Z" fill="#5E2A14"/>
+<path d="M648.75 75 H 684.75 L 689.75 80 V 90 L 684.75 95 H 648.75 L 643.75 90 V 80 Z" fill="#5E2A14"/>
+<rect x="643.75" y="83.0" width="46" height="12.0" fill="#F2A93B"/>
+<rect x="643.75" y="83.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M685.75 73 H 713.75 L 708.75 80 L 713.75 87 H 685.75 Z" fill="#2A1008"/>
+<text x="698.75" y="80.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2A93B" text-anchor="middle" font-weight="900" dominant-baseline="middle" >2:4</text>
+<path d="M732.25 75 H 768.25 L 773.25 80 V 90 L 768.25 95 H 732.25 L 727.25 90 V 80 Z" fill="#5E2A14"/>
+<path d="M16 109 H 108 L 114 115 V 156 L 108 162 H 16 L 10 156 V 115 Z" fill="#F2A93B"/>
+<text x="18" y="135.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="19" fill="#2A1008" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">SNARE</text>
+<path d="M141.75 109 H 189.75 L 194.75 114 V 154 L 189.75 159 H 141.75 L 136.75 154 V 114 Z" fill="#5E2A14"/>
+<path d="M225.25 109 H 273.25 L 278.25 114 V 154 L 273.25 159 H 225.25 L 220.25 154 V 114 Z" fill="#5E2A14"/>
+<path d="M308.75 109 H 356.75 L 361.75 114 V 154 L 356.75 159 H 308.75 L 303.75 154 V 114 Z" fill="#5E2A14"/>
+<path d="M392.25 109 H 440.25 L 445.25 114 V 154 L 440.25 159 H 392.25 L 387.25 154 V 114 Z" fill="#5E2A14"/>
+<path d="M475.75 109 H 523.75 L 528.75 114 V 154 L 523.75 159 H 475.75 L 470.75 154 V 114 Z" fill="#5E2A14"/>
+<rect x="470.75" y="109.0" width="58" height="50.0" fill="#FFD27A"/>
+<rect x="470.75" y="109.0" width="58" height="3" fill="#FFF4D6" opacity=".8"/>
+<text x="499.75" y="149" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="13" fill="#2A1008" text-anchor="middle" font-weight="900" dominant-baseline="middle" >100</text>
+<path d="M559.25 109 H 607.25 L 612.25 114 V 154 L 607.25 159 H 559.25 L 554.25 154 V 114 Z" fill="#5E2A14"/>
+<path d="M642.75 109 H 690.75 L 695.75 114 V 154 L 690.75 159 H 642.75 L 637.75 154 V 114 Z" fill="#5E2A14"/>
+<path d="M726.25 109 H 774.25 L 779.25 114 V 154 L 774.25 159 H 726.25 L 721.25 154 V 114 Z" fill="#5E2A14"/>
+<rect x="721.25" y="139.0" width="58" height="20.0" fill="#F2A93B"/>
+<rect x="721.25" y="139.0" width="58" height="3" fill="#FFF4D6" opacity=".8"/>
+<text x="750.25" y="149" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="13" fill="#2A1008" text-anchor="middle" font-weight="900" dominant-baseline="middle" >40</text>
+<path d="M770 107 H 798 L 793 114 L 798 121 H 770 Z" fill="#2A1008"/>
+<text x="783" y="114.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2A93B" text-anchor="middle" font-weight="900" dominant-baseline="middle" >50%</text>
+<path d="M472.75 105 H 526.75 L 533.75 112 V 156 L 526.75 163 H 472.75 L 465.75 156 V 112 Z" fill="none" stroke="#2A1008" stroke-width="5"/>
+<path d="M472.75 105 H 526.75 L 533.75 112 V 156 L 526.75 163 H 472.75 L 465.75 156 V 112 Z" fill="none" stroke="#FFF4D6" stroke-width="2.5"/>
+<path d="M16 173 H 108 L 114 179 V 190 L 108 196 H 16 L 10 190 V 179 Z" fill="#4A1E0E"/>
+<text x="18" y="184.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">HAT</text>
+<path d="M147.75 173 H 183.75 L 188.75 178 V 188 L 183.75 193 H 147.75 L 142.75 188 V 178 Z" fill="#5E2A14"/>
+<rect x="142.75" y="177.0" width="46" height="16.0" fill="#F2A93B"/>
+<rect x="142.75" y="177.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M231.25 173 H 267.25 L 272.25 178 V 188 L 267.25 193 H 231.25 L 226.25 188 V 178 Z" fill="#5E2A14"/>
+<rect x="226.25" y="185.0" width="46" height="8.0" fill="#F2A93B"/>
+<rect x="226.25" y="185.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M314.75 173 H 350.75 L 355.75 178 V 188 L 350.75 193 H 314.75 L 309.75 188 V 178 Z" fill="#5E2A14"/>
+<rect x="309.75" y="179.0" width="46" height="14.0" fill="#F2A93B"/>
+<rect x="309.75" y="179.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M398.25 173 H 434.25 L 439.25 178 V 188 L 434.25 193 H 398.25 L 393.25 188 V 178 Z" fill="#5E2A14"/>
+<rect x="393.25" y="185.0" width="46" height="8.0" fill="#F2A93B"/>
+<rect x="393.25" y="185.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M481.75 173 H 517.75 L 522.75 178 V 188 L 517.75 193 H 481.75 L 476.75 188 V 178 Z" fill="#5E2A14"/>
+<rect x="476.75" y="177.0" width="46" height="16.0" fill="#F2A93B"/>
+<rect x="476.75" y="177.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M565.25 173 H 601.25 L 606.25 178 V 188 L 601.25 193 H 565.25 L 560.25 188 V 178 Z" fill="#5E2A14"/>
+<rect x="560.25" y="185.0" width="46" height="8.0" fill="#F2A93B"/>
+<rect x="560.25" y="185.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M648.75 173 H 684.75 L 689.75 178 V 188 L 684.75 193 H 648.75 L 643.75 188 V 178 Z" fill="#5E2A14"/>
+<rect x="643.75" y="179.0" width="46" height="14.0" fill="#F2A93B"/>
+<rect x="643.75" y="179.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M732.25 173 H 768.25 L 773.25 178 V 188 L 768.25 193 H 732.25 L 727.25 188 V 178 Z" fill="#5E2A14"/>
+<rect x="727.25" y="183.0" width="46" height="10.0" fill="#F2A93B"/>
+<rect x="727.25" y="183.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M16 207 H 108 L 114 213 V 224 L 108 230 H 16 L 10 224 V 213 Z" fill="#4A1E0E"/>
+<text x="18" y="218.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">DJEMBE</text>
+<path d="M147.75 207 H 183.75 L 188.75 212 V 222 L 183.75 227 H 147.75 L 142.75 222 V 212 Z" fill="#5E2A14"/>
+<path d="M231.25 207 H 267.25 L 272.25 212 V 222 L 267.25 227 H 231.25 L 226.25 222 V 212 Z" fill="#5E2A14"/>
+<path d="M314.75 207 H 350.75 L 355.75 212 V 222 L 350.75 227 H 314.75 L 309.75 222 V 212 Z" fill="#5E2A14"/>
+<rect x="309.75" y="213.0" width="46" height="14.0" fill="#F2A93B"/>
+<rect x="309.75" y="213.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M398.25 207 H 434.25 L 439.25 212 V 222 L 434.25 227 H 398.25 L 393.25 222 V 212 Z" fill="#5E2A14"/>
+<path d="M481.75 207 H 517.75 L 522.75 212 V 222 L 517.75 227 H 481.75 L 476.75 222 V 212 Z" fill="#5E2A14"/>
+<path d="M565.25 207 H 601.25 L 606.25 212 V 222 L 601.25 227 H 565.25 L 560.25 222 V 212 Z" fill="#5E2A14"/>
+<path d="M648.75 207 H 684.75 L 689.75 212 V 222 L 684.75 227 H 648.75 L 643.75 222 V 212 Z" fill="#5E2A14"/>
+<rect x="643.75" y="215.0" width="46" height="12.0" fill="#F2A93B"/>
+<rect x="643.75" y="215.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M732.25 207 H 768.25 L 773.25 212 V 222 L 768.25 227 H 732.25 L 727.25 222 V 212 Z" fill="#5E2A14"/>
+<path d="M16 241 H 108 L 114 247 V 258 L 108 264 H 16 L 10 258 V 247 Z" fill="#4A1E0E"/>
+<text x="18" y="252.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">TOM</text>
+<path d="M147.75 241 H 183.75 L 188.75 246 V 256 L 183.75 261 H 147.75 L 142.75 256 V 246 Z" fill="#5E2A14"/>
+<path d="M231.25 241 H 267.25 L 272.25 246 V 256 L 267.25 261 H 231.25 L 226.25 256 V 246 Z" fill="#5E2A14"/>
+<rect x="226.25" y="251.0" width="46" height="10.0" fill="#F2A93B"/>
+<rect x="226.25" y="251.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M314.75 241 H 350.75 L 355.75 246 V 256 L 350.75 261 H 314.75 L 309.75 256 V 246 Z" fill="#5E2A14"/>
+<path d="M398.25 241 H 434.25 L 439.25 246 V 256 L 434.25 261 H 398.25 L 393.25 256 V 246 Z" fill="#5E2A14"/>
+<rect x="393.25" y="249.0" width="46" height="12.0" fill="#F2A93B"/>
+<rect x="393.25" y="249.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M481.75 241 H 517.75 L 522.75 246 V 256 L 517.75 261 H 481.75 L 476.75 256 V 246 Z" fill="#5E2A14"/>
+<path d="M565.25 241 H 601.25 L 606.25 246 V 256 L 601.25 261 H 565.25 L 560.25 256 V 246 Z" fill="#5E2A14"/>
+<path d="M648.75 241 H 684.75 L 689.75 246 V 256 L 684.75 261 H 648.75 L 643.75 256 V 246 Z" fill="#5E2A14"/>
+<rect x="643.75" y="251.0" width="46" height="10.0" fill="#F2A93B"/>
+<rect x="643.75" y="251.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M732.25 241 H 768.25 L 773.25 246 V 256 L 768.25 261 H 732.25 L 727.25 256 V 246 Z" fill="#5E2A14"/>
+<path d="M16 275 H 108 L 114 281 V 292 L 108 298 H 16 L 10 292 V 281 Z" fill="#4A1E0E"/>
+<text x="18" y="286.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">CLAP</text>
+<path d="M147.75 275 H 183.75 L 188.75 280 V 290 L 183.75 295 H 147.75 L 142.75 290 V 280 Z" fill="#5E2A14"/>
+<path d="M231.25 275 H 267.25 L 272.25 280 V 290 L 267.25 295 H 231.25 L 226.25 290 V 280 Z" fill="#5E2A14"/>
+<path d="M314.75 275 H 350.75 L 355.75 280 V 290 L 350.75 295 H 314.75 L 309.75 290 V 280 Z" fill="#5E2A14"/>
+<path d="M398.25 275 H 434.25 L 439.25 280 V 290 L 434.25 295 H 398.25 L 393.25 290 V 280 Z" fill="#5E2A14"/>
+<path d="M481.75 275 H 517.75 L 522.75 280 V 290 L 517.75 295 H 481.75 L 476.75 290 V 280 Z" fill="#5E2A14"/>
+<rect x="476.75" y="275.0" width="46" height="20.0" fill="#FFD27A"/>
+<rect x="476.75" y="275.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M518.75 273 H 546.75 L 541.75 280 L 546.75 287 H 518.75 Z" fill="#2A1008"/>
+<text x="531.75" y="280.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2A93B" text-anchor="middle" font-weight="900" dominant-baseline="middle" >1:2</text>
+<path d="M565.25 275 H 601.25 L 606.25 280 V 290 L 601.25 295 H 565.25 L 560.25 290 V 280 Z" fill="#5E2A14"/>
+<path d="M648.75 275 H 684.75 L 689.75 280 V 290 L 684.75 295 H 648.75 L 643.75 290 V 280 Z" fill="#5E2A14"/>
+<path d="M732.25 275 H 768.25 L 773.25 280 V 290 L 768.25 295 H 732.25 L 727.25 290 V 280 Z" fill="#5E2A14"/>
+<path d="M16 309 H 108 L 114 315 V 326 L 108 332 H 16 L 10 326 V 315 Z" fill="#4A1E0E"/>
+<text x="18" y="320.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#8A6A55" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">SHAKER</text>
+<text x="106" y="320.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#8A6A55" text-anchor="end" font-weight="900" dominant-baseline="middle" >M</text>
+<path d="M147.75 309 H 183.75 L 188.75 314 V 324 L 183.75 329 H 147.75 L 142.75 324 V 314 Z" fill="#6A3A24"/>
+<rect x="142.75" y="319.0" width="46" height="10.0" fill="#B89A80"/>
+<rect x="142.75" y="319.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M231.25 309 H 267.25 L 272.25 314 V 324 L 267.25 329 H 231.25 L 226.25 324 V 314 Z" fill="#6A3A24"/>
+<rect x="226.25" y="323.0" width="46" height="6.0" fill="#B89A80"/>
+<rect x="226.25" y="323.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M314.75 309 H 350.75 L 355.75 314 V 324 L 350.75 329 H 314.75 L 309.75 324 V 314 Z" fill="#6A3A24"/>
+<rect x="309.75" y="319.0" width="46" height="10.0" fill="#B89A80"/>
+<rect x="309.75" y="319.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M398.25 309 H 434.25 L 439.25 314 V 324 L 434.25 329 H 398.25 L 393.25 324 V 314 Z" fill="#6A3A24"/>
+<rect x="393.25" y="323.0" width="46" height="6.0" fill="#B89A80"/>
+<rect x="393.25" y="323.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M481.75 309 H 517.75 L 522.75 314 V 324 L 517.75 329 H 481.75 L 476.75 324 V 314 Z" fill="#6A3A24"/>
+<rect x="476.75" y="319.0" width="46" height="10.0" fill="#B89A80"/>
+<rect x="476.75" y="319.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M565.25 309 H 601.25 L 606.25 314 V 324 L 601.25 329 H 565.25 L 560.25 324 V 314 Z" fill="#6A3A24"/>
+<rect x="560.25" y="323.0" width="46" height="6.0" fill="#B89A80"/>
+<rect x="560.25" y="323.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M648.75 309 H 684.75 L 689.75 314 V 324 L 684.75 329 H 648.75 L 643.75 324 V 314 Z" fill="#6A3A24"/>
+<rect x="643.75" y="319.0" width="46" height="10.0" fill="#B89A80"/>
+<rect x="643.75" y="319.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M732.25 309 H 768.25 L 773.25 314 V 324 L 768.25 329 H 732.25 L 727.25 324 V 314 Z" fill="#6A3A24"/>
+<rect x="727.25" y="323.0" width="46" height="6.0" fill="#B89A80"/>
+<rect x="727.25" y="323.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M16 343 H 108 L 114 349 V 360 L 108 366 H 16 L 10 360 V 349 Z" fill="#4A1E0E"/>
+<text x="18" y="354.0" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="12" fill="#FBE7C0" text-anchor="start" font-weight="900" dominant-baseline="middle" letter-spacing="1">PERC</text>
+<path d="M147.75 343 H 183.75 L 188.75 348 V 358 L 183.75 363 H 147.75 L 142.75 358 V 348 Z" fill="#5E2A14"/>
+<path d="M231.25 343 H 267.25 L 272.25 348 V 358 L 267.25 363 H 231.25 L 226.25 358 V 348 Z" fill="#5E2A14"/>
+<path d="M314.75 343 H 350.75 L 355.75 348 V 358 L 350.75 363 H 314.75 L 309.75 358 V 348 Z" fill="#5E2A14"/>
+<path d="M398.25 343 H 434.25 L 439.25 348 V 358 L 434.25 363 H 398.25 L 393.25 358 V 348 Z" fill="#5E2A14"/>
+<path d="M481.75 343 H 517.75 L 522.75 348 V 358 L 517.75 363 H 481.75 L 476.75 358 V 348 Z" fill="#5E2A14"/>
+<path d="M565.25 343 H 601.25 L 606.25 348 V 358 L 601.25 363 H 565.25 L 560.25 358 V 348 Z" fill="#5E2A14"/>
+<path d="M648.75 343 H 684.75 L 689.75 348 V 358 L 684.75 363 H 648.75 L 643.75 358 V 348 Z" fill="#5E2A14"/>
+<rect x="643.75" y="345.0" width="46" height="18.0" fill="#F2A93B"/>
+<rect x="643.75" y="345.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M685.75 341 H 719.75 L 714.75 348 L 719.75 355 H 685.75 Z" fill="#2A1008"/>
+<text x="701.75" y="348.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2A93B" text-anchor="middle" font-weight="900" dominant-baseline="middle" >FILL</text>
+<path d="M732.25 343 H 768.25 L 773.25 348 V 358 L 768.25 363 H 732.25 L 727.25 358 V 348 Z" fill="#5E2A14"/>
+<rect x="727.25" y="345.0" width="46" height="18.0" fill="#F2A93B"/>
+<rect x="727.25" y="345.0" width="46" height="3" fill="#FFF4D6" opacity=".8"/>
+<path d="M764 341 H 798 L 793 348 L 798 355 H 764 Z" fill="#2A1008"/>
+<text x="780" y="348.5" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="9" fill="#F2A93B" text-anchor="middle" font-weight="900" dominant-baseline="middle" >FILL</text>
+<text x="14" y="390" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="10" fill="#E8B98A" text-anchor="start" font-weight="800" dominant-baseline="middle" letter-spacing="1">TOP ROW: SNARE 1–8   /   SHIFT: CHIMP OUT</text>
+<path d="M563 383 H 579 L 582 386 V 394 L 579 397 H 563 L 560 394 V 386 Z" fill="#F2A93B"/>
+<path d="M591 383 H 607 L 610 386 V 394 L 607 397 H 591 L 588 394 V 386 Z" fill="#6A3A24"/>
+<path d="M619 383 H 635 L 638 386 V 394 L 635 397 H 619 L 616 394 V 386 Z" fill="#6A3A24"/>
+<path d="M647 383 H 663 L 666 386 V 394 L 663 397 H 647 L 644 394 V 386 Z" fill="#6A3A24"/>
+<path d="M675 383 H 691 L 694 386 V 394 L 691 397 H 675 L 672 394 V 386 Z" fill="#6A3A24"/>
+<path d="M703 383 H 719 L 722 386 V 394 L 719 397 H 703 L 700 394 V 386 Z" fill="#6A3A24"/>
+<path d="M731 383 H 747 L 750 386 V 394 L 747 397 H 731 L 728 394 V 386 Z" fill="#6A3A24"/>
+<path d="M759 383 H 775 L 778 386 V 394 L 775 397 H 759 L 756 394 V 386 Z" fill="#6A3A24"/>
+<path d="M18.0 430 H 89.0 L 99.0 440 V 462 L 89.0 472 H 18.0 L 8.0 462 V 440 Z" fill="#5E2A14"/>
+<text x="53.5" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >1</text>
+<path d="M116.5 430 H 187.5 L 197.5 440 V 462 L 187.5 472 H 116.5 L 106.5 462 V 440 Z" fill="#5E2A14"/>
+<text x="152.0" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >2</text>
+<path d="M215.0 430 H 286.0 L 296.0 440 V 462 L 286.0 472 H 215.0 L 205.0 462 V 440 Z" fill="#5E2A14"/>
+<text x="250.5" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >3</text>
+<path d="M313.5 430 H 384.5 L 394.5 440 V 462 L 384.5 472 H 313.5 L 303.5 462 V 440 Z" fill="#5E2A14"/>
+<text x="349.0" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >4</text>
+<path d="M412.0 430 H 483.0 L 493.0 440 V 462 L 483.0 472 H 412.0 L 402.0 462 V 440 Z" fill="#F2A93B"/>
+<text x="447.5" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#2A1008" text-anchor="middle" font-weight="900" dominant-baseline="middle" >5</text>
+<path d="M510.5 430 H 581.5 L 591.5 440 V 462 L 581.5 472 H 510.5 L 500.5 462 V 440 Z" fill="#5E2A14"/>
+<text x="546.0" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >6</text>
+<path d="M609.0 430 H 680.0 L 690.0 440 V 462 L 680.0 472 H 609.0 L 599.0 462 V 440 Z" fill="#5E2A14"/>
+<text x="644.5" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#C98A5E" text-anchor="middle" font-weight="900" dominant-baseline="middle" >7</text>
+<path d="M707.5 430 H 778.5 L 788.5 440 V 462 L 778.5 472 H 707.5 L 697.5 462 V 440 Z" fill="#F2A93B"/>
+<text x="743.0" y="452" font-family="Inter Display, Inter, Liberation Sans, sans-serif" font-size="20" fill="#2A1008" text-anchor="middle" font-weight="900" dominant-baseline="middle" >8</text>
+</svg>
