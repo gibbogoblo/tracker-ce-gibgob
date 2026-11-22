@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480">
+<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6D28A"/><stop offset="1" stop-color="#E89A55"/></linearGradient>
+<radialGradient id="stone" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#FFE4A6"/><stop offset=".6" stop-color="#F2B04C"/><stop offset="1" stop-color="#B8701F"/></radialGradient></defs>
+<rect width="800" height="480" fill="url(#sky)"/>
+<circle cx="610" cy="40" r="26" fill="#FFF0C4" opacity=".8"/>
+<path d="M0 60 Q 120 46 260 56 T 520 52 T 800 58 V 70 H 0 Z" fill="#C98451" opacity=".6"/>
+<path d="M330 62 L 334 30 L 320 22 M334 30 L 346 20" stroke="#3A1E12" stroke-width="4" fill="none"/><ellipse cx="334" cy="20" rx="40" ry="8" fill="#3A1E12"/><ellipse cx="354" cy="15" rx="20" ry="5" fill="#3A1E12"/>
+<rect x="0" y="60" width="800" height="420" fill="#7A3E22"/>
+<rect y="400" width="800" height="80" fill="#5A2C18"/>
+<g fill="#3A1E12"><path d="M230.2 62.0 Q 208.6 56.6 212.2 35.0 Q 214.0 22.4 201.4 26.0" stroke="#3A1E12" stroke-width="3.6" fill="none" stroke-linecap="round"/><ellipse cx="232.0" cy="47.6" rx="11.700000000000001" ry="15.3" transform="rotate(-12 232.0 47.6)"/><circle cx="239.2" cy="29.6" r="8.1"/><ellipse cx="247.3" cy="32.3" rx="7.2" ry="4.05" transform="rotate(18 247.3 32.3)"/><ellipse cx="230.2 " cy="60.2" rx="12.6" ry="3.6"/><rect x="234.70000000000002" y="49.4" width="2.7" height="12.6" rx="1.35"/></g><g fill="#3A1E12"><path d="M281.44 62.0 Q 298.72 57.68 295.84 40.400000000000006 Q 294.4 30.32 304.48 33.2" stroke="#3A1E12" stroke-width="2.88" fill="none" stroke-linecap="round"/><ellipse cx="280.0" cy="50.480000000000004" rx="9.36" ry="12.24" transform="rotate(12 280.0 50.480000000000004)"/><circle cx="274.24" cy="36.08" r="6.4799999999999995"/><ellipse cx="267.76" cy="38.24" rx="5.76" ry="3.2399999999999998" transform="rotate(-18 267.76 38.24)"/><ellipse cx="281.44 " cy="60.56" rx="10.08" ry="2.88"/><rect x="275.68" y="51.92" width="2.16" height="10.08" rx="1.08"/></g><g fill="#3A1E12"><path d="M398.9 62.0 Q 385.7 58.7 387.9 45.5 Q 389.0 37.8 381.3 40.0" stroke="#3A1E12" stroke-width="2.2" fill="none" stroke-linecap="round"/><ellipse cx="400.0" cy="53.2" rx="7.15" ry="9.350000000000001" transform="rotate(-12 400.0 53.2)"/><circle cx="404.4" cy="42.2" r="4.95"/><ellipse cx="409.35" cy="43.849999999999994" rx="4.4" ry="2.475" transform="rotate(18 409.35 43.849999999999994)"/><ellipse cx="398.9 " cy="60.9" rx="7.700000000000001" ry="2.2"/><rect x="401.65000000000003" y="54.3" width="1.6500000000000001" height="7.700000000000001" rx="0.8250000000000001"/></g>
+<text x="16" y="22" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="20" fill="#3A1E12" text-anchor="start" font-weight="bold" dominant-baseline="middle" letter-spacing="1.5">SAFARI CLIFFS</text>
+<text x="16" y="42" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="12" fill="#5A2C18" text-anchor="start" font-weight="normal" dominant-baseline="middle" >Pattern 03  ·  64 steps  ·  128 BPM</text>
+
+<rect x="432" y="9" width="82" height="40" rx="8" fill="#F7E2B5" stroke="#B8451F" stroke-width="2"/>
+<text x="473" y="21" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="10" fill="#B8451F" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >Prob</text>
+<text x="473" y="37" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#3A1E12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >1:2</text>
+<rect x="522" y="9" width="82" height="40" rx="8" fill="#F7E2B5" stroke="#C98A12" stroke-width="2"/>
+<text x="563" y="21" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="10" fill="#C98A12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >Vel</text>
+<text x="563" y="37" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#3A1E12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >96</text>
+<rect x="612" y="9" width="82" height="40" rx="8" fill="#F7E2B5" stroke="#5E7A2A" stroke-width="2"/>
+<text x="653" y="21" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="10" fill="#5E7A2A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >Nud</text>
+<text x="653" y="37" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#3A1E12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >0</text>
+<rect x="702" y="9" width="82" height="40" rx="8" fill="#F7E2B5" stroke="#7A4A8E" stroke-width="2"/>
+<text x="743" y="21" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="10" fill="#7A4A8E" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >Pitch</text>
+<text x="743" y="37" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#3A1E12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >0</text>
+<path d="M0 66 L 0 66.5 L 40 67.0 L 80 67.2 L 120 67.8 L 160 67.0 L 200 67.7 L 240 64.1 L 280 65.9 L 320 67.8 L 360 66.6 L 400 67.6 L 440 64.5 L 480 65.9 L 520 65.0 L 560 66.2 L 600 66.3 L 640 64.1 L 680 64.9 L 720 65.1 L 760 67.7 L 800 67.1 L 800 106 L 0 106 Z" fill="#9D5532"/><path d="M0 105 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 69 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="86.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Kick</text>
+<path d="M0 106 L 0 104.6 L 40 107.2 L 80 104.6 L 120 106.5 L 160 104.5 L 200 104.0 L 240 107.5 L 280 104.8 L 320 104.9 L 360 107.9 L 400 107.5 L 440 105.2 L 480 107.8 L 520 106.2 L 560 106.7 L 600 104.8 L 640 107.8 L 680 106.8 L 720 107.9 L 760 107.6 L 800 105.2 L 800 146 L 0 146 Z" fill="#8E4A2B"/><path d="M0 145 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 109 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<rect x="8" y="109" width="120" height="34" rx="8" fill="#F2B04C"/>
+<text x="18" y="126.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#3A1E12" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Snare</text>
+<path d="M0 146 L 0 145.4 L 40 144.7 L 80 144.6 L 120 144.3 L 160 145.2 L 200 146.4 L 240 144.0 L 280 146.7 L 320 145.4 L 360 145.2 L 400 147.3 L 440 145.9 L 480 145.3 L 520 145.9 L 560 146.8 L 600 144.2 L 640 147.9 L 680 144.1 L 720 147.0 L 760 147.4 L 800 144.1 L 800 186 L 0 186 Z" fill="#9D5532"/><path d="M0 185 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 149 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="166.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Hat</text>
+<path d="M0 186 L 0 187.2 L 40 185.5 L 80 186.3 L 120 184.0 L 160 184.2 L 200 184.7 L 240 187.8 L 280 184.8 L 320 187.0 L 360 187.7 L 400 187.8 L 440 185.4 L 480 185.4 L 520 186.1 L 560 187.1 L 600 184.4 L 640 187.0 L 680 187.2 L 720 187.4 L 760 184.1 L 800 187.8 L 800 226 L 0 226 Z" fill="#8E4A2B"/><path d="M0 225 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 189 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="206.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Djembe</text>
+<path d="M0 226 L 0 224.4 L 40 225.4 L 80 226.4 L 120 227.7 L 160 225.4 L 200 227.7 L 240 226.2 L 280 225.2 L 320 225.3 L 360 224.7 L 400 224.3 L 440 224.6 L 480 226.8 L 520 228.0 L 560 224.6 L 600 224.2 L 640 227.9 L 680 226.1 L 720 225.6 L 760 224.9 L 800 226.4 L 800 266 L 0 266 Z" fill="#9D5532"/><path d="M0 265 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 229 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="246.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Tom</text>
+<path d="M0 266 L 0 267.3 L 40 265.8 L 80 265.7 L 120 264.2 L 160 267.7 L 200 264.1 L 240 266.0 L 280 267.4 L 320 264.5 L 360 266.9 L 400 267.8 L 440 266.5 L 480 267.2 L 520 264.4 L 560 265.7 L 600 264.6 L 640 267.4 L 680 265.2 L 720 265.8 L 760 268.0 L 800 267.4 L 800 306 L 0 306 Z" fill="#8E4A2B"/><path d="M0 305 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 269 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="286.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Clap</text>
+<path d="M0 306 L 0 307.9 L 40 305.8 L 80 306.0 L 120 306.9 L 160 305.9 L 200 305.2 L 240 305.6 L 280 304.6 L 320 305.5 L 360 308.0 L 400 307.8 L 440 306.5 L 480 306.0 L 520 305.4 L 560 304.4 L 600 305.1 L 640 307.1 L 680 307.5 L 720 305.4 L 760 307.1 L 800 307.1 L 800 346 L 0 346 Z" fill="#9D5532"/><path d="M0 345 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 309 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="326.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#B0876A" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Shaker</text>
+<text x="118" y="326.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="11" fill="#B0876A" text-anchor="end" font-weight="bold" dominant-baseline="middle" >M</text>
+<path d="M0 346 L 0 346.8 L 40 346.7 L 80 347.0 L 120 345.5 L 160 346.8 L 200 345.1 L 240 345.9 L 280 347.1 L 320 346.8 L 360 345.2 L 400 347.8 L 440 346.6 L 480 346.3 L 520 344.0 L 560 346.2 L 600 345.0 L 640 346.7 L 680 345.9 L 720 347.3 L 760 346.6 L 800 347.2 L 800 386 L 0 386 Z" fill="#8E4A2B"/><path d="M0 385 H 800" stroke="#5A2C18" stroke-width="2"/><path d="M0 349 H 800" stroke="#C98451" stroke-opacity=".35"/>
+<text x="18" y="366.0" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="14" fill="#F7E2B5" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Perc</text>
+<rect x="380.5" y="66" width="40.5" height="320" fill="#FFE4A6" opacity=".16"/><g fill="#2A140B"><path d="M395.15 65.0 Q 375.95 60.2 379.15 41.0 Q 380.75 29.799999999999997 369.55 33.0" stroke="#2A140B" stroke-width="3.2" fill="none" stroke-linecap="round"/><ellipse cx="396.75" cy="52.2" rx="10.4" ry="13.600000000000001" transform="rotate(-12 396.75 52.2)"/><circle cx="403.15" cy="36.2" r="7.2"/><ellipse cx="410.35" cy="38.599999999999994" rx="6.4" ry="3.6" transform="rotate(18 410.35 38.599999999999994)"/><ellipse cx="395.15 " cy="63.4" rx="11.200000000000001" ry="3.2"/><rect x="399.15000000000003" y="53.8" width="2.4000000000000004" height="11.200000000000001" rx="1.2000000000000002"/></g>
+<ellipse cx="156.25" cy="88.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="156.25" cy="86.0" rx="15" ry="12" fill="url(#stone)"/>
+<ellipse cx="196.75" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="277.75" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="319.75" cy="88.0" rx="14.4" ry="11.5" fill="#4A2412"/><ellipse cx="319.75" cy="86.0" rx="14.4" ry="11.5" fill="url(#stone)"/>
+<ellipse cx="360.25" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="441.25" cy="88.0" rx="12.0" ry="9.5" fill="#4A2412"/><ellipse cx="441.25" cy="86.0" rx="12.0" ry="9.5" fill="url(#stone)"/>
+<ellipse cx="483.25" cy="88.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="483.25" cy="86.0" rx="15" ry="12" fill="url(#stone)"/>
+<ellipse cx="523.75" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="564.25" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="646.75" cy="88.0" rx="14.4" ry="11.5" fill="#4A2412"/><ellipse cx="646.75" cy="86.0" rx="14.4" ry="11.5" fill="url(#stone)"/>
+<ellipse cx="687.25" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="727.75" cy="88.0" rx="12.6" ry="10.0" fill="#4A2412"/><ellipse cx="727.75" cy="86.0" rx="12.6" ry="10.0" fill="url(#stone)"/>
+<rect x="712.75" y="93" width="30" height="12" rx="6" fill="#3A1E12"/>
+<text x="727.75" y="99" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="9" fill="#F2B04C" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >2:4</text>
+<ellipse cx="768.25" cy="86.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="156.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="196.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="277.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="319.75" cy="128.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="319.75" cy="126.0" rx="15" ry="12" fill="url(#stone)"/>
+<ellipse cx="360.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="441.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="483.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="523.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="564.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="646.75" cy="128.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="646.75" cy="126.0" rx="15" ry="12" fill="url(#stone)"/>
+<ellipse cx="687.25" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="727.75" cy="126.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="768.25" cy="128.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="768.25" cy="126.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<rect x="753.25" y="133" width="30" height="12" rx="6" fill="#3A1E12"/>
+<text x="768.25" y="139" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="9" fill="#F2B04C" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >50%</text>
+<ellipse cx="156.25" cy="168.0" rx="13.8" ry="11.0" fill="#4A2412"/><ellipse cx="156.25" cy="166.0" rx="13.8" ry="11.0" fill="url(#stone)"/>
+<ellipse cx="196.75" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="196.75" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="237.25" cy="168.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="237.25" cy="166.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="277.75" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="277.75" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="319.75" cy="168.0" rx="13.8" ry="11.0" fill="#4A2412"/><ellipse cx="319.75" cy="166.0" rx="13.8" ry="11.0" fill="url(#stone)"/>
+<ellipse cx="360.25" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="360.25" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="400.75" cy="168.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="400.75" cy="166.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="441.25" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="441.25" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="483.25" cy="168.0" rx="13.8" ry="11.0" fill="#4A2412"/><ellipse cx="483.25" cy="166.0" rx="13.8" ry="11.0" fill="url(#stone)"/>
+<ellipse cx="523.75" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="523.75" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="564.25" cy="168.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="564.25" cy="166.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="604.75" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="604.75" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="646.75" cy="168.0" rx="13.8" ry="11.0" fill="#4A2412"/><ellipse cx="646.75" cy="166.0" rx="13.8" ry="11.0" fill="url(#stone)"/>
+<ellipse cx="687.25" cy="168.0" rx="11.4" ry="9.0" fill="#4A2412"/><ellipse cx="687.25" cy="166.0" rx="11.4" ry="9.0" fill="url(#stone)"/>
+<ellipse cx="727.75" cy="168.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="727.75" cy="166.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="768.25" cy="168.0" rx="12.0" ry="9.5" fill="#4A2412"/><ellipse cx="768.25" cy="166.0" rx="12.0" ry="9.5" fill="url(#stone)"/>
+<ellipse cx="156.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="196.75" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="208.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="237.25" cy="206.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="277.75" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="319.75" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="360.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="208.0" rx="12.6" ry="10.0" fill="#4A2412"/><ellipse cx="400.75" cy="206.0" rx="12.6" ry="10.0" fill="url(#stone)"/>
+<ellipse cx="441.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="483.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="523.75" cy="208.0" rx="13.2" ry="10.5" fill="#4A2412"/><ellipse cx="523.75" cy="206.0" rx="13.2" ry="10.5" fill="url(#stone)"/>
+<ellipse cx="564.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="646.75" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="687.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="727.75" cy="208.0" rx="13.8" ry="11.0" fill="#4A2412"/><ellipse cx="727.75" cy="206.0" rx="13.8" ry="11.0" fill="url(#stone)"/>
+<ellipse cx="768.25" cy="206.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="156.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="196.75" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="277.75" cy="248.0" rx="12.6" ry="10.0" fill="#4A2412"/><ellipse cx="277.75" cy="246.0" rx="12.6" ry="10.0" fill="url(#stone)"/>
+<ellipse cx="319.75" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="360.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="248.0" rx="12.0" ry="9.5" fill="#4A2412"/><ellipse cx="400.75" cy="246.0" rx="12.0" ry="9.5" fill="url(#stone)"/>
+<ellipse cx="441.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="483.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="523.75" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="564.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="248.0" rx="12.6" ry="10.0" fill="#4A2412"/><ellipse cx="604.75" cy="246.0" rx="12.6" ry="10.0" fill="url(#stone)"/>
+<ellipse cx="646.75" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="687.25" cy="248.0" rx="12.0" ry="9.5" fill="#4A2412"/><ellipse cx="687.25" cy="246.0" rx="12.0" ry="9.5" fill="url(#stone)"/>
+<ellipse cx="727.75" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="768.25" cy="246.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="156.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="196.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="277.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="319.75" cy="288.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="319.75" cy="286.0" rx="15" ry="12" fill="url(#stone)"/>
+<ellipse cx="360.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="441.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="483.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="523.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="564.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="646.75" cy="288.0" rx="15" ry="12" fill="#4A2412"/><ellipse cx="646.75" cy="286.0" rx="15" ry="12" fill="url(#stone)"/>
+<rect x="631.75" y="293" width="30" height="12" rx="6" fill="#3A1E12"/>
+<text x="646.75" y="299" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="9" fill="#F2B04C" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >1:2</text>
+<ellipse cx="687.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="727.75" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="768.25" cy="286.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="156.25" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="196.75" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="237.25" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="277.75" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="319.75" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="360.25" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="400.75" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="441.25" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="483.25" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="523.75" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="564.25" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="604.75" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="646.75" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="687.25" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="727.75" cy="326.0" rx="12.0" ry="9.5" fill="#8A6A55"/>
+<ellipse cx="768.25" cy="326.0" rx="10.8" ry="8.5" fill="#8A6A55"/>
+<ellipse cx="156.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="196.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="237.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="277.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="319.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="360.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="400.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="441.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="483.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="523.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="564.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="604.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="646.75" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="687.25" cy="366.0" rx="9" ry="7" fill="#5A2C18" opacity="0.9"/>
+<ellipse cx="727.75" cy="368.0" rx="14.4" ry="11.5" fill="#4A2412"/><ellipse cx="727.75" cy="366.0" rx="14.4" ry="11.5" fill="url(#stone)"/>
+<rect x="712.75" y="373" width="30" height="12" rx="6" fill="#3A1E12"/>
+<text x="727.75" y="379" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="9" fill="#F2B04C" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >FILL</text>
+<ellipse cx="768.25" cy="368.0" rx="14.4" ry="11.5" fill="#4A2412"/><ellipse cx="768.25" cy="366.0" rx="14.4" ry="11.5" fill="url(#stone)"/>
+<rect x="753.25" y="373" width="30" height="12" rx="6" fill="#3A1E12"/>
+<text x="768.25" y="379" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="9" fill="#F2B04C" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >FILL</text>
+<rect x="300.5" y="108" width="38.5" height="36" rx="8" fill="none" stroke="#FFF4D6" stroke-width="3"/>
+<text x="18" y="400" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="12" fill="#F2D3A0" text-anchor="start" font-weight="bold" dominant-baseline="middle" >Steps 1-16</text>
+<rect x="138" y="396" width="160" height="8" rx="4" fill="#F2B04C"/>
+<rect x="302" y="396" width="160" height="8" rx="4" fill="#7A4428"/>
+<rect x="466" y="396" width="160" height="8" rx="4" fill="#7A4428"/>
+<rect x="630" y="396" width="160" height="8" rx="4" fill="#7A4428"/>
+<text x="400" y="422" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="11" fill="#F2D3A0" text-anchor="middle" font-weight="normal" dominant-baseline="middle" >Top row: Snare steps 1-8   ·   Shift: CHIMP OUT</text>
+<rect x="8.0" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="53.5" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >1</text>
+<rect x="106.5" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="152.0" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >2</text>
+<rect x="205.0" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="250.5" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >3</text>
+<rect x="303.5" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="349.0" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >4</text>
+<rect x="402.0" y="430" width="91" height="42" rx="8" fill="#F2B04C" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="447.5" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#3A1E12" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >5</text>
+<rect x="500.5" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="546.0" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >6</text>
+<rect x="599.0" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="644.5" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >7</text>
+<rect x="697.5" y="430" width="91" height="42" rx="8" fill="#5A2C18" stroke="#8E4A2B" stroke-width="1.5"/>
+<text x="743.0" y="451" font-family="Liberation Sans, Arial, Helvetica, sans-serif" font-size="15" fill="#E8C08A" text-anchor="middle" font-weight="bold" dominant-baseline="middle" >8</text>
+</svg>
