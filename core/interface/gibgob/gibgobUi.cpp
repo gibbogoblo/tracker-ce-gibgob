@@ -350,8 +350,10 @@ bool room(int words)
 
 void setLighten(bool on)
 {
-    s_lighten = on;
-    s_haveColor = false;
+    // Shift no longer lightens the colours: drawShiftBorder() adds a blue
+    // wash and a striped frame over the whole screen instead
+    (void)on;
+    s_lighten = false;
 }
 
 void color(uint32_t c)
@@ -472,6 +474,27 @@ void bitmap(uint32_t address, int w, int h, int x, int y)
     s_haveColor = false;
     s_used += 9;
 }
+
+namespace detail
+{
+// for drawing that talks to the chip directly (the Shift look): close an open
+// RECTS, and afterwards forget the cached colour / alpha and count the words
+void endRectsNow()
+{
+    if (s_inRects)
+    {
+        API_END();
+        s_inRects = false;
+        s_used += 1;
+    }
+}
+void forgetState(int words)
+{
+    s_haveColor = false;
+    s_alpha = 255;
+    s_used += words;
+}
+} // namespace detail
 
 namespace
 {
@@ -860,8 +883,62 @@ bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
 
 void drawShiftBorder()
 {
-    draw::color(color::kShiftBorder);
-    draw::frame(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1, 4);
+    // Shift: a subtle blue-purple added over the screen (additive: nothing is
+    // covered, everything lifts towards blue), then a yellow / black striped
+    // frame (one 16 x 16 tile repeated along the edges). Always drawn: it is
+    // small and fixed, and must never be the part that is left out.
+    constexpr uint32_t kWash = 0x1C1648;
+    constexpr uint32_t kStripe = 0xFFB347;
+    constexpr uint32_t kTileAddress = 116000; // display.cpp: bitmaps[kBitmapGibGobHazard]
+    constexpr int t = 6;                      // frame thickness
+    const int y1 = kScreenTop, y2 = kScreenTop + kScreenH - 1;
+    const int h = kScreenH;
+
+    draw::detail::endRectsNow();
+    API_COLOR_A(255);
+    API_BLEND_FUNC(ONE, ONE);
+    API_COLOR(kWash);
+    API_BEGIN(RECTS);
+    API_VERTEX2F(0, (int16_t)y1);
+    API_VERTEX2F(kScreenW - 1, (int16_t)y2);
+    API_END();
+    API_BLEND_FUNC(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+
+    // black under the stripes
+    API_COLOR(0x000000);
+    API_BEGIN(RECTS);
+    API_VERTEX2F(0, (int16_t)y1);
+    API_VERTEX2F(kScreenW - 1, (int16_t)(y1 + t - 1));
+    API_VERTEX2F(0, (int16_t)(y2 - t + 1));
+    API_VERTEX2F(kScreenW - 1, (int16_t)y2);
+    API_VERTEX2F(0, (int16_t)y1);
+    API_VERTEX2F(t - 1, (int16_t)y2);
+    API_VERTEX2F(kScreenW - t, (int16_t)y1);
+    API_VERTEX2F(kScreenW - 1, (int16_t)y2);
+    API_END();
+
+    // the stripes: handle 0 (the fonts use 1 and up), repeated tile
+    API_COLOR(kStripe);
+    API_BITMAP_HANDLE(0);
+    API_BITMAP_SOURCE(kTileAddress);
+    API_BITMAP_LAYOUT(L4, 8, 16);
+    API_BEGIN(BITMAPS);
+    struct Seg
+    {
+        int16_t x, y, w, h;
+    };
+    const Seg segs[6] = {
+        { 0, (int16_t)y1, 400, t },     { 400, (int16_t)y1, 400, t },               // top (under 512 wide each)
+        { 0, (int16_t)(y2 - t + 1), 400, t }, { 400, (int16_t)(y2 - t + 1), 400, t }, // bottom
+        { 0, (int16_t)y1, t, (int16_t)h },  { (int16_t)(kScreenW - t), (int16_t)y1, t, (int16_t)h },
+    };
+    for (const Seg& sg : segs)
+    {
+        API_BITMAP_SIZE(NEAREST, REPEAT, REPEAT, (uint16_t)sg.w, (uint16_t)sg.h);
+        API_VERTEX2F(sg.x, sg.y);
+    }
+    API_END();
+    draw::detail::forgetState(37);
 }
 
 void drawInfoStrip(int titleX,

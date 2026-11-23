@@ -138,6 +138,12 @@ uint32_t scaleColor(uint32_t c, int num, int den);
 // busy pattern loses some detail instead of the whole screen.
 namespace draw
 {
+namespace detail
+{
+void endRectsNow();
+void forgetState(int words);
+} // namespace detail
+
 void begin(int budgetWords);
 int used();
 int skipped(); // drawing calls dropped for lack of room since begin()

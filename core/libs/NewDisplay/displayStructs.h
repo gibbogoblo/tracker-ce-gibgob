@@ -62,6 +62,8 @@ enum enDisplayBitmaps
 
 #endif
 
+    kBitmapGibGobHazard, // GibGob OS: the stripes of the Shift frame
+
     displayBitmapsCount,
 };
 

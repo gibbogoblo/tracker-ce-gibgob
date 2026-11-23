@@ -120,7 +120,12 @@ void API_CMD_GRADIENT(int16_t x0, int16_t y0, uint32_t c0, int16_t x1, int16_t y
     }
 }
 void API_CMD_SETBITMAP(uint32_t a, uint16_t, uint16_t w, uint16_t h) { words += 5; g_bmpAddr = a; g_bmpW = w; g_bmpH = h; }
-void API_BLEND_FUNC(int, int) { words++; }
+static bool g_additive = false;
+void API_BLEND_FUNC(int a, int b) { words++; g_additive = (a == ONE && b == ONE); }
+void API_BITMAP_HANDLE(uint8_t) { words++; }
+void API_BITMAP_SOURCE(uint32_t a) { words++; g_bmpAddr = a; }
+void API_BITMAP_LAYOUT(uint8_t, uint16_t, uint16_t) { words++; }
+void API_BITMAP_SIZE(uint8_t, uint8_t, uint8_t, uint16_t w, uint16_t h) { words++; g_bmpW = w; g_bmpH = h; }
 void API_VERTEX2F(int16_t x, int16_t y)
 {
     words++;
@@ -135,14 +140,19 @@ void API_VERTEX2F(int16_t x, int16_t y)
         else
         {
             const int r = g_lineW > 16 ? g_lineW / 16 : 0; // grown and rounded by the line width
-            fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' rx='%d' fill='#%06X' fill-opacity='%.2f'/>\n", std::min<int>(g_vx, x) - r,
-                    std::min<int>(g_vy, y) - r, std::abs(x - g_vx) + 1 + 2 * r, std::abs(y - g_vy) + 1 + 2 * r, r, lastColor & 0xFFFFFF, g_alpha / 255.0);
+            fprintf(g_svg, "<rect x='%d' y='%d' width='%d' height='%d' rx='%d' fill='#%06X' fill-opacity='%.2f'%s/>\n", std::min<int>(g_vx, x) - r,
+                    std::min<int>(g_vy, y) - r, std::abs(x - g_vx) + 1 + 2 * r, std::abs(y - g_vy) + 1 + 2 * r, r, lastColor & 0xFFFFFF, g_alpha / 255.0,
+                    g_additive ? " style='mix-blend-mode:plus-lighter'" : "");
             g_vn = 0;
         }
     }
-    if (g_svg && beginPrim == BITMAPS)
+    if (g_svg && beginPrim == BITMAPS && g_bmpAddr == 116000) // the Shift frame's stripes
+        fprintf(g_svg, "<defs><pattern id='hz' width='16' height='16' patternUnits='userSpaceOnUse'><path d='M0 8 L8 0 L16 0 L0 16 Z M8 16 L16 8 L16 16 Z' fill='#%06X'/></pattern></defs>"
+                       "<rect x='%d' y='%d' width='%d' height='%d' fill='url(#hz)'/>\n", lastColor & 0xFFFFFF, x, y, g_bmpW, g_bmpH);
+    else if (g_svg && beginPrim == BITMAPS)
         fprintf(g_svg, "<image x='%d' y='%d' width='%d' height='%d' href='%s'/>\n", x, y, g_bmpW, g_bmpH, bitmapFile(g_bmpAddr));
-    if (lastColor == 0xB85548 || lastColor == 0xC97F75) borderRects++; // plain, or lightened by Shift
+    // the Shift look: the blue wash (2 corners) and the 6 striped edges
+    if (lastColor == 0x1C1648 || (beginPrim == BITMAPS && g_bmpAddr == 116000)) borderRects++;
     if (!inBegin) { printf("vertex outside BEGIN\n"); fails++; }
     if (x < -2 || x > 801 || y < g_minY || y > 481) { printf("vertex off screen %d,%d\n", x, y); fails++; }
 }

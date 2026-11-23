@@ -126,8 +126,6 @@ void DrumSeqControl::update()
         draw::color(color::kSelect);
         draw::frame(x1 - 3, y1 - 3, x1 + cellW - 4, y1 + rowH - 4, 3);
     }
-    if (view->shift)
-        drawShiftBorder();
 
     // text: the first step number of each row, then pitch and chance marks
     char buf[12];
@@ -162,6 +160,8 @@ void DrumSeqControl::update()
         }
     }
 
+    if (view->shift)
+        drawShiftBorder(); // last: the wash lies over everything
     draw::end();
 }
 

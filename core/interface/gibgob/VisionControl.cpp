@@ -330,8 +330,6 @@ void VisionControl::update()
             draw::frame(x1 - 3, y1 - 3, x2 + 3, y2 + 3, 3);
         }
     }
-    if (view->shift)
-        drawShiftBorder();
 
     // text last: names, lengths, mute / solo tags
     for (int t = 0; t < 8; t++)
@@ -365,6 +363,8 @@ void VisionControl::update()
         draw::text((x1 + x2) / 2, y1 + 66, fRegular, OPT_CENTER, view->pictureHint);
     }
 
+    if (view->shift)
+        drawShiftBorder(); // last: the wash lies over everything
     draw::end();
 }
 

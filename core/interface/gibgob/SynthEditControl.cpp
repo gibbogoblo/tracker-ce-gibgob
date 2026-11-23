@@ -1068,8 +1068,6 @@ void SynthEditControl::update()
         draw::text(12, kQuickY + kQuickH / 2, f.big, OPT_CENTERY, v.title);
         cuteQuickBoxes(v, f);
         cuteTabs(v, f);
-        if (v.shift)
-            drawShiftBorder();
         for (int p = 0; p < v.layout.panelCount; p++)
             cutePanel(v, p, f);
         if (v.layout.style == kStyleMain)
@@ -1090,6 +1088,8 @@ void SynthEditControl::update()
             draw::color(P.dark);
             draw::text(400, 408, f.bold, OPT_CENTER, v.message);
         }
+        if (v.shift)
+            drawShiftBorder(); // last: the wash lies over everything
         draw::end();
         return;
     }
@@ -1125,11 +1125,9 @@ void SynthEditControl::update()
     draw::color(y2k::kText);
     draw::text(12, kQuickY + kQuickH / 2, f.big, OPT_CENTERY, v.title);
     drawQuickBoxes(v, f);
-    // the tabs and the Shift frame before the content: if a busy page runs
-    // out of room, it loses a detail, never these
+    // the tabs before the content: if a busy page runs out of room, it loses
+    // a detail, never these (the Shift look is drawn last and always)
     drawTabs(v, f);
-    if (v.shift)
-        drawShiftBorder();
 
     for (int p = 0; p < v.layout.panelCount; p++)
         drawPanel(v, p, f);
@@ -1153,6 +1151,8 @@ void SynthEditControl::update()
         draw::color(y2k::kDark);
         draw::text(400, 409, f.bold, OPT_CENTER, v.message);
     }
+    if (v.shift)
+        drawShiftBorder(); // last: the wash lies over everything
     draw::end();
 }
 
