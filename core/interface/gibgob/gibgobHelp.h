@@ -211,6 +211,27 @@ static const char* const kHelpLibrary[] = {
 };
 
 
+static const char* const kHelpDrumOverview[] = {
+    "Up/Down: pick a drum   Left/Right: a step",
+    "Top row: the 8 steps on screen on / off",
+    "Small +/-: next / previous 8 steps",
+    "Big +/-: length 8 / 16 / 32 / 64 / 128",
+    "Hold Note + +/-: chance of the step",
+    "Hold Instr / FX1 / FX2 + +/-: vel / nudge / pitch",
+    "  (big +/-: bigger steps)",
+    "Insert + plus: plays only in fills",
+    "Insert + minus: left out of fills",
+    "Insert (stopped) on a marked step: unmark",
+    "Hold Insert while playing: the fill",
+    "Copy: copy the 8 steps   Shift+Copy: paste",
+    "Delete: the hit   Shift+Delete: clear track",
+    "Middle: this drum in close-up",
+    "Shift+top row: CHIMP OUT FX",
+    "Rec / Shift+Rec: rec on / undo",
+    "Play: play / stop   Shift+Play: song",
+    "Button 1: main screen  Button 2: sound",
+};
+
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))
 
 } // namespace gibgob

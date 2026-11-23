@@ -881,7 +881,7 @@ bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
     return true;
 }
 
-void drawShiftBorder()
+void drawShiftBorder(int top)
 {
     // Shift: a subtle blue-purple added over the screen (additive: nothing is
     // covered, everything lifts towards blue), then a yellow / black striped
@@ -891,8 +891,8 @@ void drawShiftBorder()
     constexpr uint32_t kStripe = 0xFFB347;
     constexpr uint32_t kTileAddress = 116000; // display.cpp: bitmaps[kBitmapGibGobHazard]
     constexpr int t = 6;                      // frame thickness
-    const int y1 = kScreenTop, y2 = kScreenTop + kScreenH - 1;
-    const int h = kScreenH;
+    const int y1 = top, y2 = kScreenTop + kScreenH - 1;
+    const int h = y2 - y1 + 1;
 
     draw::detail::endRectsNow();
     API_COLOR_A(255);

@@ -53,10 +53,27 @@ struct Note
     uint8_t flags;     // kNoteFlag*
     uint8_t chanceInv; // 100 - probability in %, so 0 (old notes) = always plays
 
-    int chance() const { return 100 - (chanceInv > 100 ? 100 : chanceInv); }
-    void setChance(int c) { chanceInv = (uint8_t)(100 - (c < 0 ? 0 : (c > 100 ? 100 : c))); }
+    // values above 100 are conditions (see kCondFillOnly): those always pass the chance
+    int chance() const { return chanceInv > 100 ? 100 : 100 - chanceInv; }
+    void setChance(int c) { chanceInv = (uint8_t)(100 - (c < 0 ? 0 : (c > 100 ? 100 : c))); } // ends a condition
 };
 static_assert(sizeof(Note) == 8, "Note must fit exactly in one step slot");
+
+// ---- fills: a step can play only during a fill, or be left out of fills ----
+// (kept in chanceInv above 100, so a step has a chance or a fill mark)
+static constexpr uint8_t kCondFillOnly = 200;
+static constexpr uint8_t kCondNoFill = 201;
+// +1 = plays only in fills, -1 = left out of fills, 0 = always
+inline int noteFill(const Note& n)
+{
+    return n.chanceInv == kCondFillOnly ? 1 : (n.chanceInv == kCondNoFill ? -1 : 0);
+}
+inline void setNoteFill(Note& n, int fill)
+{
+    n.chanceInv = fill > 0 ? kCondFillOnly : (fill < 0 ? kCondNoFill : 0);
+}
+// while true (Insert held on the drum overview), the fill is playing
+extern volatile bool g_fillActive;
 
 static constexpr uint8_t kNoteFlagSelected = 0x01;  // UI selection
 static constexpr uint8_t kNoteFlagRecording = 0x02; // being live-recorded (key still held)

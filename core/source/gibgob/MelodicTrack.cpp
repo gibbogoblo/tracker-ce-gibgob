@@ -1694,6 +1694,8 @@ uint32_t random32()
 // playback (audio context)
 // =====================================================================
 
+volatile bool g_fillActive = false;
+
 AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks)
 {
     ensureInit();
@@ -1764,6 +1766,10 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
 
         int chance = n.chance();
         if (chance < 100 && !percent(chance))
+            continue;
+        // fill marks: only in a fill / never in a fill
+        const int fill = noteFill(n);
+        if ((fill > 0 && !g_fillActive) || (fill < 0 && g_fillActive))
             continue;
 
         uint8_t velocity = n.velocity ? n.velocity : 100;

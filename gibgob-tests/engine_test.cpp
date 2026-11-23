@@ -793,6 +793,31 @@ int main()
         CHECK(stuckSynth() == 0);
     }
 
+    // fills: a fill-only step plays only while the fill is held, a left-out step only without it
+    {
+        freshPattern();
+        Note always = mk(0, 24, 60), only = mk(4 * 48, 24, 62), out = mk(8 * 48, 24, 64);
+        setNoteFill(only, 1);
+        setNoteFill(out, -1);
+        CHECK(only.chance() == 100 && out.chance() == 100); // a mark is not a chance
+        CHECK(noteFill(only) == 1 && noteFill(out) == -1 && noteFill(always) == 0);
+        addNote(&pat, 0, always); addNote(&pat, 0, only); addNote(&pat, 0, out);
+        auto played = [](int pitch) { int n = 0; for (auto& e : events) if (e.kind == 'S' && e.b == pitch) n++; return n; };
+        g_fillActive = false;
+        runTicks(0, 16 * 48);
+        CHECK(played(60) == 1 && played(62) == 0 && played(64) == 1);
+        stopAll(); events.clear();
+        g_fillActive = true;
+        runTicks(0, 16 * 48);
+        CHECK(played(60) == 1 && played(62) == 1 && played(64) == 0);
+        g_fillActive = false;
+        stopAll(); events.clear();
+        // changing the chance ends the mark
+        Note n = getNote(&pat, 0, 1);
+        n.setChance(n.chance() - 5);
+        CHECK(noteFill(n) == 0 && n.chance() == 95);
+    }
+
     printf(failures ? "FAILED: %d\n" : "ALL ENGINE TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

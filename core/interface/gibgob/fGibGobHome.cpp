@@ -15,6 +15,7 @@
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/Perform.h"
 #include "gibgob/PerformControl.h"
+#include "gibgob/drumOverview.h"
 #include "gibgob/drumSeq.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobPages.h"
@@ -557,8 +558,7 @@ void cGibGobHome::openEditor()
     }
     else
     {
-        drumSeq.cursorStep = 0;
-        mtInterface.activateModule(&drumSeq, (uint32_t)t);
+        mtInterface.activateModule(&drumOverview, homeOptions(t)); // every drum track, this one picked
     }
 }
 

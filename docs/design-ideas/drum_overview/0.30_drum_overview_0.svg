@@ -1,0 +1,138 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>
+<linearGradient id='g0' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='0' y2='70'><stop offset='0' stop-color='#E8432C'/><stop offset='1' stop-color='#F27A3C'/></linearGradient><rect x='0' y='0' width='800' height='71' fill='url(#g0)'/>
+<polyline fill='none' stroke='#FFB35C' stroke-opacity='1.00' stroke-width='8.0' stroke-linejoin='round' points='129,14 148,11 '/>
+<polyline fill='none' stroke='#FFB35C' stroke-opacity='1.00' stroke-width='8.0' stroke-linejoin='round' points='129,31 163,34 '/>
+<polyline fill='none' stroke='#FFB35C' stroke-opacity='1.00' stroke-width='8.0' stroke-linejoin='round' points='126,47 144,54 '/>
+<polyline fill='none' stroke='#FFB35C' stroke-opacity='1.00' stroke-width='8.0' stroke-linejoin='round' points='118,62 146,82 '/>
+<polyline fill='none' stroke='#FFB35C' stroke-opacity='1.00' stroke-width='8.0' stroke-linejoin='round' points='107,75 119,90 '/>
+<circle cx='66' cy='26' r='56.0' fill='#F9A94F' fill-opacity='1.00'/>
+<circle cx='66' cy='26' r='46.0' fill='#FBB862' fill-opacity='1.00'/>
+<rect x='18' y='24' width='31' height='23' rx='5' fill='#B9683A' fill-opacity='1.00'/>
+<rect x='52' y='20' width='25' height='21' rx='5' fill='#B9683A' fill-opacity='1.00'/>
+<rect x='19' y='33' width='29' height='4' rx='0' fill='#7A3E1E' fill-opacity='1.00'/>
+<rect x='53' y='29' width='23' height='4' rx='0' fill='#7A3E1E' fill-opacity='1.00'/>
+<rect x='46' y='32' width='9' height='4' rx='0' fill='#7A3E1E' fill-opacity='1.00'/>
+<rect x='16' y='20' width='35' height='8' rx='3' fill='#F6E6CB' fill-opacity='1.00'/>
+<rect x='50' y='16' width='29' height='8' rx='3' fill='#F6E6CB' fill-opacity='1.00'/>
+<clipPath id='c1'><rect x='0' y='50' width='800' height='365'/></clipPath><polygon clip-path='url(#c1)' fill='#7B5DA6' fill-opacity='1.00' points='0,58 50,61 100,59 150,54 200,55 250,59 300,61 350,57 400,54 450,56 500,61 550,60 600,55 650,54 700,58 750,61 800,58 800,1315 0,1315'/>
+<clipPath id='c2'><rect x='0' y='106' width='800' height='309'/></clipPath><polygon clip-path='url(#c2)' fill='#4F72E6' fill-opacity='1.00' points='0,124 50,115 100,110 150,117 200,125 250,121 300,112 350,112 400,121 450,124 500,117 550,110 600,115 650,124 700,122 750,113 800,111 800,1315 0,1315'/>
+<clipPath id='c3'><rect x='0' y='278' width='800' height='137'/></clipPath><polygon clip-path='url(#c3)' fill='#BAB9DF' fill-opacity='1.00' points='0,285 50,289 100,294 150,292 200,286 250,286 300,292 350,294 400,289 450,285 500,288 550,294 600,293 650,287 700,285 750,291 800,294 800,1315 0,1315'/>
+<clipPath id='c4'><rect x='0' y='334' width='800' height='81'/></clipPath><polygon clip-path='url(#c4)' fill='#EBB98A' fill-opacity='1.00' points='0,352 50,348 100,340 150,341 200,349 250,352 300,344 350,339 400,344 450,352 500,350 550,341 600,339 650,348 700,352 750,346 800,339 800,1315 0,1315'/>
+<clipPath id='c5'><rect x='0' y='396' width='800' height='84'/></clipPath><polygon clip-path='url(#c5)' fill='#D9985F' fill-opacity='1.00' points='0,408 50,413 100,410 150,403 200,404 250,410 300,412 350,407 400,402 450,406 500,412 550,411 600,404 650,403 700,409 750,413 800,408 800,1380 0,1380'/>
+<rect x='490' y='66' width='45' height='333' rx='18' fill='#FFFFFF' fill-opacity='0.16'/>
+<text x='18' y='96' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='start'>kick</text>
+<text x='16' y='208' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='start'>snare</text>
+<text x='18' y='146' fill='#D9DCFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='start'>prob</text>
+<text x='18' y='250' fill='#D9DCFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='start'>nudge</text>
+<text x='18' y='166' fill='#D9DCFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='start'>vel</text>
+<text x='18' y='270' fill='#D9DCFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='start'>pitch</text>
+<text x='18' y='324' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='start'>hi-hat</text>
+<text x='18' y='381' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='start'>clap</text>
+<circle cx='168' cy='90' r='10.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='512' cy='90' r='10.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='254' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='340' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='426' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='598' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='684' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='770' cy='90' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='340' cy='204' r='26.0' fill='#FFD84A' fill-opacity='1.00'/>
+<circle cx='340' cy='204' r='22.0' fill='#4F72E6' fill-opacity='1.00'/>
+<circle cx='254' cy='206' r='17.0' fill='#000000' fill-opacity='0.14'/>
+<circle cx='598' cy='206' r='17.0' fill='#000000' fill-opacity='0.14'/>
+<circle cx='254' cy='204' r='17.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='598' cy='204' r='17.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='168' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='340' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='426' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='512' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='684' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='770' cy='204' r='4.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='340' cy='318' r='10.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='684' cy='318' r='10.0' fill='#FFD84A' fill-opacity='1.00'/>
+<circle cx='168' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='254' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='426' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='512' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='598' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='770' cy='318' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='426' cy='375' r='10.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='770' cy='375' r='10.0' fill='#FFFFFF' fill-opacity='1.00'/>
+<circle cx='168' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='254' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='340' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='512' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='598' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='684' cy='375' r='3.0' fill='#FFFFFF' fill-opacity='0.55'/>
+<circle cx='276' cy='39' r='16.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='296' cy='31' r='24.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='319' cy='36' r='19.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<rect x='259' y='39' width='83' height='17' rx='8' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='376' cy='38' r='17.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='397' cy='33' r='22.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='416' cy='40' r='15.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<rect x='359' y='39' width='75' height='17' rx='8' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='463' cy='41' r='14.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='482' cy='34' r='21.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='502' cy='31' r='24.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='521' cy='41' r='14.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<rect x='449' y='39' width='87' height='17' rx='8' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='570' cy='36' r='19.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='594' cy='30' r='25.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='613' cy='41' r='14.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<rect x='551' y='39' width='79' height='17' rx='8' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='681' cy='40' r='15.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='706' cy='32' r='23.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='731' cy='28' r='27.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<circle cx='756' cy='35' r='20.0' fill='#FCE9E6' fill-opacity='1.00'/>
+<rect x='664' y='38' width='117' height='18' rx='8' fill='#FCE9E6' fill-opacity='1.00'/>
+<text x='300' y='35' fill='#A0626A' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='middle'>prob</text>
+<text x='300' y='51' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>1:2</text>
+<text x='396' y='35' fill='#A0626A' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='middle'>vel</text>
+<text x='396' y='51' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>96</text>
+<text x='492' y='35' fill='#A0626A' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='middle'>nudge</text>
+<text x='492' y='51' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>96</text>
+<text x='590' y='35' fill='#A0626A' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='middle'>pitch</text>
+<text x='590' y='51' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>96</text>
+<text x='722' y='35' fill='#A0626A' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='12' font-weight='normal' text-anchor='middle'>length</text>
+<text x='722' y='51' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>64 steps</text>
+<text x='96' y='56' fill='#5A2A16' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>1/8</text>
+<circle cx='151' cy='443' r='37.0' fill='#F0462A' fill-opacity='1.00'/>
+<circle cx='545' cy='443' r='37.0' fill='#F0462A' fill-opacity='1.00'/>
+<circle cx='53' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='151' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='250' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='348' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='447' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='545' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='644' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='742' cy='443' r='31.0' fill='#5E2E20' fill-opacity='1.00'/>
+<circle cx='53' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='151' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='250' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='348' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='447' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='545' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='644' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='742' cy='443' r='25.0' fill='#8C4C34' fill-opacity='1.00'/>
+<circle cx='53' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='151' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='250' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='348' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='447' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='545' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='644' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<circle cx='742' cy='443' r='20.0' fill='#FFF8EC' fill-opacity='1.00'/>
+<text x='53' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>1</text>
+<text x='151' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>2</text>
+<text x='250' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>3</text>
+<text x='348' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>4</text>
+<text x='447' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>5</text>
+<text x='545' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>6</text>
+<text x='644' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>7</text>
+<text x='742' y='450' fill='#2B2238' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>8</text>
+<text x='340' y='148' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>1:2</text>
+<text x='340' y='252' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>-3</text>
+<text x='340' y='168' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>100</text>
+<text x='340' y='272' fill='#FFFFFF' fill-opacity='1.00' font-family='Liberation Sans, Arial' font-size='17' font-weight='bold' text-anchor='middle'>+2</text>
+</svg>

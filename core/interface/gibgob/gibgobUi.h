@@ -202,7 +202,8 @@ struct BottomBar
     bool highlighted[8] = { false };
 };
 void drawBottomBar(const BottomBar& bar, int fontHandle);
-void drawShiftBorder();
+// the Shift look (blue wash + striped frame) from `top` down (default: below the title bar)
+void drawShiftBorder(int top = kScreenTop);
 // full-screen list of shortcuts; returns true if drawn (the caller then stops)
 bool drawHelp(const HelpView& help, int fontRegular, int fontBold);
 

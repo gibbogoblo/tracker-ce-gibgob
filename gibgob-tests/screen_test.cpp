@@ -3,6 +3,7 @@
 #include "gibgob/DrumSeqControl.h"
 #include "gibgob/PerformControl.h"
 #include "gibgob/VisionControl.h"
+#include "gibgob/DrumOverviewControl.h"
 #include "gibgob/PerformFx.h"
 #include <algorithm>
 #include "gibgob/gibgobHelp.h"
@@ -440,6 +441,74 @@ int main()
             lv.bar = bar;
             prop.data = &lv; TableControl lc(&prop);
             render(lc, "sample library", kLimit, false); // Shift only swaps the top row here: no frame
+        }
+        {
+            // drum overview: 1..8 tracks, every step a hit, every lock and fill tag shown, Shift
+            static DrumOverviewView dv;
+            static const char* const kNm[8] = { "kick", "snare", "hi-hat", "clap", "rim", "tom", "perc", "shaker" };
+            auto fillAll = [&](int count, bool worst)
+            {
+                dv = DrumOverviewView();
+                dv.count = count; dv.sel = count > 1 ? 1 : 0; dv.cursor = 2; dv.play = 4;
+                for (int t = 0; t < count; t++)
+                {
+                    snprintf(dv.tracks[t].name, sizeof(dv.tracks[t].name), "%s", worst ? "WWWWWWWW" : kNm[t]);
+                    dv.tracks[t].exists = 0xFF;
+                    dv.tracks[t].hit = worst ? 0xFF : (uint8_t)(0x11 << (t % 4));
+                    dv.tracks[t].fillOnly = worst ? 0x0F : 0x40;
+                    dv.tracks[t].noFill = worst ? 0xF0 : 0x00;
+                    dv.tracks[t].muted = worst && t == 6;
+                }
+                snprintf(dv.labelTop[0], 10, "prob"); snprintf(dv.labelTop[1], 10, "vel");
+                snprintf(dv.labelBot[0], 10, "nudge"); snprintf(dv.labelBot[1], 10, "pitch");
+                for (int st = 0; st < 8; st++)
+                    if (worst || st == 2)
+                    {
+                        snprintf(dv.lockTop[st][0], 8, worst ? "NO FIL" : "1:2"); snprintf(dv.lockTop[st][1], 8, worst ? "127" : "100");
+                        snprintf(dv.lockBot[st][0], 8, worst ? "-24" : "-3"); snprintf(dv.lockBot[st][1], 8, worst ? "C#10" : "+2");
+                    }
+                static const char* const kCl[4] = { "prob", "vel", "nudge", "pitch" };
+                for (int k = 0; k < 4; k++) { snprintf(dv.cloudLabel[k], 10, "%s", kCl[k]); snprintf(dv.cloudValue[k], 10, "%s", worst ? "NO FILL" : (k == 0 ? "1:2" : "96")); }
+                snprintf(dv.lengthText, 12, worst ? "128 steps" : "64 steps"); snprintf(dv.pageText, 8, worst ? "16/16" : "1/8");
+                dv.bar = bar;
+            };
+            strControlProperties dp; dp.y = 0; dp.w = 800; dp.h = 480;
+            dp.data = &dv;
+            DrumOverviewControl dc2(&dp);
+            g_minY = 0; // this screen draws its own header (no title bar)
+            for (int count : { 1, 2, 4, 8 })
+            {
+                fillAll(count, true);
+                char nm[48]; snprintf(nm, sizeof(nm), "drum overview, %d tracks, full", count);
+                render(dc2, nm, kLimit, false);
+                dv.shift = true; dv.fillOn = true; dv.cloudLit = 2;
+                snprintf(nm, sizeof(nm), "drum overview, %d tracks, shift, full", count);
+                render(dc2, nm, kLimit, true);
+            }
+            fillAll(4, false); snprintf(dv.message, sizeof(dv.message), "No drum tracks in this pattern");
+            render(dc2, "drum overview, no drum tracks", kLimit, false);
+            dv.help.active = true; dv.help.lines = kHelpDrumOverview; dv.help.count = (int)(sizeof(kHelpDrumOverview) / sizeof(kHelpDrumOverview[0])); dv.help.title = "Drum overview - shortcuts";
+            words = 0; dc2.update(); // help: checked like the other help lists (it starts its own count)
+            printf("%-34s %4d words\n", "help: drum overview", words);
+            if (words > kLimit || draw::skipped()) { printf("  help too big\n"); fails++; }
+            dv.help.active = false;
+            if (const char* out = getenv("DRUM_SVG"))
+            {
+                // pictures: 4 tracks as in the design, 8 tracks, 2 tracks, Shift + fill
+                const int counts[4] = { 4, 8, 2, 4 };
+                for (int k = 0; k < 4; k++)
+                {
+                    fillAll(counts[k], false);
+                    if (k == 3) { dv.shift = true; dv.fillOn = true; dv.cloudLit = 0; dv.tracks[1].noFill = 0x10; dv.tracks[1].hit |= 0x10; }
+                    char path[256]; snprintf(path, sizeof(path), "%s.%d.svg", out, k);
+                    g_svg = fopen(path, "w");
+                    fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                    words = 0; dc2.update();
+                    fprintf(g_svg, "</svg>\n");
+                    fclose(g_svg); g_svg = nullptr;
+                }
+            }
+            g_minY = 27;
             prop.data = &tv;
         }
 
