@@ -231,6 +231,12 @@ void DrumOverviewControl::update()
         }
         if (t.muted)
             draw::text(150, mid, fSmall, OPT_CENTERY | OPT_RIGHTX, "mute");
+        if (sel && v.cursor < 0)
+        {
+            // the cursor on the name (Middle: the track's settings): a yellow bar under it
+            draw::color(kCursor);
+            draw::roundRect(16, mid + 20, 140, mid + 25, 2);
+        }
     }
 
     // ---- steps: hits (fill-only gold, left-out hollow), empty steps as small dots ----
@@ -242,7 +248,7 @@ void DrumOverviewControl::update()
         const int h = edge[i + 1] - edge[i];
         int R = sel ? 17 : (h * 32 / 100 < 10 ? h * 32 / 100 : 10);
         R = R < 3 ? 3 : R;
-        if (sel)
+        if (sel && v.cursor >= 0)
         {
             // the cursor: a yellow ring
             const int16_t ring[3] = { (int16_t)(kX0 + v.cursor * kStepX), (int16_t)mid, (int16_t)(R + 9) };

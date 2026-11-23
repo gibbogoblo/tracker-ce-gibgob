@@ -1969,6 +1969,8 @@ static void functShift(uint8_t state)
 
 static void functMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (state == buttonPress)
         GS->middle(true);
     else if (state == buttonRelease)

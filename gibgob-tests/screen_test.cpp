@@ -485,6 +485,8 @@ int main()
                 snprintf(nm, sizeof(nm), "drum overview, %d tracks, shift, full", count);
                 render(dc2, nm, kLimit, true);
             }
+            fillAll(4, true); dv.cursor = -1; // the cursor on the track name
+            render(dc2, "drum overview, cursor on the name, full", kLimit, false);
             fillAll(4, false); snprintf(dv.message, sizeof(dv.message), "No drum tracks in this pattern");
             render(dc2, "drum overview, no drum tracks", kLimit, false);
             dv.help.active = true; dv.help.lines = kHelpDrumOverview; dv.help.count = (int)(sizeof(kHelpDrumOverview) / sizeof(kHelpDrumOverview[0])); dv.help.title = "Drum overview - shortcuts";

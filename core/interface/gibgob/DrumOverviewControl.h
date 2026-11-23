@@ -29,7 +29,7 @@ struct DrumOverviewView
     int count = 0; // drum tracks shown
     DrumOverviewTrack tracks[kMaxTracks];
     int sel = 0;     // selected band
-    int cursor = 0;  // step on screen 0..7
+    int cursor = 0;  // step on screen 0..7, -1 = on the track name
     int play = -1;   // playing step on screen, -1 = not on this page
     bool fillOn = false; // Insert held while playing
 

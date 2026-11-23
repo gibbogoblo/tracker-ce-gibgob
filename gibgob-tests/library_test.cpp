@@ -113,6 +113,35 @@ int main()
     tiny.load(junk, (int)strlen(junk));
     CHECK(tiny.count() == 1 && tiny.entry(0).genre == 0); // genre 9 is out of range: none
 
+    // a tempo in the name gives a genre when no genre word does
+    CHECK(Index::guessGenre("/Samples/Loops/break_174bpm.wav") == kGenreJungle);
+    CHECK(Index::guessGenre("/Samples/Loops/Drums 92 BPM.wav") == kGenreHiphop);
+    CHECK(Index::guessGenre("/Samples/Loops/shuffle-132-bpm.wav") == kGenreGarage);
+    CHECK(Index::guessGenre("/Samples/Drums/kick 808.wav") == kGenreNone);   // a number, but no bpm
+    CHECK(Index::guessGenre("/Samples/Loops/pad 120bpm.wav") == kGenreNone); // a tempo outside the three
+    CHECK(Index::guessGenre("/Samples/Trap/loop 174bpm.wav") == kGenreHiphop); // a genre word wins
+
+    // a whole folder at once
+    {
+        static char fpool[4096];
+        static Entry fentries[16];
+        Index f;
+        f.init(fpool, sizeof(fpool), fentries, 16);
+        f.beginScan();
+        const int a1 = f.add("/Samples/Kit A/kick.wav");
+        f.add("/Samples/Kit A/snare.wav");
+        f.add("/Samples/Kit A/hat.wav");
+        const int b1 = f.add("/Samples/Kit A/More/kick.wav"); // a folder inside: not this folder
+        const int c1 = f.add("/Samples/Kit B/kick.wav");
+        f.endScan();
+        CHECK(f.setGenreFolder(a1, kGenreJungle) == 3);
+        uint16_t fl[16];
+        CHECK(f.filter(kShelfJungle, kCatNone, fl, 16) == 3);
+        CHECK(f.entry(b1).genre == kGenreNone && f.entry(c1).genre == kGenreNone);
+        CHECK(f.setCategoryFolder(c1, kCatPerc) == 1 && f.entry(c1).category == kCatPerc);
+        CHECK(f.dirty);
+    }
+
     printf(failures ? "FAILED: %d\n" : "ALL LIBRARY TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

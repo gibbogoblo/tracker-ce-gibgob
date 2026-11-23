@@ -43,6 +43,7 @@ class cDrumOverview : public ModuleBase
     void copyPage();
     void pastePage();
     void openCloseUp();
+    void openTrackPage();
     void goHome();
     void topButton(int button, bool pressed);
     void releaseAll();
@@ -51,6 +52,7 @@ class cDrumOverview : public ModuleBase
     int drumCount = 0;
     int selTrack = 0;     // the selected track (by track number)
     int cursor = 0;       // step (0 .. length - 1)
+    bool onName = false;  // the cursor is on the track name (left of step 1)
     Param param = kParamNone;
     bool insertDown = false;
     bool insertUsed = false;

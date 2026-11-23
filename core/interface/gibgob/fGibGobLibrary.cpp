@@ -616,16 +616,38 @@ void cGibGobLibrary::topButton(int b)
     refresh();
 }
 
-void cGibGobLibrary::changeTag(int delta)
+// held Note / Instr + small +/-: this sample's genre / category;
+// + big +/-: every sample in its folder takes the next / previous one
+void cGibGobLibrary::changeTag(int delta, bool folder)
 {
     const int i = cursorEntry();
     if (i < 0)
         return;
     const lib::Entry& e = S->idx.entry(i);
+    char msg[48];
     if (S->held == 1)
-        S->idx.setGenre(i, ((int)e.genre + delta + lib::kGenreCount) % lib::kGenreCount);
+    {
+        const int g = ((int)e.genre + delta + lib::kGenreCount) % lib::kGenreCount;
+        if (folder)
+        {
+            snprintf(msg, sizeof(msg), "Folder: %d samples now %s", S->idx.setGenreFolder(i, g), lib::kGenreNames[g]);
+            mtPopups.show(0, msg, 1);
+        }
+        else
+            S->idx.setGenre(i, g);
+    }
     else if (S->held == 2)
-        S->idx.setCategory(i, ((int)e.category + delta + lib::kCatCount) % lib::kCatCount);
+    {
+        const int c = ((int)e.category + delta + lib::kCatCount) % lib::kCatCount;
+        if (folder)
+        {
+            snprintf(msg, sizeof(msg), "Folder: %d samples now %s", S->idx.setCategoryFolder(i, c),
+                     lib::kCategoryNames[c]);
+            mtPopups.show(0, msg, 1);
+        }
+        else
+            S->idx.setCategory(i, c);
+    }
     refresh(); // the list is filtered again when the button is let go
 }
 
@@ -691,6 +713,8 @@ static void functRight(uint8_t s)
 
 static void functMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (state == buttonPress && !S->view.help.active)
         LB->assign();
 }
@@ -746,7 +770,7 @@ static void functEncoder(int16_t value)
     const bool big = value >= 10 || value <= -10;
     const int dir = value > 0 ? 1 : -1;
     if (S->held != 0)
-        LB->changeTag(dir);
+        LB->changeTag(dir, big); // big +/-: the whole folder
     else
         LB->move(dir * (big ? kVisibleRows : 1));
 }

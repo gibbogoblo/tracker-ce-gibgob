@@ -62,6 +62,9 @@ void trackDisplayName(int track, char* out, int outLen);
 
 // Called by every GibGob screen when it opens: Shift starts off.
 void screenOpened();
+// true while the Middle press that opened this screen is still held (and for
+// its release): the screen ignores it. Call first in every Middle handler.
+bool middleBlocked(uint8_t state);
 
 // Button 2 (Params): open the parameters of the sound on this track
 // (sample parameters, or the synth's pages).

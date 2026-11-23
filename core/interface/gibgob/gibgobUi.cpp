@@ -57,10 +57,25 @@ bool shiftButton(uint8_t state)
     return false;
 }
 
+// A screen opened by a Middle press must not act on that same press: the
+// Mini repeats a held Middle as more presses, which would land on the new
+// screen (the library loaded the sample under its cursor right away).
+static bool s_middleBlocked = false;
+
 void screenOpened()
 {
     g_shiftLatched = false;
     s_shiftDown = false;
+    s_middleBlocked = mtInterface.getPlatform()->getButtons()->isButtonPressed(interfaceButtonMiniMiddle);
+}
+
+bool middleBlocked(uint8_t state)
+{
+    if (!s_middleBlocked)
+        return false;
+    if (state == buttonRelease)
+        s_middleBlocked = false; // let go: from the next press on it counts
+    return true;
 }
 
 static int s_soundTrack = 0;

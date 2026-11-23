@@ -1837,6 +1837,8 @@ static void functRight(uint8_t s)
 
 static void functMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (inMenu())
     {
         if (state == buttonPress)

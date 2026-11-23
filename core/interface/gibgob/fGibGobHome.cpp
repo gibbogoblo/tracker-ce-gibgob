@@ -263,6 +263,8 @@ static void functWelcomeRight(uint8_t state)
 }
 static void functWelcomeMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (state == buttonPress)
         GH->welcomeChoose();
 }
@@ -893,6 +895,8 @@ static void functRight(uint8_t s)
 
 static void functMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (state != buttonPress)
         return;
     if (shiftActive())

@@ -97,6 +97,9 @@ class Index
 
     void setGenre(int i, int genre);
     void setCategory(int i, int category);
+    // the same for every file in the folder of file i; returns how many
+    int setGenreFolder(int i, int genre);
+    int setCategoryFolder(int i, int category);
     void toggleFavourite(int i);
     void markUsed(int i);
 

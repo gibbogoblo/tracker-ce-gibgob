@@ -21,6 +21,7 @@ class cGibGobPages : public ModuleBase
         kFromHome = 0,
         kFromPianoRoll = 1,
         kFromInstrumentEditor = 2, // chord palette as the 3rd synth-parameters page
+        kFromDrums = 3,            // the drum overview (Middle on a track name)
     };
     static uint32_t makeOptions(Page page, Origin origin, int track)
     {

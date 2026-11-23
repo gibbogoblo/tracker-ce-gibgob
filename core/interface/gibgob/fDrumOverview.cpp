@@ -14,6 +14,7 @@
 #include "gibgob/drumSeq.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobHome.h"
+#include "gibgob/gibgobPages.h"
 #include "gibgob/gibgobUi.h"
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
@@ -117,10 +118,13 @@ void cDrumOverview::start(uint32_t options)
         memset(&s_clip, 0, sizeof(s_clip));
         s_clipReady = true;
     }
-    if (options & 0x100)
+    if ((options & 0x100) && (int)(options & 7) != selTrack)
     {
+        // another track: start at its first step (the same track, e.g. back
+        // from its settings: stay where you were)
         selTrack = (int)(options & 7);
         cursor = 0;
+        onName = false;
     }
     view->help.active = false;
     view->help.title = "Drum overview - shortcuts";
@@ -234,7 +238,7 @@ void cDrumOverview::refresh()
 
     v.count = drumCount;
     v.sel = selIndex;
-    v.cursor = cursor - first;
+    v.cursor = onName ? -1 : cursor - first;
     const int ph = playheadTick(t);
     const int playStep = ph < 0 ? -1 : (ph / kTicksPerStep) % steps;
     v.play = (playStep >= first && playStep < first + kSteps) ? playStep - first : -1;
@@ -393,9 +397,37 @@ void cDrumOverview::moveCursor(int delta)
 {
     if (track() < 0)
         return;
+    // Left from step 1: onto the track name (Middle there: its settings)
+    if (onName)
+    {
+        if (delta > 0)
+        {
+            onName = false;
+            cursor = 0;
+        }
+        refresh();
+        return;
+    }
+    if (delta == -1 && cursor == 0)
+    {
+        onName = true;
+        refresh();
+        return;
+    }
     const int steps = trackSteps(current(), track());
     cursor = clampInt(cursor + delta, 0, steps - 1);
     refresh();
+}
+
+// Middle on the track name: the track's settings (sound / sample library, name, length...)
+void cDrumOverview::openTrackPage()
+{
+    const int t = track();
+    if (t < 0)
+        return;
+    const uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPageTrack, cGibGobPages::kFromDrums, t);
+    mtInterface.deactivateModule(this);
+    mtInterface.activateModule(&gibgobPages, options);
 }
 
 void cDrumOverview::toggleStep(int step)
@@ -441,7 +473,7 @@ void cDrumOverview::toggleStep(int step)
 void cDrumOverview::deleteStep()
 {
     const int t = track();
-    if (t < 0)
+    if (t < 0 || onName) // on the track name: no step to change
         return;
     Sequencer::strPattern* p = current();
     int idx[kMaxNotes];
@@ -472,7 +504,7 @@ void cDrumOverview::clearTrack()
 void cDrumOverview::changeParam(int dir, bool big)
 {
     const int t = track();
-    if (t < 0)
+    if (t < 0 || onName) // on the track name: no step to change
         return;
     if (param == kParamShift)
     {
@@ -558,7 +590,7 @@ void cDrumOverview::changeLength(int dir)
 void cDrumOverview::markFill(int fill)
 {
     const int t = track();
-    if (t < 0)
+    if (t < 0 || onName) // on the track name: no step to change
         return;
     Sequencer::strPattern* p = current();
     int idx[kMaxNotes];
@@ -583,7 +615,7 @@ void cDrumOverview::markFill(int fill)
 void cDrumOverview::clearFillMark()
 {
     const int t = track();
-    if (t < 0)
+    if (t < 0 || onName) // on the track name: no step to change
         return;
     Sequencer::strPattern* p = current();
     int idx[kMaxNotes];
@@ -794,8 +826,14 @@ static void functRight(uint8_t s)
 
 static void functMiddle(uint8_t state)
 {
-    if (state == buttonPress)
-        DO->openCloseUp(); // the selected drum in close-up (one track, every step)
+    if (middleBlocked(state))
+        return;
+    if (state != buttonPress)
+        return;
+    if (DO->onName)
+        DO->openTrackPage(); // on the name: the track's settings
+    else
+        DO->openCloseUp(); // on a step: the selected drum in close-up (one track, every step)
 }
 
 // Insert: held while playing = the fill; Insert + plus / minus marks the step;

@@ -201,6 +201,7 @@ static const char* const kHelpLibrary[] = {
     "Left/Right or big +/-: a page",
     "Middle: load it onto the track",
     "Hold Note + +/-: its genre",
+    "  (big +/-: every sample in its folder)",
     "Hold Instr + +/-: its category",
     "FX1: favourite on / off",
     "FX2: the folders (file browser)",
@@ -213,6 +214,7 @@ static const char* const kHelpLibrary[] = {
 
 static const char* const kHelpDrumOverview[] = {
     "Up/Down: pick a drum   Left/Right: a step",
+    "Left from step 1: the name (Middle: settings)",
     "Top row: the 8 steps on screen on / off",
     "Small +/-: next / previous 8 steps",
     "Big +/-: length 8 / 16 / 32 / 64 / 128",
@@ -225,7 +227,7 @@ static const char* const kHelpDrumOverview[] = {
     "Hold Insert while playing: the fill",
     "Copy: copy the 8 steps   Shift+Copy: paste",
     "Delete: the hit   Shift+Delete: clear track",
-    "Middle: this drum in close-up",
+    "Middle on a step: this drum in close-up",
     "Shift+top row: CHIMP OUT FX",
     "Rec / Shift+Rec: rec on / undo",
     "Play: play / stop   Shift+Play: song",

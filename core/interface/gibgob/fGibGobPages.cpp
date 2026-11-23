@@ -14,6 +14,7 @@
 #include "gibgob/gibgobHome.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobLibrary.h"
+#include "gibgob/drumOverview.h"
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "instrumentEditor/instrumentEditor.h"
@@ -192,7 +193,10 @@ void cGibGobPages::start(uint32_t options)
     view.help.active = false;
     page = ((options >> 8) & 0xF) == kPagePalette ? kPagePalette : kPageTrack;
     uint32_t o = (options >> 4) & 0xF;
-    origin = o == kFromPianoRoll ? kFromPianoRoll : (o == kFromInstrumentEditor ? kFromInstrumentEditor : kFromHome);
+    origin = o == kFromPianoRoll          ? kFromPianoRoll
+             : o == kFromInstrumentEditor ? kFromInstrumentEditor
+             : o == kFromDrums            ? kFromDrums
+                                          : kFromHome;
     track = (int)(options & 7);
     row = 0;
     col = page == kPagePalette ? 0 : 1;
@@ -860,6 +864,8 @@ void cGibGobPages::goBack()
     mtInterface.deactivateModule(this);
     if (origin == kFromPianoRoll)
         mtInterface.activateModule(&pianoRoll, (uint32_t)t);
+    else if (origin == kFromDrums)
+        mtInterface.activateModule(&drumOverview, homeOptions(t));
     else
         mtInterface.activateModule(&gibgobHome, homeOptions(t));
 }
@@ -968,6 +974,8 @@ static void functRight(uint8_t s)
 
 static void functMiddle(uint8_t state)
 {
+    if (middleBlocked(state))
+        return;
     if (state == buttonPress)
         GP->pressMiddle();
 }

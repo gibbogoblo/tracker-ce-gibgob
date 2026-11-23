@@ -11,7 +11,8 @@
 //   Shift        : back to the genres
 //   Up/Down, +/- : move (each sample plays)   Left/Right: a page
 //   Middle       : load it onto the track
-//   hold Note / Instr + +/- : its genre / category    FX1: favourite
+//   hold Note / Instr + +/- : its genre / category (big +/-: its whole folder)
+//   FX1: favourite
 //   FX2          : the folders (the file browser)    Button 1: back
 class cGibGobLibrary : public ModuleBase
 {
@@ -29,7 +30,7 @@ class cGibGobLibrary : public ModuleBase
     void refilter();
     void move(int delta);
     void topButton(int b);
-    void changeTag(int delta);
+    void changeTag(int delta, bool folder);
     void assign();
     void back(bool folders);
 

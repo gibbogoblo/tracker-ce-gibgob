@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 namespace gibgob
 {
@@ -98,6 +99,32 @@ int Index::guessCategory(const char* path)
     return kCatNone;
 }
 
+// a tempo written in the name ("92bpm", "174 BPM", "140_bpm"): 0 if none
+static int tempoInName(const char* path)
+{
+    for (const char* p = path; *p; ++p)
+    {
+        if (!isdigit((unsigned char)*p) || (p != path && isdigit((unsigned char)p[-1])))
+            continue;
+        int v = 0, digits = 0;
+        const char* q = p;
+        while (isdigit((unsigned char)*q) && digits < 4)
+        {
+            v = v * 10 + (*q - '0');
+            ++q;
+            ++digits;
+        }
+        if (isdigit((unsigned char)*q))
+            continue;
+        while (*q == ' ' || *q == '_' || *q == '-')
+            ++q;
+        if (tolower((unsigned char)q[0]) == 'b' && tolower((unsigned char)q[1]) == 'p' &&
+            tolower((unsigned char)q[2]) == 'm' && v >= 40 && v <= 250)
+            return v;
+    }
+    return 0;
+}
+
 int Index::guessGenre(const char* path)
 {
     if (isRecording(path))
@@ -114,6 +141,14 @@ int Index::guessGenre(const char* path)
         return kGenreJungle;
     if (anyWord(path, kVoc))
         return kGenreVocal;
+    // no genre word: a loop's tempo says a lot (80-100 hip hop, 125-140 garage, 160-180 jungle)
+    const int bpm = tempoInName(path);
+    if (bpm >= 80 && bpm <= 100)
+        return kGenreHiphop;
+    if (bpm >= 125 && bpm <= 140)
+        return kGenreGarage;
+    if (bpm >= 160 && bpm <= 180)
+        return kGenreJungle;
     return kGenreNone;
 }
 
@@ -204,6 +239,51 @@ void Index::setGenre(int i, int genre)
     e[i].genre = (uint8_t)(genre % kGenreCount);
     e[i].flags |= kFlagGenreSet;
     dirty = true;
+}
+
+// the folder part of a path ("/Samples/Kits/kick.wav" -> "/Samples/Kits/"): its length
+static int folderLength(const char* path)
+{
+    const char* slash = strrchr(path, '/');
+    return slash ? (int)(slash - path) + 1 : 0;
+}
+
+int Index::setGenreFolder(int i, int genre)
+{
+    if (i < 0 || i >= n)
+        return 0;
+    const char* dir = path(i);
+    const int dl = folderLength(dir);
+    int count = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        const char* pk = path(k);
+        if (folderLength(pk) == dl && strncasecmp(pk, dir, (size_t)dl) == 0)
+        {
+            setGenre(k, genre);
+            ++count;
+        }
+    }
+    return count;
+}
+
+int Index::setCategoryFolder(int i, int category)
+{
+    if (i < 0 || i >= n)
+        return 0;
+    const char* dir = path(i);
+    const int dl = folderLength(dir);
+    int count = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        const char* pk = path(k);
+        if (folderLength(pk) == dl && strncasecmp(pk, dir, (size_t)dl) == 0)
+        {
+            setCategory(k, category);
+            ++count;
+        }
+    }
+    return count;
 }
 
 void Index::setCategory(int i, int category)
