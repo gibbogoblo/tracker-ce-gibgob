@@ -1,3 +1,4 @@
+#include "core/interfaceDefs.h"
 #include "gibgob/PianoRollControl.h"
 #include "gibgob/TableControl.h"
 #include "gibgob/DrumSeqControl.h"
@@ -206,9 +207,38 @@ static int render(cDisplayControl& c, const char* name, int limit, bool expectBo
 
 #include "synth_screen.inc"
 
+void gibgobMiddleEvent(uint8_t value);
+
+// Middle opening a screen must not act on the new screen: the press (and
+// the Mini's repeats of it while held) is ignored there until it is let go
+static void testMiddleCarryOver()
+{
+    // Middle pressed: the event is noted first, then the old screen opens the new one
+    gibgobMiddleEvent(buttonPress);
+    gibgob::screenOpened();
+    if (!gibgob::middleBlocked(buttonPress)) { printf("middle: the opening press reached the new screen\n"); fails++; }
+    // held: the Mini sends it again as a press
+    gibgobMiddleEvent(buttonHold);
+    if (!gibgob::middleBlocked(buttonPress)) { printf("middle: a held repeat reached the new screen\n"); fails++; }
+    // let go: still not acted on, and from now on it counts
+    gibgobMiddleEvent(buttonRelease);
+    if (!gibgob::middleBlocked(buttonRelease)) { printf("middle: the release reached the new screen\n"); fails++; }
+    gibgobMiddleEvent(buttonPress);
+    if (gibgob::middleBlocked(buttonPress)) { printf("middle: a new press was ignored\n"); fails++; }
+    gibgobMiddleEvent(buttonRelease);
+    if (gibgob::middleBlocked(buttonRelease)) { printf("middle: a new release was ignored\n"); fails++; }
+    // a screen opened by another button, Middle up: nothing ignored
+    gibgob::screenOpened();
+    gibgobMiddleEvent(buttonPress);
+    if (gibgob::middleBlocked(buttonPress)) { printf("middle: blocked without a carried-over press\n"); fails++; }
+    gibgobMiddleEvent(buttonRelease);
+    gibgob::middleBlocked(buttonRelease);
+}
+
 int main()
 {
     const int kLimit = 1500; // whole frame may hold about 2040; title bar and popups need the rest
+    testMiddleCarryOver();
     for (auto& t : pat.track) { t.length = 63; }
     memset(&mtProject, 0, sizeof(mtProject));
     for (auto& i : mtProject.instrument) i.isActive = 1;

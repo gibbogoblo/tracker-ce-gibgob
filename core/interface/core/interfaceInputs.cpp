@@ -23,8 +23,16 @@ void Interface::potChange(uint8_t n, int16_t value)
 }
 
 //=======================================================================
+// GibGob OS: Middle's real state, kept here because the driver reports a
+// press before it marks the button pressed (see gibgob::middleBlocked)
+void gibgobMiddleEvent(uint8_t value);
+
 void Interface::buttonChange(uint8_t n, uint8_t value)
 {
+#ifdef TRACKER_MINI
+    if (n == interfaceButtonMiniMiddle)
+        gibgobMiddleEvent(value);
+#endif
 #ifdef TRACKER_MINI
     if (isNavButton(n))
     {

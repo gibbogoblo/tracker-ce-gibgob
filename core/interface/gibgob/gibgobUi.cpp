@@ -60,13 +60,22 @@ bool shiftButton(uint8_t state)
 // A screen opened by a Middle press must not act on that same press: the
 // Mini repeats a held Middle as more presses, which would land on the new
 // screen (the library loaded the sample under its cursor right away).
+// (The driver calls the press handler before it marks the button pressed, so
+// the button state is kept from the events themselves: gibgobMiddleEvent,
+// called for every Middle event before any screen gets it.)
 static bool s_middleBlocked = false;
+static bool s_middleDown = false;
 
 void screenOpened()
 {
     g_shiftLatched = false;
     s_shiftDown = false;
-    s_middleBlocked = mtInterface.getPlatform()->getButtons()->isButtonPressed(interfaceButtonMiniMiddle);
+    s_middleBlocked = s_middleDown;
+}
+
+void noteMiddleEvent(uint8_t value)
+{
+    s_middleDown = value != buttonRelease; // press or hold: down
 }
 
 bool middleBlocked(uint8_t state)
@@ -1005,3 +1014,9 @@ void drawInfoStrip(int titleX,
 }
 
 } // namespace gibgob
+
+// every Middle event, before any screen gets it (interfaceInputs.cpp)
+void gibgobMiddleEvent(uint8_t value)
+{
+    gibgob::noteMiddleEvent(value);
+}
