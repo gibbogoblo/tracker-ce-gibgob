@@ -38,7 +38,7 @@ LDFLAGS       := -nostartfiles --specs=nano.specs \
                  -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=calloc \
                  -Wl,--wrap=_malloc_r -Wl,--wrap=_free_r -Wl,--wrap=_calloc_r
 
-all: $(BUILD_DIR)/CHIP.psyn $(BUILD_DIR)/MRPH.psyn $(BUILD_DIR)/LILI.psyn $(BUILD_DIR)/GORILLA.psyn
+all: $(BUILD_DIR)/CHIP.psyn $(BUILD_DIR)/MRPH.psyn $(BUILD_DIR)/LILI.psyn $(BUILD_DIR)/GORILLA.psyn $(BUILD_DIR)/CHILL.psyn
 
 $(BUILD_DIR)/CHIP.elf: $(SDK_DIR)/engines/chip.cpp $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
 	@mkdir -p $(BUILD_DIR)
@@ -159,6 +159,45 @@ grain-test:
 	$(HOSTCXX) -O2 -std=c++20 -Wall -I$(SDK_DIR)/engines $(SDK_DIR)/engines/gorillagrain/grain_test.cpp -o $(BUILD_DIR)/grain_test
 	$(BUILD_DIR)/grain_test
 
+# ---- CHILLAMANG (GibGob OS): mellow tine electric piano, the cyber angelic look ----
+$(BUILD_DIR)/CHILL.elf: $(SDK_DIR)/engines/chillamang.cpp $(SDK_DIR)/engines/chillamang/chill_dsp.h $(SDK_DIR)/engines/morphangutan/morph_dsp.h $(SDK_DIR)/include/psyn/psyn_plugin.h $(SDK_DIR)/include/psyn/psyn_cpp_bridge.h $(SDK_DIR)/tools/psyn.ld
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I$(SDK_DIR)/engines $< $(LDFLAGS) $(PSYN_EXTRA_LDFLAGS) -o $@
+
+$(BUILD_DIR)/CHILL.psyn: $(BUILD_DIR)/CHILL.elf $(SDK_DIR)/tools/psyn_builder.py
+	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py \
+		--elf $< \
+		--out $@ \
+		--code-name "CHILL" \
+		--display-name "CHILLAMANG" \
+		--patch-folder "CHILLAMANG" \
+		--type-id-wave 63 \
+		--type-id-play-tracker 63 \
+		--default-voices 6 \
+		--max-voices 8 \
+		--output-channels 2 \
+		--renders-aux 0 \
+		--has-sample-slots 0 \
+		--supports-idle-sleep 1 \
+		--has-voice-tick-idle 0
+
+chill-test:
+	@mkdir -p $(BUILD_DIR)
+	$(HOSTCXX) -O2 -std=c++20 -Wall -I$(SDK_DIR)/engines $(SDK_DIR)/engines/chillamang/chill_test.cpp -o $(BUILD_DIR)/chill_test
+	$(BUILD_DIR)/chill_test
+
+chill-plugin-test:
+	@mkdir -p $(BUILD_DIR)
+	$(HOSTCXX) -std=c++20 -includecstdint -O3 -ffast-math -fno-exceptions -DPRODUCT=WAVE -DPRODUCT_WAVE \
+		-D__dso_handle=psyn_test_dso_handle -D__cxa_atexit=psyn_test_cxa_atexit $(GRAIN_HOST_INC) \
+		$(SDK_DIR)/engines/chillamang/plugin_harness.cpp -o $(BUILD_DIR)/chill_plugin_harness
+	GARBAGE=1 $(BUILD_DIR)/chill_plugin_harness
+
+chill-previews:
+	@mkdir -p $(BUILD_DIR)/chill_previews
+	$(HOSTCXX) -O2 -std=c++20 -Wall -I$(SDK_DIR)/engines $(SDK_DIR)/engines/chillamang/preview.cpp -o $(BUILD_DIR)/chill_preview
+	$(BUILD_DIR)/chill_preview $(BUILD_DIR)/chill_previews
+
 # ---- hardware test builds of MORPHANGUTAN (to find what the Tracker dislikes) ----
 # TA: mono, no FX   TB: stereo, no FX   TC: sine test tone, mono, no FX   TD: full, automatic ID
 MORPH_TEST_FLAGS_TA := -DMORPH_MONO -DMORPH_NO_FX
@@ -200,4 +239,4 @@ morph-previews:
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean morph-test morph-previews morph-hwtest grain-test grain-plugin-test
+.PHONY: all clean morph-test morph-previews morph-hwtest grain-test grain-plugin-test chill-test chill-plugin-test chill-previews

@@ -948,7 +948,8 @@ void cGibGobSynth::refresh()
     v.editing = true;
     const bool singer = modelSings();
     v.jungle = !singer && strcasecmp(s->model.theme, "Jungle") == 0;
-    v.cute = singer || v.jungle;
+    v.angelic = !singer && strcasecmp(s->model.theme, "Angelic") == 0;
+    v.cute = singer || v.jungle || v.angelic;
     if (pageHasSampleView(l))
     {
         // the sample's shape (only read again when the page is drawn anew)

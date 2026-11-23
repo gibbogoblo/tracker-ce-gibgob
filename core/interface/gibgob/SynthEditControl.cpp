@@ -38,6 +38,11 @@ void fit(char* out, int outLen, const char* in, int chars)
 uint32_t panelColor(const SynthView& v, int panel)
 {
     const ViewLayout& l = v.layout;
+    if (v.angelic)
+    {
+        const int g = l.panel[panel].group;
+        return angelic::kAccent[(g < 0 ? panel : g) & 3];
+    }
     if (v.jungle)
     {
         static const uint32_t kJ[4] = { jungle::kFirefly, 0x6FD6A0, 0x9FE0B5, 0x5AC8FA };
@@ -340,9 +345,9 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
     }
     if (p.graph != kGraphAvatar)
     {
-        draw::color(v.jungle ? 0x07171A : y2k::kGraphBg);
+        draw::color(v.angelic ? angelic::kGraphBg : (v.jungle ? 0x07171A : y2k::kGraphBg));
         draw::rect(x1, y1, x2, y2);
-        draw::color(v.jungle ? jungle::kRing : y2k::kPanelEdge);
+        draw::color(v.angelic ? angelic::kRing : (v.jungle ? jungle::kRing : y2k::kPanelEdge));
         draw::frame(x1, y1, x2, y2, 1);
     }
 
@@ -372,7 +377,7 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
                     const int hx = clampi(hp[2 * k], ix + 9, ix + iw - 10);
                     const int hy = clampi(hp[2 * k + 1], iy + 9, iy + ih - 10);
                     const int s = (g.handle == k) ? 11 : 8;
-                    draw::slant(hx - s, hy - s, hx + s, hy + s, s, kHandle[k], y2k::kGraphBg);
+                    draw::slant(hx - s, hy - s, hx + s, hy + s, s, kHandle[k], v.angelic ? angelic::kGraphBg : y2k::kGraphBg);
                     draw::color(y2k::kDark);
                     draw::text(hx, hy, f.small, OPT_CENTER, kName[k]);
                 }
@@ -392,7 +397,7 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
         case kGraphFilter:
         {
             // a grid line at each decade
-            draw::color(y2k::kGrid);
+            draw::color(v.angelic ? angelic::kGrid : y2k::kGrid);
             for (int k = 1; k < 3; k++)
                 draw::rect(ix + iw * k / 3, iy, ix + iw * k / 3, iy + ih - 1);
             n = filterPoints(g, ix, iy, iw, ih, pts, 48);
@@ -404,7 +409,7 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
             draw::lineStrip(pts, n);
             // the cutoff
             const int cx = ix + (int)((0.03f + clampf(g.cutoff, 0, 1) * 0.94f) * (iw - 1));
-            draw::color(y2k::kPink);
+            draw::color(v.angelic ? angelic::kAccent[0] : y2k::kPink);
             draw::rect(cx, iy, cx, iy + ih - 1);
             break;
         }
@@ -674,7 +679,10 @@ void drawMainExtras(const SynthView& v, const Fonts& f)
     // two lines of status under the sound settings (voices free, memory)
     const PanelPos& p = v.layout.panel[1];
     char line[40];
-    draw::color(v.warn ? y2k::kPink : y2k::kDim);
+    if (v.angelic)
+        draw::color(v.warn ? angelic::kAccent[0] : angelic::kSoft);
+    else
+        draw::color(v.warn ? y2k::kPink : y2k::kDim);
     fit(line, sizeof(line), v.pathText, (p.w - 24) / 9);
     draw::text(p.x + 14, p.y + p.h - 52, f.small, OPT_CENTERY, line);
     fit(line, sizeof(line), v.hint, (p.w - 24) / 9);
@@ -755,9 +763,13 @@ const RoundPalette kJungle = { jungle::kPanel, jungle::kRing, jungle::kTitle, ju
                                jungle::kFirefly, jungle::kText, jungle::kFireflyHi, jungle::kSoft, jungle::kText,
                                jungle::kDark, jungle::kLeaf, jungle::kFirefly, jungle::kTabOn, jungle::kFirefly,
                                { jungle::kButton[0], jungle::kButton[1], jungle::kButton[2], jungle::kButton[3] } };
+const RoundPalette kAngelic = { angelic::kPanel, angelic::kRing, angelic::kTitle, angelic::kRow, angelic::kSel,
+                                angelic::kGold, angelic::kDark, angelic::kDark, angelic::kSoft, angelic::kText,
+                                angelic::kDark, angelic::kLit, angelic::kGold, angelic::kTabOn, angelic::kLit,
+                                { angelic::kAccent[0], angelic::kAccent[1], angelic::kAccent[2], angelic::kAccent[3] } };
 inline const RoundPalette& pal(const SynthView& v)
 {
-    return v.jungle ? kJungle : kPink;
+    return v.angelic ? kAngelic : (v.jungle ? kJungle : kPink);
 }
 
 void cutePill(int x1, int y1, int x2, int y2, uint32_t fill)
@@ -796,6 +808,68 @@ void jungleHeader(const SynthView& v, const Fonts& f)
     {
         draw::color(jungle::kFirefly);
         draw::text(718, 14, f.bold, OPT_CENTERY | OPT_RIGHTX, v.pageText);
+    }
+}
+
+// a gold halo: an open ring (an ellipse in two round rectangles)
+void halo(int cx, int cy, int rx, int ry, uint32_t under)
+{
+    draw::color(angelic::kGold);
+    draw::roundRect(cx - rx, cy - ry, cx + rx, cy + ry, ry);
+    draw::color(under);
+    draw::roundRect(cx - rx + 3, cy - ry + 2, cx + rx - 3, cy + ry - 2, ry - 2);
+}
+
+// the angel emblem: a gold halo over a little gold heart between two lilac
+// wings (three feathers each, the top one longest)
+void angelEmblem(int cx, int cy)
+{
+    static const int8_t kFeather[3][2] = { { 0, 18 }, { 5, 13 }, { 10, 8 } }; // dy, length
+    draw::color(angelic::kWingEdge);
+    for (const auto& fe : kFeather)
+    {
+        const int y = cy - 3 + fe[0];
+        draw::roundRect(cx - 5 - fe[1], y - 2, cx - 5, y + 2, 2);
+        draw::roundRect(cx + 5, y - 2, cx + 5 + fe[1], y + 2, 2);
+    }
+    halo(cx, cy - 8, 8, 3, angelic::kPanel);
+    draw::color(angelic::kGold);
+    draw::roundRect(cx - 4, cy - 1, cx + 4, cy + 7, 4);
+}
+
+// four-point sparkles in one colour (x, y, size each)
+void sparkles(const int16_t (*s)[3], int n, uint32_t col)
+{
+    draw::color(col);
+    for (int i = 0; i < n; i++)
+    {
+        draw::rect(s[i][0] - s[i][2], s[i][1], s[i][0] + s[i][2], s[i][1]);
+        draw::rect(s[i][0], s[i][1] - s[i][2], s[i][0], s[i][1] + s[i][2]);
+    }
+}
+
+void angelicHeader(const SynthView& v, const Fonts& f)
+{
+    // a pearl pill with a gloss, the name, the angel emblem at its end;
+    // sparkles on the right
+    cuteRingPill(5, 3, 459, 26, angelic::kRing, angelic::kPanel, 1);
+    draw::color(0xF3EEFF);
+    draw::roundRect(16, 5, 120, 9, 2); // the gloss
+    draw::color(angelic::kText);
+    draw::text(20, 15, f.big, OPT_CENTERY, v.synthName);
+    angelEmblem(430, 15);
+    char info[24];
+    fit(info, sizeof(info), v.headerInfo, 20);
+    draw::color(angelic::kSoft);
+    draw::text(474, 14, f.small, OPT_CENTERY, info);
+    static const int16_t kGoldSparks[2][3] = { { 708, 9, 5 }, { 756, 8, 6 } };
+    static const int16_t kBlueSparks[2][3] = { { 732, 20, 3 }, { 782, 18, 4 } };
+    sparkles(kGoldSparks, 2, angelic::kGoldDeep);
+    sparkles(kBlueSparks, 2, angelic::kAccent[2]);
+    if (v.pageText[0])
+    {
+        draw::color(angelic::kAccent[1]);
+        draw::text(694, 14, f.bold, OPT_CENTERY | OPT_RIGHTX, v.pageText);
     }
 }
 
@@ -840,7 +914,13 @@ void cutePanel(const SynthView& v, int pi, const Fonts& f)
     if (v.panelTitle[pi][0])
     {
         int tx = p.x + 20;
-        if (v.jungle)
+        if (v.angelic)
+        {
+            // a little halo before the title
+            halo(p.x + 24, p.y + 16, 10, 5, P.panel);
+            tx = p.x + 42;
+        }
+        else if (v.jungle)
         {
             // a little leaf before the title
             draw::color(jungle::kLeaf);
@@ -919,7 +999,7 @@ void cuteQuickBoxes(const SynthView& v, const Fonts& f)
         if (on)
             cutePill(x1, y1, x2, y2, col);
         else
-            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, col, v.jungle ? jungle::kPanel : cute::kBg, 2);
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, col, v.angelic ? angelic::kPanel : (v.jungle ? jungle::kPanel : cute::kBg), 2);
         char label[10], value[10];
         fit(value, sizeof(value), v.quick[k].value, 7);
         abbreviate(v.quick[k].label, label, clampi((86 - (int)strlen(value) * 8) * 2 / 13, 2, 8));
@@ -942,6 +1022,8 @@ void cuteTabs(const SynthView& v, const Fonts& f)
         // with Shift: the tools (a singer: the syllables, the one sung lights up)
         if (on && v.jungle && !v.shift)
             cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, jungle::kFirefly, P.tabOn, 2);
+        else if (on && v.angelic && !v.shift)
+            cuteRingPill(x1 + 2, y1 + 2, x2 - 2, y2 - 2, angelic::kGold, P.tabOn, 2); // a halo
         else if (on)
             cutePill(x1, y1, x2, y2, v.shift ? P.tabOnShift : P.tabOn);
         else
@@ -1024,7 +1106,9 @@ void SynthEditControl::update()
     // the pink look keeps its colours under Shift (only the red frame shows)
     draw::setLighten(v.shift && !v.cute);
 
-    if (v.jungle)
+    if (v.angelic)
+        draw::fadeRect(0, 0, kScreenW - 1, 479, angelic::kSkyTop, angelic::kSkyLow, true);
+    else if (v.jungle)
         draw::fadeRect(0, 0, kScreenW - 1, 479, jungle::kSkyTop, jungle::kSkyLow, true);
     else
     {
@@ -1035,7 +1119,9 @@ void SynthEditControl::update()
     if (v.cute)
     {
         const RoundPalette& P = pal(v);
-        if (v.jungle)
+        if (v.angelic)
+            angelicHeader(v, f);
+        else if (v.jungle)
             jungleHeader(v, f);
         else
             cuteHeader(v, f);
@@ -1053,7 +1139,7 @@ void SynthEditControl::update()
             drawSinger(v);
         if (v.hint[0] && v.layout.style != kStyleMain)
         {
-            draw::color(v.warn ? (v.jungle ? jungle::kFirefly : cute::kHot) : P.soft);
+            draw::color(v.warn ? (v.angelic ? angelic::kAccent[0] : (v.jungle ? jungle::kFirefly : cute::kHot)) : P.soft);
             draw::text(28, 352, f.small, OPT_CENTERY, v.hint);
         }
         if (v.message[0])

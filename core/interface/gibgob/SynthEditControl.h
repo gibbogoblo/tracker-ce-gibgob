@@ -118,6 +118,7 @@ struct SynthView
     bool editing = true; // false: the synth has no GibGob layout (message only)
     bool cute = false;   // the round look (pink for LILITRON); Shift does not lighten it
     bool jungle = false; // with cute: the night jungle colours (GORILLAGRAIN)
+    bool angelic = false; // with cute: the Y2K cyber angelic look (CHILLAMANG): pearl, halos, wings
     char message[64];
     HelpView help;
 };
@@ -215,6 +216,32 @@ constexpr uint32_t kMoon = 0xE8F7D0;
 // the coloured buttons (the Mini's own colours)
 constexpr uint32_t kButton[4] = { 0x53B886, 0xB8AA53, 0x7B6FD6, 0x5AC8FA };
 } // namespace jungle
+
+// the Y2K cyber angelic look (CHILLAMANG): the same round shapes on a pearl
+// sky (lavender to baby blue), iridescent pastels, gold halos, little wings
+namespace angelic
+{
+constexpr uint32_t kSkyTop = 0xFBF7FF;
+constexpr uint32_t kSkyLow = 0xE6F4FF;
+constexpr uint32_t kPanel = 0xFFFFFF;
+constexpr uint32_t kRing = 0xD6C8FF;   // panel and tab edges (lilac)
+constexpr uint32_t kTitle = 0x5A4A92;  // panel titles
+constexpr uint32_t kRow = 0xF1ECFF;
+constexpr uint32_t kSoft = 0x7D6FB5;   // labels
+constexpr uint32_t kText = 0x3D2F7A;   // values
+constexpr uint32_t kDark = 0x2A1F5C;   // text on light fills
+constexpr uint32_t kSel = 0xFFC6EA;    // the selected thing: iridescent pink
+constexpr uint32_t kGold = 0xF5C542;   // halos: the cursor's ring, the page tab's ring
+constexpr uint32_t kGoldDeep = 0xC99A1E;
+constexpr uint32_t kLit = 0xBDEBFF;    // the engine in use: baby blue
+constexpr uint32_t kTabOn = 0xE4DAFF;
+constexpr uint32_t kWing = 0xFFFFFF;
+constexpr uint32_t kWingEdge = 0xD6C8FF;
+constexpr uint32_t kGraphBg = 0xF6F2FF;
+constexpr uint32_t kGrid = 0xE4DAFF;
+// deeper iridescent colours, readable on white: rose, lavender, sky, gold
+constexpr uint32_t kAccent[4] = { 0xE36BB4, 0x8C6FE0, 0x3FA9D9, 0xC99A1E };
+} // namespace angelic
 
 // points of a picture, for the drawing and the tests (returns how many)
 int envelopePoints(const SynthGraph& g, int x, int y, int w, int h, int16_t* xy, int max, int16_t handles[8]);

@@ -346,14 +346,15 @@ static int synthTests(int limit)
             strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &sv;
             SynthEditControl sc(&prop);
             g_minY = 0;
-            for (int shift = 0; shift < 6; shift++)
+            for (int shift = 0; shift < 8; shift++)
             {
-                sv.cute = shift >= 2; // 2, 3: the pink look; 4, 5: the night jungle
-                sv.jungle = shift >= 4;
+                sv.cute = shift >= 2; // 2, 3: the pink look; 4, 5: the night jungle; 6, 7: angelic
+                sv.jungle = shift == 4 || shift == 5;
+                sv.angelic = shift >= 6;
                 sv.shift = shift & 1;
                 for (int i = 0; i < 8; i++) { sv.tabText[i] = shift ? kTools[i] : kTabs[i]; sv.tabOn[i] = shift ? (i == 4 || i == 6) : (i == page); }
                 char nm[48];
-                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s%s", kPageNames[page], vi + 1, views, kStyleName[l.style], sv.jungle ? " jungle" : (sv.cute ? " pink" : ""), sv.shift ? " shift" : "");
+                snprintf(nm, sizeof(nm), "synth %s %d/%d (%s)%s%s", kPageNames[page], vi + 1, views, kStyleName[l.style], sv.angelic ? " angelic" : (sv.jungle ? " jungle" : (sv.cute ? " pink" : "")), sv.shift ? " shift" : "");
                 render(sc, nm, limit, sv.shift);
                 if (g_ctxN != 0) { printf("  synth: save/restore not paired (%d)\n", g_ctxN); fails++; g_ctxN = 0; }
             }
@@ -370,6 +371,33 @@ static int synthTests(int limit)
                 fprintf(g_svg, "</svg>\n");
                 fclose(g_svg); g_svg = nullptr;
                 sv.jungle = false;
+                snprintf(sv.synthName, sizeof(sv.synthName), "MORPHANGUTAN");
+            }
+            sv.angelic = false;
+            if (svgDir && vi == 0)
+            {
+                // the Y2K cyber angelic look (CHILLAMANG) on every page
+                sv.shift = false; sv.cute = sv.angelic = true; sv.jungle = false; sv.message[0] = 0; sv.cursor = 1;
+                for (int i = 0; i < 8; i++) { sv.tabText[i] = kTabs[i]; sv.tabOn[i] = (i == page); }
+                snprintf(sv.synthName, sizeof(sv.synthName), "CHILLAMANG");
+                char path[256]; snprintf(path, sizeof(path), "%s/12_angelic_%s.svg", svgDir, kPageNames[page]);
+                g_svg = fopen(path, "w");
+                fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                render(sc, "angelic page (svg)", limit, false);
+                fprintf(g_svg, "</svg>\n");
+                fclose(g_svg); g_svg = nullptr;
+                if (page == 0)
+                {
+                    sv.shift = true;
+                    snprintf(path, sizeof(path), "%s/12_angelic_shift.svg", svgDir);
+                    g_svg = fopen(path, "w");
+                    fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                    render(sc, "angelic shift (svg)", limit, true);
+                    fprintf(g_svg, "</svg>\n");
+                    fclose(g_svg); g_svg = nullptr;
+                    sv.shift = false;
+                }
+                sv.angelic = sv.cute = false;
                 snprintf(sv.synthName, sizeof(sv.synthName), "MORPHANGUTAN");
             }
             if (svgDir)
