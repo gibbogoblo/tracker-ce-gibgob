@@ -34,4 +34,10 @@ Look: the clean beach version, `v5_*.png` (source `mockups_v5.py`).
   Effects: off, delay, reverb, chorus, crush, reverse, comb, filter, drive.
 - Nothing held, big +/-: the selected track's length 8 / 16 / 32 / 64 / 128.
 - Copy: copy. Shift + Copy: paste.
-- Insert: to be decided (not "select").
+- Insert = Fill:
+  - Insert + plus on a step: the step plays only in fills ("FILL" tag).
+  - Insert + minus on a step: fills leave the step out ("NO FILL" tag).
+  - Insert on a step marked either way: the mark is cleared.
+  - Holding Insert while the pattern plays: fill is on for as long as it is
+    held: the fill-only steps play and the left-out steps go quiet, so the
+    pattern can change completely.

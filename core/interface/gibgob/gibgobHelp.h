@@ -33,7 +33,6 @@ static const char* const kHelpMain[] = {
     "Menu > Master, page 4: Master FX",
     "Picture: /GibGob/Vision/1.jpg and 2.jpg",
     "  up to 254 x 109, baseline JPEG",
-    "Logo: /GibGob/Vision/logo.jpg (264 x 56)",
 };
 
 static const char* const kHelpPianoRoll[] = {

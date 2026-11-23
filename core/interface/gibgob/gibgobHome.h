@@ -63,10 +63,10 @@ class cGibGobHome : public ModuleBase
     uint8_t heldPitch[8] = { 0 };
     bool perfHeld[8] = { false };
 
-    // picture loading: slot 0 = frame 1, 1 = frame 2, 2 = logo, 3 = done
-    int loadSlot = 3;
+    // picture loading: slot 0 = frame 1, 1 = frame 2, 2 = done
+    int loadSlot = 2;
     bool loadBusy = false;
-    int loadedW[3] = { 0, 0, 0 }, loadedH[3] = { 0, 0, 0 };
+    int loadedW[2] = { 0, 0 }, loadedH[2] = { 0, 0 };
     void pictureDone(bool ok);
 
     int lastPattern = -1;
@@ -79,6 +79,7 @@ class cGibGobHome : public ModuleBase
     gibgob::VisionView* view = nullptr; // in the external memory
     hControl control = -1;
     char barText[8][16];
+    char titleText[16];
 };
 
 extern cGibGobHome gibgobHome;

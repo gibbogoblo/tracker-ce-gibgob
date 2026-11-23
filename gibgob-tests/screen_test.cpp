@@ -237,23 +237,16 @@ int main()
             buildVisionTile(&pat, t, 48 * 7, tile);
             if (tile.count > VisionTile::kMaxMarks) { printf("  vision tile over its marks\n"); fails++; }
         }
-        snprintf(vv.patternText, sizeof(vv.patternText), "Pattern 255"); snprintf(vv.barText, sizeof(vv.barText), "Bar 128.4");
-        snprintf(vv.swingText, sizeof(vv.swingText), "100%%"); snprintf(vv.bpmText, sizeof(vv.bpmText), "300");
+        snprintf(vv.patText, sizeof(vv.patText), "Pat 255"); snprintf(vv.title, sizeof(vv.title), "Track 8   Step 128/128");
+        snprintf(vv.mode, sizeof(vv.mode), "Q REC"); vv.modeColor = 0xE0604F;
+        memcpy(vv.params, pb, sizeof(pb)); vv.selectedParam = 2;
         vv.bar = bar; vv.shift = true; vv.cursor = 4;
         vv.pictureHint = "/GibGob/Vision/1.jpg + 2.jpg";
         strControlProperties prop; prop.y = 0; prop.w = 800; prop.h = 480; prop.data = &vv;
         VisionControl vc(&prop);
-        g_minY = 0; // this view has the whole screen (no title bar)
-        render(vc, "gibbon vision, no picture", kLimit);
-        vv.logoLoaded = true; vv.logoAddress = 470000; vv.logoW = kVisionLogoW; vv.logoH = kVisionLogoH;
+        render(vc, "main screen, no picture, full", kLimit);
         vv.pictureLoaded = true; vv.frameW = kVisionTileW; vv.frameH = kVisionTileH; vv.frameAddress[0] = 350000; vv.frameAddress[1] = 410000;
-        render(vc, "gibbon vision, picture", kLimit);
-        // main screen extras: recording (red bar box) and a held coloured button's value over the logo
-        snprintf(vv.modeText, sizeof(vv.modeText), "Q REC"); snprintf(vv.barText, sizeof(vv.barText), "128.4");
-        vv.editActive = true; vv.editColor = 0x53B886;
-        snprintf(vv.editLabel, sizeof(vv.editLabel), "Track 8 length"); snprintf(vv.editValue, sizeof(vv.editValue), "WWWWWWWWWWWWWWW");
-        render(vc, "main screen, rec + held value", kLimit);
-        vv.editActive = false; vv.modeText[0] = 0;
+        render(vc, "main screen, picture, full", kLimit);
         vv.welcome.active = true; vv.welcome.choice = 2;
         render(vc, "welcome window", kLimit, false);
         vv.welcome.active = false;
@@ -268,35 +261,46 @@ int main()
                 snprintf(vv.tiles[t].info, sizeof(vv.tiles[t].info), t == 4 || t == 6 ? "64 st  bars 1-4" : "16 st");
                 vv.tiles[t].flash = (t == 0 || t == 2); vv.tiles[t].soloed = false; vv.tiles[t].muted = (t == 3);
             }
-            snprintf(vv.patternText, sizeof(vv.patternText), "Pattern 3"); snprintf(vv.barText, sizeof(vv.barText), "Bar 3.2");
-            snprintf(vv.swingText, sizeof(vv.swingText), "54%%"); snprintf(vv.bpmText, sizeof(vv.bpmText), "140");
+            snprintf(vv.patText, sizeof(vv.patText), "Pat 3"); snprintf(vv.title, sizeof(vv.title), "Track 2   Step 7/16");
+            static const char* const kL[4] = { "Len", "Vel", "Snd", "Note" }; static const char* const kV[4] = { "16", "100", "snr_jun", "C3" };
+            static const uint32_t kC[4] = { 0x53B886, 0xB8AA53, 0x7B6FD6, 0x5AC8FA };
+            for (int i = 0; i < 4; i++) { snprintf(vv.params[i].label, 10, "%s", kL[i]); snprintf(vv.params[i].value, 10, "%s", kV[i]); vv.params[i].color = kC[i]; }
+            vv.selectedParam = -1;
             // the main screen: the top row plays the tracks, recording is on
             static const char* const kTr[8] = { "Kick", "Snare", "Hats", "Perc", "Chords", "Bass", "Lead", "Break" };
             static const uint32_t kTrCol[8] = { 0xB85548, 0xB85548, 0xB85548, 0x3C3C42, 0x5F53B8, 0x5F53B8, 0x5F53B8, 0xD9A23A };
             for (int i = 0; i < 8; i++) { vv.bar.text[i] = kTr[i]; vv.bar.fill[i] = kTrCol[i]; vv.bar.highlighted[i] = (i == 0 || i == 2); }
-            vv.cursor = 1; snprintf(vv.modeText, sizeof(vv.modeText), "REC"); snprintf(vv.barText, sizeof(vv.barText), "3.2");
-            vv.logoLoaded = false; vv.pictureLoaded = false;
+            vv.cursor = 1; snprintf(vv.mode, sizeof(vv.mode), "REC");
+            vv.pictureLoaded = false;
             g_svg = fopen(out, "w");
             fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
             words = 0; vc.update();
             fprintf(g_svg, "</svg>\n");
             fclose(g_svg); g_svg = nullptr;
-            // Shift on: the top row is CHIMP OUT; FX1 held: the tempo where the logo is
+            // Shift on: the top row is CHIMP OUT; FX1 held: BPM lit
             static const char* const kFx[8] = { "Roll 1/16", "Roll 1/32", "Stutter", "Filter", "Delay", "Reverb", "Halftime", "Vinyl" };
             static const uint32_t kFxCol[8] = { 0xE07B39, 0xE07B39, 0xD9A23A, 0x7B6FD6, 0x3FA7B5, 0x5AC8FA, 0x4FA3E0, 0xB8AA53 };
             for (int i = 0; i < 8; i++) { vv.bar.text[i] = kFx[i]; vv.bar.fill[i] = kFxCol[i]; vv.bar.highlighted[i] = (i == 2); }
-            vv.shift = true; vv.modeText[0] = 0; snprintf(vv.barText, sizeof(vv.barText), "Bar 3.2");
-            vv.editActive = true; vv.editColor = 0x7B6FD6;
-            snprintf(vv.editLabel, sizeof(vv.editLabel), "Tempo"); snprintf(vv.editValue, sizeof(vv.editValue), "140 BPM");
+            vv.shift = true; vv.mode[0] = 0;
+            static const char* const kSL[4] = { "All len", "", "BPM", "Swing" }; static const char* const kSV[4] = { "16", "", "140", "54%" };
+            for (int i = 0; i < 4; i++) { snprintf(vv.params[i].label, 10, "%s", kSL[i]); snprintf(vv.params[i].value, 10, "%s", kSV[i]); }
+            vv.selectedParam = 2;
             char out2[256]; snprintf(out2, sizeof(out2), "%s.shift.svg", out);
             g_svg = fopen(out2, "w");
             fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
             words = 0; vc.update();
             fprintf(g_svg, "</svg>\n");
             fclose(g_svg); g_svg = nullptr;
-            vv.editActive = false; vv.shift = true;
+            // the Shift contents without the Shift look (for trying other looks on top)
+            vv.shift = false;
+            snprintf(out2, sizeof(out2), "%s.shiftbase.svg", out);
+            g_svg = fopen(out2, "w");
+            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+            words = 0; vc.update();
+            fprintf(g_svg, "</svg>\n");
+            fclose(g_svg); g_svg = nullptr;
+            vv.shift = true;
         }
-        g_minY = 27;
     }
     // a 1-step-long hit on a 16-step drum track shows four times in the 4 bars
     {

@@ -15,11 +15,9 @@ namespace gibgob
 // grid geometry (shared by the drawing and the picture size check)
 constexpr int kVisionMargin = 10;
 constexpr int kVisionGap = 8;
-// the view has the whole screen: its own header (no title bar), then the grid
+// below the title bar and the info strip: the grid
 constexpr int kVisionTop = 69;
 constexpr int kVisionBottom = 418;
-constexpr int kVisionLogoX = 267, kVisionLogoY = 7; // logo panel
-constexpr int kVisionLogoW = 264, kVisionLogoH = 56;
 constexpr int kVisionTileW = (kScreenW - 2 * kVisionMargin - 2 * kVisionGap) / 3;
 constexpr int kVisionTileH = (kVisionBottom - kVisionTop - 2 * kVisionGap) / 3;
 constexpr int kVisionScreenSteps = 64; // 4 bars
@@ -61,21 +59,14 @@ struct VisionView
     int frameW = 0, frameH = 0;
     int frame = 0;
     const char* pictureHint = nullptr; // shown when there is no picture
-    // the logo in the header (/GibGob/Vision/logo.jpg), else red text
-    bool logoLoaded = false;
-    uint32_t logoAddress = 0;
-    int logoW = 0, logoH = 0;
-
-    char patternText[16] = { 0 };
-    char barText[16] = { 0 };
-    char swingText[8] = { 0 };
-    char bpmText[8] = { 0 };
-    char modeText[8] = { 0 }; // "REC" / "Q REC" (the bar box turns red)
-    // a coloured button is held: its value replaces the logo
-    bool editActive = false;
-    uint32_t editColor = 0;
-    char editLabel[20] = { 0 };
-    char editValue[24] = { 0 };
+    // the header: the main sequencer's info strip (pattern, step, REC, the
+    // four coloured-button values)
+    char patText[12] = { 0 };
+    char title[56] = { 0 };
+    char mode[12] = { 0 };
+    uint32_t modeColor = 0;
+    ParamBox params[4];
+    int selectedParam = -1;
     BottomBar bar;
     HelpView help;
     WelcomeView welcome;

@@ -73,11 +73,10 @@ struct PictureSlot
     uint32_t address;
     int maxW, maxH;
 };
-constexpr int kPictureSlots = 3;
+constexpr int kPictureSlots = 2;
 const PictureSlot kSlots[kPictureSlots] = {
     { "GibGob/Vision/1", 350000, kVisionTileW, kVisionTileH },
     { "GibGob/Vision/2", 410000, kVisionTileW, kVisionTileH },
-    { "GibGob/Vision/logo", 470000, kVisionLogoW, kVisionLogoH },
 };
 constexpr int kTicksPerBeat = 4 * kTicksPerStep;
 constexpr int kScreenTicks = kVisionScreenSteps * kTicksPerStep;
@@ -154,9 +153,9 @@ void cGibGobHome::initDisplayControls()
         view = new (s_viewMemory) VisionView();
     strControlProperties prop;
     prop.x = 0;
-    prop.y = 0;
+    prop.y = kScreenTop;
     prop.w = kScreenW;
-    prop.h = 480;
+    prop.h = kScreenH;
     prop.style = controlStyleShow;
     prop.data = view;
     control = display.createControl<VisionControl>(&prop);
@@ -190,7 +189,6 @@ void cGibGobHome::start(uint32_t options)
     if (!s_picturesKept || display.imgLoadCalls != s_loadCallsAfterMine)
     {
         view->pictureLoaded = false;
-        view->logoLoaded = false;
         view->pictureHint = "/GibGob/Vision/1.jpg + 2.jpg";
         loadSlot = 0;
         loadBusy = false;
@@ -199,9 +197,10 @@ void cGibGobHome::start(uint32_t options)
             loadedW[i] = loadedH[i] = 0;
     }
 
-    // the screen draws its own header over the whole screen
-    songTimer.hide();
-    titleBar->hide();
+    songTimer.show();
+    snprintf(titleText, sizeof(titleText), "GibGob OS");
+    titleBar->show();
+    titleBar->setTitle(titleText);
 
     setDefaultScreenFunct();
     if (takeWelcome())
@@ -307,7 +306,7 @@ void cGibGobHome::update()
     perform::uiTick();
     bool changed = recPoll();
 
-    // pictures: frame 1, frame 2, the logo, one after the other (the display
+    // pictures: frame 1, frame 2, one after the other (the display
     // decodes them into its own memory)
     if (loadSlot < kPictureSlots)
     {
@@ -423,60 +422,55 @@ void cGibGobHome::refresh()
     }
     lastSounding = sounding;
 
-    // header: pattern, bar (red while recording), swing, BPM
-    const int bar = c.playing ? (int)(c.ticks / (16 * kTicksPerStep)) + 1 : 1;
-    const int beat = c.playing ? (int)((c.ticks / kTicksPerBeat) % 4) + 1 : 1;
-    snprintf(view->patternText, sizeof(view->patternText), "Pattern %d", mtProject.values.actualPattern);
-    snprintf(view->modeText, sizeof(view->modeText), "%s", recModeText());
-    snprintf(view->barText, sizeof(view->barText), view->modeText[0] ? "%d.%d" : "Bar %d.%d", bar, beat);
-    snprintf(view->swingText, sizeof(view->swingText), "%d%%", patternSwing(p));
-    snprintf(view->bpmText, sizeof(view->bpmText), "%d", (int)(mtProject.values.globalTempo + 0.5f));
-
-    // a held coloured button: its value where the logo is
-    view->editActive = param != kParamNone;
-    if (view->editActive)
+    // header (the main sequencer's info strip): pattern, the selected track's
+    // step, REC, the four coloured-button values
+    const int laneSteps = trackSteps(p, cursor);
+    const int ph = playheadTick(cursor);
+    snprintf(view->patText, sizeof(view->patText), "Pat %d", mtProject.values.actualPattern);
+    snprintf(view->title, sizeof(view->title), "Track %d   Step %d/%d", cursor + 1,
+             ph < 0 ? 1 : ph / kTicksPerStep + 1, laneSteps);
+    snprintf(view->mode, sizeof(view->mode), "%s", recModeText());
+    view->modeColor = color::kRec;
+    ParamBox* pb = view->params;
+    for (int i = 0; i < 4; i++)
+        pb[i].label[0] = pb[i].value[0] = 0;
+    pb[0].color = color::kNoteBtn;
+    pb[1].color = color::kInstrBtn;
+    pb[2].color = color::kFx1Btn;
+    pb[3].color = color::kFx2Btn;
+    if (view->shift)
     {
-        char sound[16];
-        switch (param)
-        {
-            case kParamLength:
-                view->editColor = color::kNoteBtn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "Track %d length", cursor + 1);
-                snprintf(view->editValue, sizeof(view->editValue), "%d steps", trackSteps(p, cursor));
-                break;
-            case kParamVelocity:
-                view->editColor = color::kInstrBtn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "Velocity");
-                snprintf(view->editValue, sizeof(view->editValue), "%d", velocity);
-                break;
-            case kParamSound:
-                view->editColor = color::kFx1Btn;
-                gibgobSoundName(getSound(p, cursor), sound, sizeof(sound));
-                snprintf(view->editLabel, sizeof(view->editLabel), "Sound");
-                snprintf(view->editValue, sizeof(view->editValue), "%.15s", sound);
-                break;
-            case kParamPitch:
-                view->editColor = color::kFx2Btn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "Track %d note", cursor + 1);
-                snprintf(view->editValue, sizeof(view->editValue), "%s", mtNotes[clampInt(laneNote(p, cursor), 0, 127)]);
-                break;
-            case kParamAllLength:
-                view->editColor = color::kNoteBtn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "All tracks");
-                snprintf(view->editValue, sizeof(view->editValue), "%d steps", patternSteps(p));
-                break;
-            case kParamTempo:
-                view->editColor = color::kFx1Btn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "Tempo");
-                snprintf(view->editValue, sizeof(view->editValue), "%d BPM", (int)(mtProject.values.globalTempo + 0.5f));
-                break;
-            case kParamSwing:
-                view->editColor = color::kFx2Btn;
-                snprintf(view->editLabel, sizeof(view->editLabel), "Swing");
-                snprintf(view->editValue, sizeof(view->editValue), "%d%%", patternSwing(p));
-                break;
-            default: view->editActive = false; break;
-        }
+        snprintf(pb[0].label, sizeof(pb[0].label), "All len");
+        snprintf(pb[0].value, sizeof(pb[0].value), "%d", patternSteps(p));
+        snprintf(pb[2].label, sizeof(pb[2].label), "BPM");
+        snprintf(pb[2].value, sizeof(pb[2].value), "%d", (int)(mtProject.values.globalTempo + 0.5f));
+        snprintf(pb[3].label, sizeof(pb[3].label), "Swing");
+        snprintf(pb[3].value, sizeof(pb[3].value), "%d%%", patternSwing(p));
+    }
+    else
+    {
+        char sound[12];
+        gibgobSoundName(getSound(p, cursor), sound, sizeof(sound));
+        snprintf(pb[0].label, sizeof(pb[0].label), "Len");
+        snprintf(pb[0].value, sizeof(pb[0].value), "%d", laneSteps);
+        snprintf(pb[1].label, sizeof(pb[1].label), "Vel");
+        snprintf(pb[1].value, sizeof(pb[1].value), "%d", velocity);
+        snprintf(pb[2].label, sizeof(pb[2].label), "Snd");
+        snprintf(pb[2].value, sizeof(pb[2].value), "%.7s", sound);
+        snprintf(pb[3].label, sizeof(pb[3].label), "Note");
+        snprintf(pb[3].value, sizeof(pb[3].value), "%s", mtNotes[clampInt(laneNote(p, cursor), 0, 127)]);
+    }
+    // lit while its button is held
+    switch (param)
+    {
+        case kParamLength:
+        case kParamAllLength: view->selectedParam = 0; break;
+        case kParamVelocity: view->selectedParam = 1; break;
+        case kParamSound:
+        case kParamTempo: view->selectedParam = 2; break;
+        case kParamPitch:
+        case kParamSwing: view->selectedParam = 3; break;
+        default: view->selectedParam = -1; break;
     }
 
     // bottom bar: the tracks (play / record); with Shift on, the CHIMP OUT effects
@@ -520,13 +514,6 @@ void cGibGobHome::pictureDone(bool ok)
     else if (loadSlot == 1 && ok && view->pictureLoaded && loadedW[1] == loadedW[0] && loadedH[1] == loadedH[0])
     {
         view->frameAddress[1] = kSlots[1].address; // frame 2 (same size as frame 1)
-    }
-    else if (loadSlot == 2 && ok)
-    {
-        view->logoAddress = kSlots[2].address;
-        view->logoW = loadedW[2];
-        view->logoH = loadedH[2];
-        view->logoLoaded = true;
     }
     loadSlot++;
     if (loadSlot >= kPictureSlots)

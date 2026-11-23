@@ -169,8 +169,8 @@ constexpr uint32_t kTileBg = 0x1C1C24;
 constexpr uint32_t kBarLine = 0x3A3946;
 constexpr uint32_t kMutedGrey = 0x585764;
 constexpr uint32_t kPictureBg = 0x2E213B; // the frames' own background
-constexpr uint32_t kHeaderBox = 0x28272F;
-constexpr uint32_t kLogoRed = 0xF5002A;
+constexpr int kPatBoxW = 84;
+constexpr int kReserve = 230; // words kept for what is drawn after the notes
 constexpr int kHeaderH = 20;
 
 void cellRect(int cell, int& x1, int& y1, int& x2, int& y2)
@@ -207,39 +207,18 @@ void VisionControl::update()
     draw::begin(kDrawBudget);
     if (drawWelcome(view->welcome, fRegular, fBold))
     {
-        // the welcome window starts below where the title bar would be
-        draw::color(color::kBg);
-        draw::rect(0, 0, kScreenW - 1, kScreenTop - 1);
         draw::end();
         return;
     }
     if (drawHelp(view->help, fRegular, fBold))
     {
-        // the help window starts below where the title bar would be
-        draw::color(color::kBg);
-        draw::rect(0, 0, kScreenW - 1, kScreenTop - 1);
         draw::end();
         return;
     }
     draw::setLighten(view->shift);
 
     draw::color(color::kBg);
-    draw::rect(0, 0, kScreenW - 1, 479);
-
-    // header: Pattern, Bar | logo | Swing, BPM
-    const bool rec = view->modeText[0] != 0;
-    draw::color(kHeaderBox);
-    draw::rect(15, 17, 127, 47);
-    draw::color(rec ? color::kRec : kHeaderBox);
-    draw::rect(132, 17, 244, 47);
-    draw::color(view->editActive ? view->editColor : kHeaderBox);
-    draw::rect(kVisionLogoX, kVisionLogoY, kVisionLogoX + kVisionLogoW - 1, kVisionLogoY + kVisionLogoH - 1);
-    draw::color(kHeaderBox);
-    draw::rect(557, 17, 669, 47);
-    draw::rect(675, 17, 787, 47);
-    if (view->logoLoaded && !view->editActive)
-        draw::bitmap(view->logoAddress, view->logoW, view->logoH,
-                     kVisionLogoX + (kVisionLogoW - view->logoW) / 2, kVisionLogoY + (kVisionLogoH - view->logoH) / 2);
+    draw::rect(0, kScreenTop, kScreenW - 1, 479);
 
     // tile backgrounds and header bands
     draw::color(kTileBg);
@@ -260,6 +239,12 @@ void VisionControl::update()
 
     // the fixed parts before the notes, so the notes can never push them out
     drawBottomBar(view->bar, fBold);
+    drawInfoStrip(kPatBoxW + 12, view->title, view->mode, view->modeColor, view->params, view->selectedParam, fRegular,
+                  fBold);
+    draw::color(color::kLine);
+    draw::rect(4, kInfoY + 3, kPatBoxW, kInfoY + kInfoH - 4);
+    draw::color(color::kText);
+    draw::text((4 + kPatBoxW) / 2, kInfoY + kInfoH / 2, fBold, OPT_CENTERX | OPT_CENTERY, view->patText);
 
     // the picture (or where it goes)
     {
@@ -306,6 +291,8 @@ void VisionControl::update()
         draw::color(tile.muted ? kMutedGrey : tile.color);
         for (int i = 0; i < tile.count; i++)
         {
+            if (!draw::room(3 + kReserve))
+                break; // leave room for the playheads, names, cursor and Shift border
             const VisionTile::Mark& m = tile.marks[i];
             int mx1 = ax + m.x0 * aw / (kVisionScreenSteps * 4);
             int mx2 = ax + m.x1 * aw / (kVisionScreenSteps * 4) - 1;
@@ -344,43 +331,9 @@ void VisionControl::update()
         }
     }
     if (view->shift)
-    {
-        // Shift: the border round the whole screen (this view has no title bar)
-        draw::color(color::kShiftBorder);
-        draw::frame(0, 0, kScreenW - 1, 479, 4);
-    }
+        drawShiftBorder();
 
-    // text last: header, names, lengths, mute / solo tags
-    draw::color(color::kText);
-    draw::text(71, 32, fBold, OPT_CENTER, view->patternText);
-    draw::color(rec ? color::kTextDark : color::kText);
-    if (rec)
-    {
-        draw::text(140, 32, fBold, OPT_CENTERY, view->modeText);
-        draw::text(237, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->barText);
-    }
-    else
-    {
-        draw::text(188, 32, fBold, OPT_CENTER, view->barText);
-    }
-    draw::color(color::kText);
-    draw::text(779, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->bpmText);
-    draw::text(661, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->swingText);
-    if (view->editActive)
-    {
-        draw::color(color::kTextDark);
-        draw::text(kVisionLogoX + 14, kVisionLogoY + kVisionLogoH / 2, fRegular, OPT_CENTERY, view->editLabel);
-        draw::text(kVisionLogoX + kVisionLogoW - 14, kVisionLogoY + kVisionLogoH / 2, fBold, OPT_CENTERY | OPT_RIGHTX,
-                   view->editValue);
-    }
-    else if (!view->logoLoaded)
-    {
-        draw::color(kLogoRed);
-        draw::text(kVisionLogoX + kVisionLogoW / 2, kVisionLogoY + kVisionLogoH / 2, fBold, OPT_CENTER, "GIBBON VISION");
-    }
-    draw::color(color::kTextDim);
-    draw::text(565, 32, fRegular, OPT_CENTERY, "Swing");
-    draw::text(683, 32, fRegular, OPT_CENTERY, "BPM");
+    // text last: names, lengths, mute / solo tags
     for (int t = 0; t < 8; t++)
     {
         const VisionTile& tile = view->tiles[t];
