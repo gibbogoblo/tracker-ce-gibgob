@@ -11,7 +11,7 @@ mkdir -p build
 g++ $FLAGS engine_test.cpp $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/ChordFeel.cpp -o build/engine_test
 g++ $FLAGS chord_test.cpp -o build/chord_test
 g++ $FLAGS library_test.cpp $CORE/source/gibgob/Library.cpp -o build/library_test
-g++ $FLAGS screen_test.cpp $G/LaneControl.cpp $G/PianoRollControl.cpp $G/TableControl.cpp $G/ChordCanopy.cpp $G/DrumSeqControl.cpp $G/PerformControl.cpp $G/VisionControl.cpp $G/SynthEditControl.cpp $G/gibgobUi.cpp $CORE/source/gibgob/SynthLayout.cpp \
+g++ $FLAGS screen_test.cpp $G/PianoRollControl.cpp $G/TableControl.cpp $G/ChordCanopy.cpp $G/DrumSeqControl.cpp $G/PerformControl.cpp $G/VisionControl.cpp $G/SynthEditControl.cpp $G/gibgobUi.cpp $CORE/source/gibgob/SynthLayout.cpp \
     $CORE/source/gibgob/MelodicTrack.cpp $CORE/source/gibgob/ChordFeel.cpp $CORE/source/gibgob/PerformFx.cpp -o build/screen_test
 g++ $FLAGS -std=c++20 perform_test.cpp $CORE/source/gibgob/PerformFx.cpp -o build/perform_test
 g++ $FLAGS master_test.cpp $CORE/source/gibgob/MasterFx.cpp -o build/master_test

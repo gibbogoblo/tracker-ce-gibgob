@@ -205,6 +205,14 @@ void VisionControl::update()
     const int fBold = fonts[3].handle;
 
     draw::begin(kDrawBudget);
+    if (drawWelcome(view->welcome, fRegular, fBold))
+    {
+        // the welcome window starts below where the title bar would be
+        draw::color(color::kBg);
+        draw::rect(0, 0, kScreenW - 1, kScreenTop - 1);
+        draw::end();
+        return;
+    }
     if (drawHelp(view->help, fRegular, fBold))
     {
         // the help window starts below where the title bar would be
@@ -219,13 +227,17 @@ void VisionControl::update()
     draw::rect(0, 0, kScreenW - 1, 479);
 
     // header: Pattern, Bar | logo | Swing, BPM
+    const bool rec = view->modeText[0] != 0;
     draw::color(kHeaderBox);
     draw::rect(15, 17, 127, 47);
+    draw::color(rec ? color::kRec : kHeaderBox);
     draw::rect(132, 17, 244, 47);
+    draw::color(view->editActive ? view->editColor : kHeaderBox);
     draw::rect(kVisionLogoX, kVisionLogoY, kVisionLogoX + kVisionLogoW - 1, kVisionLogoY + kVisionLogoH - 1);
+    draw::color(kHeaderBox);
     draw::rect(557, 17, 669, 47);
     draw::rect(675, 17, 787, 47);
-    if (view->logoLoaded)
+    if (view->logoLoaded && !view->editActive)
         draw::bitmap(view->logoAddress, view->logoW, view->logoH,
                      kVisionLogoX + (kVisionLogoW - view->logoW) / 2, kVisionLogoY + (kVisionLogoH - view->logoH) / 2);
 
@@ -341,10 +353,27 @@ void VisionControl::update()
     // text last: header, names, lengths, mute / solo tags
     draw::color(color::kText);
     draw::text(71, 32, fBold, OPT_CENTER, view->patternText);
-    draw::text(188, 32, fBold, OPT_CENTER, view->barText);
+    draw::color(rec ? color::kTextDark : color::kText);
+    if (rec)
+    {
+        draw::text(140, 32, fBold, OPT_CENTERY, view->modeText);
+        draw::text(237, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->barText);
+    }
+    else
+    {
+        draw::text(188, 32, fBold, OPT_CENTER, view->barText);
+    }
+    draw::color(color::kText);
     draw::text(779, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->bpmText);
     draw::text(661, 32, fBold, OPT_CENTERY | OPT_RIGHTX, view->swingText);
-    if (!view->logoLoaded)
+    if (view->editActive)
+    {
+        draw::color(color::kTextDark);
+        draw::text(kVisionLogoX + 14, kVisionLogoY + kVisionLogoH / 2, fRegular, OPT_CENTERY, view->editLabel);
+        draw::text(kVisionLogoX + kVisionLogoW - 14, kVisionLogoY + kVisionLogoH / 2, fBold, OPT_CENTERY | OPT_RIGHTX,
+                   view->editValue);
+    }
+    else if (!view->logoLoaded)
     {
         draw::color(kLogoRed);
         draw::text(kVisionLogoX + kVisionLogoW / 2, kVisionLogoY + kVisionLogoH / 2, fBold, OPT_CENTER, "GIBBON VISION");

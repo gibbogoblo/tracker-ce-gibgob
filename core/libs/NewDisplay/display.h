@@ -121,6 +121,7 @@ class cDisplay
 
     // jpg/png
     uint8_t readImgFromSd(char* path, uint32_t address, int16_t max_w, int16_t max_h);
+    uint32_t imgLoadCalls = 0; // GibGob OS: counts picture loads (a screen can tell its pictures are still there)
     void readImgFromMemory(uint8_t* data, uint32_t size);
     uint8_t isImgLoaded() { return img.status == 3; }
     uint8_t getImgLoadState() { return img.status; }

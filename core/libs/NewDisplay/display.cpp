@@ -1286,6 +1286,7 @@ bool cDisplay::isControlsRefreshProcessIdle()
 //=====================================================================================================
 uint8_t cDisplay::readImgFromSd(char* path, uint32_t address, int16_t max_w, int16_t max_h)
 {
+    imgLoadCalls++;
     FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
 
     strcat(path, ".jpg");

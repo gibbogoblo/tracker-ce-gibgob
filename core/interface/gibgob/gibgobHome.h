@@ -2,32 +2,29 @@
 #define GIBGOB_HOME_H_
 
 #include "core/modulesBase.h"
-#include "gibgob/LaneControl.h"
+#include "gibgob/VisionControl.h"
 
-// GibGob OS main screen: the main sequencer, 8 horizontal track lanes.
+// GibGob OS main screen: the eight tracks as clips around your picture
+// (the Gibbon vision layout), with the main sequencer's controls. Notes are
+// edited in the drum overview / piano roll (Middle).
 class cGibGobHome : public ModuleBase
 {
   public:
+    // what a held coloured button changes with +/-
     enum Param : uint8_t
     {
-        kParamLength = 0, // Note button  (green): track length
-        kParamVelocity,   // Instr button (yellow)
-        kParamNudge,      // FX1 button   (purple)
-        kParamPitch,      // FX2 button   (light blue)
-        kParamCount
-    };
-
-    // what +/- edit while Shift is on (until Shift is turned off)
-    enum class ShiftParam : uint8_t
-    {
-        None,       // small +/- = sound, big +/- = zoom
-        GlobalLen,  // Shift + Note: length of every track
-        Tempo,      // Shift + FX1
-        Swing,      // Shift + FX2
+        kParamNone = 0,
+        kParamLength,   // Note: the track's length
+        kParamVelocity, // Instr: how hard the top row plays / records
+        kParamSound,    // FX1: the track's sound
+        kParamPitch,    // FX2: the note the top row plays
+        kParamAllLength, // Shift + Note: every track's length
+        kParamTempo,     // Shift + FX1
+        kParamSwing,     // Shift + FX2
     };
 
     virtual void update();
-    virtual void start(uint32_t options); // options = track to select
+    virtual void start(uint32_t options); // options: homeOptions(track)
     virtual void stop();
     virtual void initDisplayControls();
     virtual void destroyDisplayControls() {}
@@ -36,61 +33,52 @@ class cGibGobHome : public ModuleBase
     void refresh();
 
     // actions
-    void moveCursor(int dStep, int dTrack);
-    void pressMiddle();
-    void pressDelete();
-    void pressInsert();
-    void changeParam(int delta, bool big);
-    void changeLength(int delta);
-    void changeZoom(int delta);
-    void changeSound(int dir);
-    void changeTempo(float delta);
-    void changeSwing(int delta);
-    void changeGlobalLength(int delta, bool big);
-    void insertNote();
-    void changePattern(int delta);
-    void toggleMute(int track);
-    void trackButton(int track, bool pressed);
-    void openPianoRoll();
+    void moveCursor(int dCol, int dRow);
+    void openEditor();
     void openTrackPage();
+    void trackButton(int track, bool pressed);
     void releaseAllButtons();
+    void toggleMute(int track);
+    void toggleSolo(int track);
+    void duplicate();
+    void clearTrack();
+    void changeParam(int delta, bool big);
+    void changePattern(int delta);
     void openWelcome();
     void welcomeMove(int d);
     void welcomeChoose();
 
-    int cellNotes(int* out, int maxOut);
-
-    int cursorTrack = 0;
-    int cursorStep = 0; // -1 = on the track name column
-    int stepsVisible = 16;
-    uint8_t param = kParamVelocity;
-    bool paramHeld = false; // a coloured button is held: +/- change `param`
-    bool patternHeld = false; // button 1 is held: +/- change the pattern
-    void openVision();        // Gibbon vision
-    ShiftParam shiftParam = ShiftParam::None;
-    bool lastShift = false;
-    uint32_t blinkAt = 0;
-    bool blinkOn = false;
-
-    // defaults for new steps
-    int velocity = 100;
-    int nudge = 0;
-    int lengthTicks = 48;
+    int cursor = 0; // the selected track
+    Param param = kParamNone;
+    bool patternHeld = false; // button 1 held: small +/- change the pattern
+    bool insertDown = false;  // Insert: tap = mute, hold = solo
+    bool insertUsed = false;
+    uint32_t insertAt = 0;
+    int soloTrack = -1;
+    uint8_t muteBeforeSolo[8] = { 0 };
+    int velocity = 100; // how hard the top row plays
 
     bool held[8] = { false };
-    bool perfHeld[8] = { false }; // Shift + top row: performance effect held
-    uint8_t lastPerfActive = 0;
     bool heldRecording[8] = { false };
     uint8_t heldPitch[8] = { 0 };
-    uint32_t auditionOffAt = 0;
-    int lastPattern = -1;
-    int lastPlayPos = -2;
-    uint8_t lastSounding = 0;
+    bool perfHeld[8] = { false };
 
-    gibgob::LaneView view;
-    hControl grid = -1;
-    char titleText[40];
-    char barText[8][14];
+    // picture loading: slot 0 = frame 1, 1 = frame 2, 2 = logo, 3 = done
+    int loadSlot = 3;
+    bool loadBusy = false;
+    int loadedW[3] = { 0, 0, 0 }, loadedH[3] = { 0, 0, 0 };
+    void pictureDone(bool ok);
+
+    int lastPattern = -1;
+    int lastPlayX = -2;
+    int lastFrame = -1;
+    uint8_t lastSounding = 0;
+    uint8_t lastPerfActive = 0;
+    bool lastShift = false;
+
+    gibgob::VisionView* view = nullptr; // in the external memory
+    hControl control = -1;
+    char barText[8][16];
 };
 
 extern cGibGobHome gibgobHome;

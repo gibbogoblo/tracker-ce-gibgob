@@ -1,4 +1,3 @@
-#include "gibgob/LaneControl.h"
 #include "gibgob/PianoRollControl.h"
 #include "gibgob/TableControl.h"
 #include "gibgob/DrumSeqControl.h"
@@ -249,6 +248,15 @@ int main()
         vv.logoLoaded = true; vv.logoAddress = 470000; vv.logoW = kVisionLogoW; vv.logoH = kVisionLogoH;
         vv.pictureLoaded = true; vv.frameW = kVisionTileW; vv.frameH = kVisionTileH; vv.frameAddress[0] = 350000; vv.frameAddress[1] = 410000;
         render(vc, "gibbon vision, picture", kLimit);
+        // main screen extras: recording (red bar box) and a held coloured button's value over the logo
+        snprintf(vv.modeText, sizeof(vv.modeText), "Q REC"); snprintf(vv.barText, sizeof(vv.barText), "128.4");
+        vv.editActive = true; vv.editColor = 0x53B886;
+        snprintf(vv.editLabel, sizeof(vv.editLabel), "Track 8 length"); snprintf(vv.editValue, sizeof(vv.editValue), "WWWWWWWWWWWWWWW");
+        render(vc, "main screen, rec + held value", kLimit);
+        vv.editActive = false; vv.modeText[0] = 0;
+        vv.welcome.active = true; vv.welcome.choice = 2;
+        render(vc, "welcome window", kLimit, false);
+        vv.welcome.active = false;
         if (const char* out = getenv("VISION_SVG"))
         {
             // a picture of the frame, unlit (no Shift), playing
@@ -262,14 +270,31 @@ int main()
             }
             snprintf(vv.patternText, sizeof(vv.patternText), "Pattern 3"); snprintf(vv.barText, sizeof(vv.barText), "Bar 3.2");
             snprintf(vv.swingText, sizeof(vv.swingText), "54%%"); snprintf(vv.bpmText, sizeof(vv.bpmText), "140");
-            static const char* const kFx[8] = { "Roll 1/16", "Roll 1/32", "Stutter", "Filter", "Delay", "Reverb", "Halftime", "Vinyl" };
-            static const uint32_t kFxCol[8] = { 0xE07B39, 0xE07B39, 0xD9A23A, 0x7B6FD6, 0x3FA7B5, 0x5AC8FA, 0x4FA3E0, 0xB8AA53 };
-            for (int i = 0; i < 8; i++) { vv.bar.text[i] = kFx[i]; vv.bar.fill[i] = kFxCol[i]; vv.bar.highlighted[i] = (i == 2); }
+            // the main screen: the top row plays the tracks, recording is on
+            static const char* const kTr[8] = { "Kick", "Snare", "Hats", "Perc", "Chords", "Bass", "Lead", "Break" };
+            static const uint32_t kTrCol[8] = { 0xB85548, 0xB85548, 0xB85548, 0x3C3C42, 0x5F53B8, 0x5F53B8, 0x5F53B8, 0xD9A23A };
+            for (int i = 0; i < 8; i++) { vv.bar.text[i] = kTr[i]; vv.bar.fill[i] = kTrCol[i]; vv.bar.highlighted[i] = (i == 0 || i == 2); }
+            vv.cursor = 1; snprintf(vv.modeText, sizeof(vv.modeText), "REC"); snprintf(vv.barText, sizeof(vv.barText), "3.2");
+            vv.logoLoaded = false; vv.pictureLoaded = false;
             g_svg = fopen(out, "w");
             fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
             words = 0; vc.update();
             fprintf(g_svg, "</svg>\n");
             fclose(g_svg); g_svg = nullptr;
+            // Shift on: the top row is CHIMP OUT; FX1 held: the tempo where the logo is
+            static const char* const kFx[8] = { "Roll 1/16", "Roll 1/32", "Stutter", "Filter", "Delay", "Reverb", "Halftime", "Vinyl" };
+            static const uint32_t kFxCol[8] = { 0xE07B39, 0xE07B39, 0xD9A23A, 0x7B6FD6, 0x3FA7B5, 0x5AC8FA, 0x4FA3E0, 0xB8AA53 };
+            for (int i = 0; i < 8; i++) { vv.bar.text[i] = kFx[i]; vv.bar.fill[i] = kFxCol[i]; vv.bar.highlighted[i] = (i == 2); }
+            vv.shift = true; vv.modeText[0] = 0; snprintf(vv.barText, sizeof(vv.barText), "Bar 3.2");
+            vv.editActive = true; vv.editColor = 0x7B6FD6;
+            snprintf(vv.editLabel, sizeof(vv.editLabel), "Tempo"); snprintf(vv.editValue, sizeof(vv.editValue), "140 BPM");
+            char out2[256]; snprintf(out2, sizeof(out2), "%s.shift.svg", out);
+            g_svg = fopen(out2, "w");
+            fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+            words = 0; vc.update();
+            fprintf(g_svg, "</svg>\n");
+            fclose(g_svg); g_svg = nullptr;
+            vv.editActive = false; vv.shift = true;
         }
         g_minY = 27;
     }
@@ -291,25 +316,6 @@ int main()
         if (tile.count != 4 || tile.marks[0].x0 != 48) { printf("  vision: window start not followed (%d)\n", tile.count ? tile.marks[0].x0 : -1); fails++; }
     }
 
-    for (int zoomSteps : { 4, 16, 32 })
-    {
-        LaneView lv; lv.pattern = &pat; lv.stepsVisible = zoomSteps; lv.patternTicks = 64 * 48; lv.firstTick = 48 * 8;
-        lv.cursorTrack = 7; lv.cursorTick = 48 * 9; lv.shift = true; lv.nameCursor = zoomSteps == 16;
-        for (int t = 0; t < 8; t++) { snprintf(lv.lanes[t].name, 16, "%d WWWWWWWWW", t + 1); lv.lanes[t].melodic = t % 2; lv.lanes[t].slice = (t == 4); lv.lanes[t].muted = false; lv.lanes[t].sounding = true;
-            lv.lanes[t].steps = 12 + t * 7; lv.lanes[t].playhead = 48 * 9 + t * 11; }
-        snprintf(lv.title, sizeof(lv.title), "Pat 255   Track 8   Step 128/128"); snprintf(lv.mode, 12, "REC"); lv.modeColor = 0xFF0000;
-        memcpy(lv.params, pb, sizeof(pb)); lv.bar = bar;
-        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &lv;
-        LaneControl lc(&prop);
-        char nm[40]; snprintf(nm, 40, "main sequencer, %d steps, full", zoomSteps);
-        render(lc, nm, kLimit);
-        if (zoomSteps == 16)
-        {
-            lv.welcome.active = true; lv.welcome.choice = 2; lv.shift = false; // full-screen window, no Shift border
-            render(lc, "welcome window", kLimit, false);
-            lv.welcome.active = false;
-        }
-    }
 
     for (int zoom : { -12, 0, 24, 48 })
     {
@@ -566,7 +572,7 @@ int main()
             const H lists[] = { { "help: drum", kHelpDrum, (int)(sizeof(kHelpDrum) / sizeof(kHelpDrum[0])) },
                                 { "help: track page", kHelpTrackPage, (int)(sizeof(kHelpTrackPage) / sizeof(kHelpTrackPage[0])) },
                                 { "help: palette", kHelpPalette, (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0])) },
-                                { "help: gibbon vision", kHelpVision, (int)(sizeof(kHelpVision) / sizeof(kHelpVision[0])) },
+                                { "help: library", kHelpLibrary, (int)(sizeof(kHelpLibrary) / sizeof(kHelpLibrary[0])) },
                                 { "help: master fx", kHelpMasterFx, (int)(sizeof(kHelpMasterFx) / sizeof(kHelpMasterFx[0])) },
                                 { "help: synth editor", kHelpSynth, (int)(sizeof(kHelpSynth) / sizeof(kHelpSynth[0])) } };
             for (const H& h : lists)

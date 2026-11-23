@@ -3,7 +3,6 @@
 #include "gibgob/gibgobPages.h"
 #include "gibgob/drumSeq.h"
 #include "gibgob/gibgobPerform.h"
-#include "gibgob/gibbonVision.h"
 #include "gibgob/gibgobMasterFx.h"
 #include "gibgob/gibgobSynth.h"
 #include "gibgob/gibgobLibrary.h"
@@ -64,7 +63,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 21;
+const uint8_t Interface::modulesCount = 20;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -79,14 +78,13 @@ const hModule Interface::modules[modulesCount] = {
     &imageViewer,       // 10
     &globalFileBrowser, // 11
     &masterParams,      // 12
-    &gibgobHome,        // 13  GibGob OS main grid
+    &gibgobHome,        // 13  GibGob OS main screen (tracks as clips)
     &pianoRoll,         // 14  GibGob OS piano roll
     &gibgobPages,       // 15  GibGob OS track / chord palette pages
     &drumSeq,           // 16  GibGob OS drum track sequencer
-    &gibbonVision,      // 17  GibGob OS Gibbon vision (performance view)
-    &gibgobMasterFx,    // 18  GibGob OS Master FX page (4th Master page)
-    &gibgobSynth,       // 19  GibGob OS synth editor (synths with the GibGob layout)
-    &gibgobLibrary,     // 20  GibGob OS sample library (track assign)
+    &gibgobMasterFx,    // 17  GibGob OS Master FX page (4th Master page)
+    &gibgobSynth,       // 18  GibGob OS synth editor (synths with the GibGob layout)
+    &gibgobLibrary,     // 19  GibGob OS sample library (track assign)
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;

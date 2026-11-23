@@ -1,9 +1,9 @@
 #ifndef GIBGOB_VISIONCONTROL_H_
 #define GIBGOB_VISIONCONTROL_H_
 
-// Gibbon vision: the performance view. A 3 x 3 grid: the eight tracks around
-// a two-frame picture from the SD card, each tile showing the 4 bars that
-// are playing now.
+// The main screen (Gibbon vision layout): a 3 x 3 grid, the eight tracks
+// around a two-frame picture from the SD card, each tile showing the 4 bars
+// that are playing now.
 
 #include "displayControls.h"
 #include "gibgob/gibgobUi.h"
@@ -70,8 +70,15 @@ struct VisionView
     char barText[16] = { 0 };
     char swingText[8] = { 0 };
     char bpmText[8] = { 0 };
+    char modeText[8] = { 0 }; // "REC" / "Q REC" (the bar box turns red)
+    // a coloured button is held: its value replaces the logo
+    bool editActive = false;
+    uint32_t editColor = 0;
+    char editLabel[20] = { 0 };
+    char editValue[24] = { 0 };
     BottomBar bar;
     HelpView help;
+    WelcomeView welcome;
 };
 
 // tile cell of track t in the 3 x 3 grid (the centre is the picture)
