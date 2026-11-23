@@ -198,6 +198,8 @@ int main(int argc, char** argv)
         p.reverbMix = 0.32f;
         p.reverbDecay = 0.72f;
         p.tineLevel = 0.25f;
+        p.tineTone = 0.85f;
+        p.warmth = 0.8f;
         const int prog[4][4] = { { 41, 57, 60, 64 }, { 40, 55, 59, 62 }, { 38, 53, 57, 60 }, { 43, 53, 59, 62 } };
         for (int c = 0; c < 4; ++c)
         {
@@ -231,6 +233,7 @@ int main(int argc, char** argv)
         Piece pc{ "4_chillamang_lofi_dusty.wav", 84.0f, 26.0f, Params{}, {} };
         Params& p = pc.p;
         p.age = 0.6f;
+        p.warmth = 1.0f;
         p.drive = 0.45f;
         p.vibDepth = 0.12f;
         p.vibRate = 0.9f;
@@ -252,6 +255,55 @@ int main(int argc, char** argv)
             chord(pc.ev, b + 7.5f, { 44, 55, 60, 63, 67 }, 0.58f, 2.3f); // Abmaj9
         }
         chord(pc.ev, 20.0f, { 41, 56, 60, 63, 67 }, 0.5f, 4.0f, 0.08f);
+        pieces.push_back(pc);
+    }
+
+    // 5. serene: a fully round ping, very warm, soft hammers, long hall-like plate
+    {
+        Piece pc{ "5_chillamang_serene.wav", 60.0f, 24.0f, Params{}, {} };
+        Params& p = pc.p;
+        p.tineTone = 1.0f;
+        p.tineLevel = 0.45f;
+        p.tineDecay = 0.55f;
+        p.warmth = 1.0f;
+        p.felt = 0.35f;
+        p.bark = 0.1f;
+        p.body = 0.35f;
+        p.brightness = 3800.0f;
+        p.hammer = 0.15f;
+        p.decay = 0.75f;
+        p.tremDepth = 0.25f;
+        p.tremRate = 2.4f;
+        p.chorusMix = 0.25f;
+        p.reverbMix = 0.35f;
+        p.reverbDecay = 0.8f;
+        // Fmaj9 - Em7 - Dm9 - Cmaj7, each chord rolled slowly, with a few high bell notes
+        const int prog[4][5] = { { 41, 57, 60, 64, 67 }, { 40, 55, 59, 62, 67 }, { 38, 53, 57, 60, 64 }, { 36, 52, 55, 59, 64 } };
+        for (int c = 0; c < 4; ++c)
+        {
+            const float b = c * 5.0f;
+            for (int k = 0; k < 5; ++k)
+                pc.ev.push_back({ b + 0.18f * (float)k, prog[c][k], 0.42f + 0.03f * (float)(k % 2), 4.6f });
+            pc.ev.push_back({ b + 2.0f, prog[c][4] + 12, 0.38f, 1.5f });
+            pc.ev.push_back({ b + 3.0f, prog[c][3] + 12, 0.34f, 1.8f });
+        }
+        chord(pc.ev, 20.0f, { 41, 57, 60, 64, 69, 76 }, 0.4f, 4.0f, 0.2f);
+        pieces.push_back(pc);
+    }
+    // 6. the tine tone: the same phrase glassy (a) and round (b), nearly dry
+    for (int k = 0; k < 2; ++k)
+    {
+        Piece pc{ k == 0 ? "6a_chillamang_tine_glassy.wav" : "6b_chillamang_tine_round.wav", 92.0f, 14.0f, Params{}, {} };
+        Params& p = pc.p;
+        p.tineTone = k == 0 ? 0.0f : 1.0f;
+        p.tineLevel = 0.6f;
+        p.tremDepth = 0.0f;
+        p.chorusMix = 0.0f;
+        p.reverbMix = 0.12f;
+        const int mel[8] = { 72, 76, 79, 83, 81, 79, 76, 74 };
+        for (int i = 0; i < 8; ++i)
+            pc.ev.push_back({ 0.75f * (float)i, mel[i], 0.65f + 0.05f * (float)(i % 3), 0.7f });
+        chord(pc.ev, 6.5f, { 48, 55, 64, 71, 74 }, 0.6f, 5.0f, 0.03f);
         pieces.push_back(pc);
     }
 

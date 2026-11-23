@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 using namespace chill;
@@ -109,10 +110,24 @@ int main()
         mean /= (44100 - 4410);
         CHECK(std::fabs(mean) < 0.002, "DC %.4f", mean);
         // the start does not click: it begins at silence and rises over the first ms
-        float early = 0;
-        for (int i = 0; i < 8; ++i)
+        float early = 0, jump = 0;
+        for (int i = 0; i < 4; ++i)
             early = std::max(early, std::fabs(x[i]));
-        CHECK(early < peak * 0.1f, "first samples %.3f (peak %.3f)", early, peak);
+        {
+            Params q = p;
+            q.hammer = 0.0f; // the knock is noise and the ping a high tone on purpose: look at the body alone
+            q.tineLevel = 0.0f;
+            auto t = note(q, 60, 0.8f, 0.1f, 0.1f);
+            // a click = the start moves much faster than the tone does later
+            float later = 0;
+            for (int i = 1; i < 220; ++i)
+                jump = std::max(jump, std::fabs(t[i] - t[i - 1]));
+            for (int i = 2205; i < 2425; ++i)
+                later = std::max(later, std::fabs(t[i] - t[i - 1]));
+            jump /= std::max(later, 1e-6f);
+        }
+        CHECK(early < peak * 0.05f, "first samples %.3f (peak %.3f)", early, peak);
+        CHECK(jump < 1.5f, "the start jumps %.2fx faster than the tone later", jump);
         // after the damper: silence
         CHECK(rms(x, (int)(2.2 * 44100), (int)(2.5 * 44100)) < 1e-4f, "tail %.6f", rms(x, (int)(2.2 * 44100), (int)(2.5 * 44100)));
     }
@@ -157,6 +172,88 @@ int main()
         const float rs = (bin(soft, 2205, 8192, 2 * f) + bin(soft, 2205, 8192, 3 * f)) / bin(soft, 2205, 8192, f);
         const float rh = (bin(hard, 2205, 8192, 2 * f) + bin(hard, 2205, 8192, 3 * f)) / bin(hard, 2205, 8192, f);
         CHECK(rh > rs * 1.5f, "overtones soft %.3f hard %.3f", rs, rh);
+        if (getenv("SHOW")) printf("bark soft %.3f hard %.3f\n", rs, rh);
+    }
+
+    // the tine tone: glassy = the inharmonic ping (7.11 x the note), round =
+    // a pure partial two octaves up with no clang left
+    {
+        Params q = p;
+        q.tineLevel = 1.0f;
+        q.tineDecay = 0.8f;
+        q.body = 0.0f;
+        q.bark = 0.0f;
+        q.hammer = 0.0f;
+        q.brightness = 16000.0f;
+        q.warmth = 0.0f;
+        const float f = 261.63f;
+        q.tineTone = 0.0f;
+        auto glassy = note(q, 60, 0.9f, 1.0f, 0.5f);
+        q.tineTone = 1.0f;
+        auto round = note(q, 60, 0.9f, 1.0f, 0.5f);
+        const float gClang = bin(glassy, 220, 4096, 7.11f * f), gPure = bin(glassy, 220, 4096, 4.0f * f);
+        const float rClang = bin(round, 220, 4096, 7.11f * f), rPure = bin(round, 220, 4096, 4.0f * f);
+        CHECK(gClang > gPure, "glassy: clang %.4f pure %.4f", gClang, gPure);
+        CHECK(rPure > 20.0f * rClang, "round: clang %.5f pure %.4f", rClang, rPure);
+        // and the round ping swells in instead of striking
+        CHECK(brightness(round, 0, 220) < brightness(glassy, 0, 220) * 0.8f, "round attack %.3f glassy %.3f",
+              brightness(round, 0, 220), brightness(glassy, 0, 220));
+    }
+
+    // warmth: exact and identical at 0; at 1 no two hits alike, and darker
+    {
+        Params q = p;
+        q.warmth = 0.0f;
+        q.age = 0.0f;    // its wobble runs on between hits
+        q.hammer = 0.0f; // the knock is noise
+        auto a0 = note(q, 60, 0.7f, 1.0f, 0.6f);
+        Voice v;
+        v.init(7);
+        auto hit = [&](Voice& vo, const Params& pp)
+        {
+            vo.noteOn(pp, 60.0f, 0.7f);
+            std::vector<float> x(13230);
+            for (int s0 = 0; s0 < 13230; s0 += 30)
+            {
+                float l[30] = { 0 }, r[30] = { 0 };
+                vo.render(pp, 0.0f, l, r, 30);
+                for (int i = 0; i < 30; ++i)
+                    x[s0 + i] = l[i] + r[i];
+            }
+            vo.noteOff(pp);
+            for (int k = 0; k < 2000 && vo.active(); ++k)
+            {
+                float l[32] = { 0 }, r[32] = { 0 };
+                vo.render(pp, 0.0f, l, r, 32);
+            }
+            return x;
+        };
+        auto diff = [](const std::vector<float>& x, const std::vector<float>& y)
+        {
+            double d = 0, e = 0;
+            for (size_t i = 0; i < x.size(); ++i)
+            {
+                d += (x[i] - y[i]) * (x[i] - y[i]);
+                e += x[i] * x[i];
+            }
+            return (float)std::sqrt(d / std::max(e, 1e-12));
+        };
+        auto h1 = hit(v, q), h2 = hit(v, q);
+        CHECK(diff(h1, h2) < 0.02f, "warmth 0: two hits differ by %.3f", diff(h1, h2));
+        Params w = q;
+        w.warmth = 1.0f;
+        auto w1 = hit(v, w), w2 = hit(v, w);
+        CHECK(diff(w1, w2) > 0.05f, "warmth 1: two hits alike (%.3f)", diff(w1, w2));
+        auto a1 = note(w, 60, 0.7f, 1.0f, 0.6f);
+        // the upper harmonics (5th to 12th) against the fundamental
+        auto top = [&](const std::vector<float>& x)
+        {
+            float t = 0;
+            for (int k = 5; k <= 12; ++k)
+                t += bin(x, 2205, 8192, 261.63f * k);
+            return t / bin(x, 2205, 8192, 261.63f);
+        };
+        CHECK(top(a1) < top(a0) * 0.7f, "warmth: upper harmonics %.4f vs %.4f", top(a1), top(a0));
     }
 
     // low notes ring longer than high ones (held, no release)

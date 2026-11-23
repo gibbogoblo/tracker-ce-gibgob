@@ -67,6 +67,9 @@ enum class ChillParamId : int
     kReverbDecay,
     kReverbTone,
     kReverbMix,
+    // added in the second version (warmer, rounder)
+    kTineTone,
+    kWarmth,
 };
 
 namespace
@@ -116,6 +119,20 @@ auto pickupFormatter()
             return fmt::format("Hollow {:d}", pct);
         if (pct > 85)
             return fmt::format("Full {:d}", pct);
+        return fmt::format("{:d} %", pct);
+    };
+}
+
+// "Glassy" .. "Round"
+auto tineToneFormatter()
+{
+    return [](const Patch& /*patch*/, Patch::paramvalue_t value)
+    {
+        const int pct = static_cast<int>(std::lround(value * 100.0f));
+        if (pct <= 10)
+            return fmt::format("Glassy {:d}", pct);
+        if (pct >= 90)
+            return fmt::format("Round {:d}", pct);
         return fmt::format("{:d} %", pct);
     };
 }
@@ -305,6 +322,10 @@ void ChillamangVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& me
               .maxValue = 1, .midiCC = *MidiCCs::kOscParam0, .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kTineDecay, tineDecay, .displayName = "Tine decay", .defaultValue = d.tineDecay, .minValue = 0,
               .maxValue = 1, .midiCC = *MidiCCs::kOscParam0 + 1, .valueFormatter = createPercentFormatter());
+    helper.addParam(CP(kTineTone),
+                    Param{ .displayName = "Tine tone", .defaultValue = d.tineTone, .minValue = 0, .maxValue = 1,
+                           .valueFormatter = tineToneFormatter() },
+                    [](auto& v, Patch::optional_paramvalue_t x) { v.params.tineTone = *x; });
     ADD_FLOAT(kBark, bark, .displayName = "Bark", .defaultValue = d.bark, .minValue = 0, .maxValue = 1,
               .midiCC = *MidiCCs::kOscParam0 + 2, .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kBody, body, .displayName = "Body", .defaultValue = d.body, .minValue = 0, .maxValue = 1,
@@ -332,6 +353,8 @@ void ChillamangVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& me
               .midiCC = *MidiCCs::kOscParam0 + 7, .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kAge, age, .displayName = "Age", .defaultValue = d.age, .minValue = 0, .maxValue = 1,
               .midiCC = *MidiCCs::kOscParam0 + 8, .valueFormatter = createPercentFormatter());
+    ADD_FLOAT(kWarmth, warmth, .displayName = "Warmth", .defaultValue = d.warmth, .minValue = 0, .maxValue = 1,
+              .valueFormatter = createPercentFormatter());
     ADD_FLOAT(kKeyTrack, keyTrack, .displayName = "Key track", .defaultValue = d.keyTrack, .minValue = 0,
               .maxValue = 1, .valueFormatter = createPercentFormatter());
 
@@ -407,20 +430,21 @@ void ChillamangVoice::createMetadata(const Patch& /*patch*/, Patch::Metadata& me
           // the GibGob editor's Main page; its name picks the Y2K cyber angelic look
           { .name = "Angelic", .shortName = "GibGob",
             .elements = { el(ChillParamId::kBark), el(ChillParamId::kBrightness), el(ChillParamId::kTineLevel),
-                          el(ChillParamId::kBody), el(ChillParamId::kDecay), el(ChillParamId::kRelease),
+                          el(ChillParamId::kTineTone), el(ChillParamId::kDecay), el(ChillParamId::kRelease),
                           el(ChillParamId::kTremDepth), el(ChillParamId::kTremRate), el(ChillParamId::kChorusMix),
-                          el(ChillParamId::kAge), el(ChillParamId::kDelayMix), el(ChillParamId::kReverbMix) } },
+                          el(ChillParamId::kWarmth), el(ChillParamId::kDelayMix), el(ChillParamId::kReverbMix) } },
           { .name = "Tines", .shortName = "Osc",
             .subsections = {
-              { .name = "Tine", .elements = { el(ChillParamId::kTineLevel), el(ChillParamId::kTineDecay),
-                                              el(ChillParamId::kHammer), el(ChillParamId::kBeat) } },
+              { .name = "Tine", .elements = { el(ChillParamId::kTineLevel), el(ChillParamId::kTineTone),
+                                              el(ChillParamId::kTineDecay), el(ChillParamId::kHammer),
+                                              el(ChillParamId::kBeat) } },
               { .name = "Body", .elements = { el(ChillParamId::kBody), el(ChillParamId::kBark),
                                               el(ChillParamId::kPickup), el(ChillParamId::kTune),
                                               el(ChillParamId::kFine) } },
             } },
           { .name = "Tone", .shortName = "Filter",
             .subsections = {
-              { .elements = { el(ChillParamId::kBrightness), el(ChillParamId::kVelBright),
+              { .elements = { el(ChillParamId::kWarmth), el(ChillParamId::kBrightness), el(ChillParamId::kVelBright),
                               el(ChillParamId::kKeyTrack), el(ChillParamId::kDrive), el(ChillParamId::kAge) } },
             } },
           { .name = "Keys", .shortName = "Amp",

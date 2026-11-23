@@ -5,12 +5,16 @@
 // A voice, per note:
 //   body    a soft FM tone (carrier + modulator at the note), its brightness
 //           set by how hard the key is hit, mellowing as it rings
-//   tine    a short slightly inharmonic bell ping at the start
+//   tine    a bell ping at the start: glassy (inharmonic, FM) .. round (a pure
+//           harmonic two octaves up, swelling in softly): the Tine tone knob
 //   beat    a faint detuned partial: the slow shimmer of the tone bar
 //   pickup  uneven saturation: warmth, and "bark" when hit hard
 //   hammer  a felt thump at the attack; damper  a soft thud on release
 //   tone    a gentle low-pass that follows the key and the velocity
 //   decay   two stages (quick drop, long ring), low notes ring longer
+//   warmth  the analog side: each voice drifts a little in pitch, every hit
+//           differs slightly (tuning, brightness, level, ping), a steeper
+//           softer top and fuller low mids
 // The instrument (all voices together): suitcase tremolo (stereo autopan),
 // chorus, phaser, then MORPHANGUTAN's delay and reverb (morph::Fx).
 // MIT License, part of GibGob OS.
@@ -19,6 +23,7 @@
 
 #include "morphangutan/morph_dsp.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -46,6 +51,8 @@ struct Params
     // Tines
     float tineLevel = 0.35f; // the bell ping at the start
     float tineDecay = 0.30f; // 0..1: how long the ping rings
+    float tineTone = 0.55f;  // 0 glassy (bright, a little clangy) .. 1 round (pure, serene)
+    float warmth = 0.6f;     // 0 clean and exact .. 1 warm, drifting, analog
     float bark = 0.35f;      // growl when hit hard
     float body = 0.45f;      // brightness of the tone
     float pickup = 0.55f;    // 0 hollow .. 1 full (where the tine sits at the pickup)
@@ -54,7 +61,7 @@ struct Params
     float tune = 0.0f;       // semitones
     float fine = 0.0f;       // cents
     // Tone
-    float brightness = 5200.0f; // Hz, the low-pass
+    float brightness = 4600.0f; // Hz, the low-pass
     float velBright = 0.55f;    // harder = brighter
     float drive = 0.15f;        // preamp warmth
     float age = 0.15f;          // darker, older, a little wobbly
@@ -107,6 +114,13 @@ struct Params
     bool wantsSpaceFx() const { return delayType != morph::kDelayOff || reverbType != morph::kReverbOff; }
 };
 
+// a smooth, tube-like saturation: rounds the peaks off gradually and never
+// flattens them (a hard flat top has sharp corners: harsh, digital)
+inline float warmSat(float x)
+{
+    return x / sqrtf(1.0f + x * x);
+}
+
 // exp(-1 / (seconds * sr)): the per-sample factor of a decay with that time constant
 inline float decayCoef(float seconds)
 {
@@ -125,6 +139,11 @@ class Voice
         rng.state = 0x9E3779B9u ^ (seed * 2654435761u);
         if (rng.state == 0)
             rng.state = 1;
+        // each voice its own slow drift (two slow waves at its own rates)
+        driftRate1 = (0.07f + 0.10f * rng.unipolar()) * kInvSampleRate;
+        driftRate2 = (0.23f + 0.25f * rng.unipolar()) * kInvSampleRate;
+        driftPh1 = rng.unipolar();
+        driftPh2 = rng.unipolar();
         reset();
     }
 
@@ -134,7 +153,8 @@ class Voice
         idxEnv = bellEnv = hamEnv = thumpEnv = 0.0f;
         relMul = 1.0f;
         releasing = false;
-        lp1 = lp2 = hamLp = thumpLp = 0.0f;
+        lp1 = lp2 = lp3 = hamLp = thumpLp = bellLp = 0.0f;
+        bellRise = 0.0f;
         dcX = dcY = 0.0f;
         playing = false;
     }
@@ -151,10 +171,16 @@ class Voice
 
         if (!wasPlaying)
         {
-            phC = phM = phB = phBm = phBeat = 0.0f;
-            lp1 = lp2 = 0.0f;
+            phC = phM = phB = phBm = phBeat = phR = 0.0f;
+            lp1 = lp2 = lp3 = bellLp = 0.0f;
             dcX = dcY = 0.0f;
         }
+        // no two hits alike (warmth): tuning, brightness, level, the ping
+        const float w = clampf(p.warmth, 0.0f, 1.0f);
+        noteDetune = 1.0f + rng.bipolar() * w * 2.5f * 0.000577623f; // up to +-2.5 cents
+        noteBright = 1.0f + rng.bipolar() * w * 0.12f;
+        noteBell = 1.0f + rng.bipolar() * w * 0.25f;
+        noteAmp = 1.0f + rng.bipolar() * w * 0.09f; // about +-0.8 dB
         // two-stage decay: a quick drop then the long ring
         attackLeft = (int)((0.0015f + p.felt * 0.012f) * kSampleRate);
         attackStep = attackLeft > 0 ? 1.0f / (float)attackLeft : 1.0f;
@@ -165,12 +191,16 @@ class Voice
         slowCoef = decayCoef((0.6f + p.decay * p.decay * 14.0f) * keyScale); // ~5 s by default, up to ~15 s
         // brightness of the hit: the FM index, falling as the note rings
         const float v13 = vel * vel; // ~ vel^2: soft keys stay mellow
-        idx0 = p.body * (0.35f + 2.2f * v13);
+        idx0 = p.body * (0.35f + 2.2f * v13) * (1.0f - 0.2f * w) * noteBright;
         idxEnv = 1.0f;
         idxCoef = decayCoef((0.18f + 0.35f * p.body) * (0.6f + 0.4f * keyScale));
         // the tine ping
         bellEnv = 1.0f;
-        bellCoef = decayCoef((0.02f + p.tineDecay * 0.35f) * (0.5f + 0.5f * keyScale));
+        bellCoef = decayCoef((0.02f + p.tineDecay * 0.35f) * (0.5f + 0.5f * keyScale) *
+                             (1.0f + 0.6f * clampf(p.tineTone, 0.0f, 1.0f))); // a round ping rings a little longer
+        // the ping swells in: sharp when glassy, soft (about 8 ms) when round
+        bellRise = 1.0f;
+        bellRiseCoef = decayCoef(0.0004f + 0.008f * clampf(p.tineTone, 0.0f, 1.0f));
         // the felt thump
         hamEnv = (0.4f + 0.6f * vel) * p.hammer * (1.0f - 0.6f * p.felt);
         hamCoef = decayCoef(0.003f + 0.004f * p.felt);
@@ -212,23 +242,49 @@ class Voice
             bellRatio *= 0.5f;
         const float dB = dC * bellRatio;
         const float dBm = dC * 2.0f;
-        const float bellAmt = p.tineLevel * (0.25f + 0.75f * vel) * (1.0f - 0.7f * p.felt);
+        const float tone = clampf(p.tineTone, 0.0f, 1.0f);
+        const float bellAmt = p.tineLevel * (0.25f + 0.75f * vel) * (1.0f - 0.7f * p.felt) * noteBell;
+        // glassy: the inharmonic FM ping; round: a pure partial two octaves up
+        // (an octave and a fifth for high keys), a little louder to make up
+        const float glassAmt = bellAmt * (1.0f - tone) * (1.0f - tone);
+        const float roundAmt = bellAmt * (1.0f - (1.0f - tone) * (1.0f - tone)) * 1.15f;
+        float roundRatio = 4.0f;
+        if (f * roundRatio > 9000.0f)
+            roundRatio = 3.0f;
+        if (f * roundRatio > 9000.0f)
+            roundRatio = 2.0f;
+        const float dR = dC * roundRatio;
+        const float glassFm = 0.25f * (1.0f - tone);
+        // the ping's own soft low-pass (round: just above the partial)
+        const float bellCut = clampf(f * (roundRatio + 1.0f + 10.0f * (1.0f - tone)), 400.0f, 15000.0f);
+        const float bellG = 1.0f - pow2(-6.2831853f * bellCut * kInvSampleRate * 1.4426950f);
+        // warmth: drift, fuller low mids, a softer top
+        const float w = clampf(p.warmth, 0.0f, 1.0f);
+        const float driftCents = w * 3.5f;
+        const float fund = w * 0.4f; // more of the pure fundamental: rounder, fuller
+        const float warmNorm = 1.0f / (1.0f + fund * 0.5f);
+        const float topBlend = w * 0.75f;
         const float beatAmt = 0.06f + 0.22f * p.beat;
         const float bark = clampf(p.bark, 0.0f, 1.0f) * vel * vel;
-        const float drv = 1.0f + 7.0f * bark;
+        const float drv = 1.0f + 12.0f * bark;
         // even harmonics (0 hollow .. 1 full), stronger the harder the key is hit
-        const float asym = clampf(p.pickup, 0.0f, 1.0f) * 0.45f * (0.35f + 0.65f * vel) * (1.0f + bark);
-        const float pickupNorm = 1.0f / softClip(drv);
-        const float idxFloor = p.body * 0.12f;
+        const float asym = clampf(p.pickup, 0.0f, 1.0f) * 0.45f * (0.15f + 0.85f * vel) * (1.0f + bark);
+        // into the pickup gently: normal playing stays clean and keeps its
+        // dynamics, only bark (hard hits) pushes it into saturation
+        const float pickIn = 0.45f * drv;
+        const float pickupNorm = 1.0f / warmSat(pickIn);
+        const float fundGain = pickIn * pickupNorm; // the pickup's gain for quiet signals
+        const float idxFloor = p.body * 0.05f; // soft keys nearly pure
         // tone: a 12 dB low-pass, brighter for high keys and hard hits, darker with age
-        float cutoff = p.brightness * (0.45f + p.velBright * vel * 1.1f) *
+        float cutoff = p.brightness * noteBright * (0.45f + p.velBright * vel * 1.1f) *
                        pow2(p.keyTrack * (noteNum - 60.0f) * (1.0f / 24.0f)) * (1.0f - 0.65f * age);
+        cutoff *= 1.0f - 0.3f * clampf(p.warmth, 0.0f, 1.0f); // warmth: darker
         cutoff = clampf(cutoff, 120.0f, 16000.0f);
         const float g = 1.0f - pow2(-6.2831853f * cutoff * kInvSampleRate * 1.4426950f);
         const float driveAmt = clampf(p.drive, 0.0f, 1.0f);
         const float driveIn = 1.0f + driveAmt * 2.5f;
-        const float driveOut = 1.0f / softClip(driveIn);
-        const float level = p.volume * (1.0f - p.velToAmp + p.velToAmp * (0.15f + 0.85f * vel)) * 0.21f;
+        const float driveOut = 1.0f / warmSat(driveIn);
+        const float level = p.volume * (1.0f - p.velToAmp + p.velToAmp * (0.15f + 0.85f * vel)) * 0.21f * noteAmp;
         // keyboard spread: low keys left, high keys right
         const float panPos = clampf(p.pan + p.spread * (noteNum - 60.0f) * (1.0f / 30.0f), -1.0f, 1.0f);
         const float gL = sinTurns(0.125f * (1.0f - panPos) + 0.25f) * 1.4142135f; // cos law, 1 at centre
@@ -261,13 +317,23 @@ class Voice
             vibPh += vibInc;
             if (vibPh >= 1.0f)
                 vibPh -= 1.0f;
-            const float vib = vibCents > 0.01f ? 1.0f + sinTurns(vibPh) * vibCents * 0.000577623f : 1.0f;
+            float vib = vibCents > 0.01f ? 1.0f + sinTurns(vibPh) * vibCents * 0.000577623f : 1.0f;
+            // the analog drift: two slow waves of this voice's own
+            driftPh1 += driftRate1;
+            driftPh2 += driftRate2;
+            if (driftPh1 >= 1.0f) driftPh1 -= 1.0f;
+            if (driftPh2 >= 1.0f) driftPh2 -= 1.0f;
+            if (driftCents > 0.01f)
+                vib *= 1.0f + (0.7f * sinTurns(driftPh1) + 0.3f * sinTurns(driftPh2)) * driftCents * 0.000577623f;
+            vib *= noteDetune;
 
             phC += dC * vib;
             phM += dC * vib;
             phB += dB * vib;
             phBm += dBm * vib;
             phBeat += dBeat * vib;
+            phR += dR * vib;
+            if (phR >= 1.0f) phR -= 1.0f;
             if (phC >= 1.0f) phC -= 1.0f;
             if (phM >= 1.0f) phM -= 1.0f;
             if (phB >= 1.0f) phB -= 1.0f;
@@ -278,11 +344,22 @@ class Voice
             const float idx = idx0 * idxEnv + idxFloor;
             const float body = sinTurns(phC + idx * 0.15915494f * sinTurns(phM));
             const float beat = sinTurns(phBeat) * beatAmt;
-            const float bell = sinTurns(phB + 0.25f * sinTurns(phBm)) * bellEnv * bellAmt;
+            bellRise *= bellRiseCoef;
+            float bell = 0.0f;
+            if (bellEnv > 1e-5f)
+            {
+                const float glass = glassAmt > 1e-5f ? sinTurns(phB + glassFm * sinTurns(phBm)) * glassAmt : 0.0f;
+                const float round = sinTurns(phR) * roundAmt;
+                bellLp += ((glass + round) * bellEnv * (1.0f - bellRise) - bellLp) * bellG;
+                bell = bellLp;
+            }
             float x = (body + beat) * amp + bell * relMul * attackGain; // the ping starts softly too
 
             // pickup: uneven saturation (bark when hit hard)
-            x = softClip(x * drv + asym * x * x * drv) * pickupNorm;
+            x = warmSat(x * pickIn + asym * x * x * pickIn) * pickupNorm;
+            // warmth: more of the pure fundamental, clean (after the pickup, so
+            // it adds no overtones and soft keys stay soft)
+            x = (x + sinTurns(phC) * fund * fundGain * amp) * warmNorm;
 
             // hammer thump and damper thud (filtered noise)
             if (hamEnv > 1e-5f || thumpEnv > 1e-5f)
@@ -290,21 +367,24 @@ class Voice
                 const float nz = rng.bipolar();
                 hamLp += (nz - hamLp) * hamG;
                 thumpLp += (nz - thumpLp) * thumpG;
-                x += hamLp * hamEnv + thumpLp * thumpEnv * 4.0f;
+                x += hamLp * hamEnv * attackGain + thumpLp * thumpEnv * 4.0f; // the knock starts softly too
             }
-
-            // the uneven pickup shifts the wave off centre: take that out (~10 Hz)
-            const float hp = x - dcX + 0.9986f * dcY;
-            dcX = x;
-            dcY = hp;
-            x = hp;
+            // the preamp's warmth, before the tone filter (which then smooths
+            // the overtones it adds instead of letting them through raw)
+            if (driveAmt > 0.001f)
+                x = warmSat(x * driveIn) * driveOut;
 
             // tone
             lp1 += (x - lp1) * g;
             lp2 += (lp1 - lp2) * g;
-            float y = lp2;
-            if (driveAmt > 0.001f)
-                y = softClip(y * driveIn) * driveOut;
+            lp3 += (lp2 - lp3) * g;
+            float y = lp2 + (lp3 - lp2) * topBlend; // warmth: a steeper, softer top
+            // the uneven pickup (and the drive on it) shift the wave off centre:
+            // take that out last (~20 Hz)
+            const float hp = y - dcX + 0.997f * dcY;
+            dcX = y;
+            dcY = hp;
+            y = hp;
             y *= level;
             outL[i] += y * gL;
             outR[i] += y * gR;
@@ -312,7 +392,7 @@ class Voice
             peak = a > peak ? a : peak;
         }
         // broken numbers: start over quietly instead of poisoning the mix
-        if (!finiteBits(lp2) || !finiteBits(phC) || !finiteBits(amp) || !finiteBits(dcY))
+        if (!finiteBits(lp3) || !finiteBits(phC) || !finiteBits(amp) || !finiteBits(dcY) || !finiteBits(bellLp))
         {
             reset();
             return;
@@ -334,7 +414,10 @@ class Voice
     bool playing = false;
     bool releasing = false;
     float noteNum = 60.0f, vel = 1.0f, f0 = 261.6f, keyScale = 1.0f;
-    float phC = 0.0f, phM = 0.0f, phB = 0.0f, phBm = 0.0f, phBeat = 0.0f, vibPh = 0.0f;
+    float phC = 0.0f, phM = 0.0f, phB = 0.0f, phBm = 0.0f, phBeat = 0.0f, phR = 0.0f, vibPh = 0.0f;
+    float driftPh1 = 0.0f, driftPh2 = 0.0f, driftRate1 = 0.0f, driftRate2 = 0.0f;
+    float noteDetune = 1.0f, noteBright = 1.0f, noteBell = 1.0f, noteAmp = 1.0f;
+    float bellRise = 0.0f, bellRiseCoef = 1.0f, bellLp = 0.0f;
     int attackLeft = 0;
     float attackStep = 1.0f, attackGain = 1.0f;
     float amp = 0.0f, ampFast = 0.0f, ampSlow = 0.0f, fastCoef = 1.0f, slowCoef = 1.0f;
@@ -343,7 +426,7 @@ class Voice
     float bellEnv = 0.0f, bellCoef = 1.0f;
     float hamEnv = 0.0f, hamCoef = 1.0f, hamLp = 0.0f;
     float thumpEnv = 0.0f, thumpCoef = 1.0f, thumpLp = 0.0f;
-    float lp1 = 0.0f, lp2 = 0.0f;
+    float lp1 = 0.0f, lp2 = 0.0f, lp3 = 0.0f;
     float dcX = 0.0f, dcY = 0.0f;
 };
 
