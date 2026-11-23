@@ -764,15 +764,8 @@ bool readGrainView(int part, SynthGrainView& gv)
     for (int k = 0; k < voices; k++)
     {
         const float* g = s_graphBuf + k * kGraphPerVoice;
-        if (g[0] == kGrainViewMarker + 1.0f)
-        {
-            // a diagnosis build: its measurements ride along in [28..39]
-            if (!gv.hasDiag || k == 0)
-                for (int d = 0; d < 12; d++)
-                    gv.diag[d] = g[28 + d];
-            gv.hasDiag = true;
-        }
-        else if (g[0] != kGrainViewMarker)
+        // (marker + 1: a diagnosis build of the engine; its numbers are no longer shown)
+        if (g[0] != kGrainViewMarker && g[0] != kGrainViewMarker + 1.0f)
             continue;
         gv.head[gv.heads++] = g[1];
         const int n = clampi((int)g[2], 0, (kGraphPerVoice - 3) / 3);
@@ -803,7 +796,7 @@ bool readGrainView(int part, SynthGrainView& gv)
         gv.recording = false;
         return true;
     }
-    return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0 || gv.hasDiag;
+    return gv.heads != 0 || oldHeads != 0 || gv.grains != 0 || oldGrains != 0;
 }
 
 bool pageHasAvatar(const ViewLayout& l)
@@ -1655,7 +1648,9 @@ void cGibGobSynth::finishRecording()
         markDirty();
         const char* leaf = strrchr(path, '/');
         char msg[64];
-        snprintf(msg, sizeof(msg), "Saved %s - playing it now", leaf ? leaf + 1 : path);
+        const grainrec::State& rs = grainrec::state();
+        snprintf(msg, sizeof(msg), "Saved %s: %.1f s, %.1f s silence cut, %+.0f dB", leaf ? leaf + 1 : path,
+                 (double)rs.keptSeconds, (double)rs.trimmedSeconds, (double)rs.gainDb);
         say(msg);
     }
     else

@@ -10,6 +10,7 @@
 
 #include "cr_section_macros.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -103,6 +104,54 @@ void writeLE32(uint8_t* p, uint32_t v)
 {
     for (int i = 0; i < 4; i++)
         p[i] = (uint8_t)(v >> (8 * i));
+}
+// Cuts the silence off both ends of the take and brings its loudest point up
+// to just under full scale (at most +24 dB, so a near-silent take does not
+// turn into loud hiss). Silence = quieter than 1/64 of the loudest point
+// (-36 dB) and than ~-50 dBFS. A little is kept before the first sound (5 ms,
+// so the attack stays whole) and after the last (150 ms, so it can ring out).
+// false if there is nothing but silence.
+bool trimAndNormalize(int16_t*& take, uint32_t& frames)
+{
+    int peak = 0;
+    for (uint32_t i = 0; i < frames; i++)
+    {
+        const int a = take[i] < 0 ? -take[i] : take[i];
+        peak = a > peak ? a : peak;
+    }
+    if (peak < 60) // about -55 dBFS: nothing came in
+        return false;
+    int threshold = peak / 64;
+    threshold = threshold < 100 ? 100 : threshold;
+    threshold = threshold > peak ? peak : threshold; // a very quiet take: its loudest point still counts
+    uint32_t first = 0, last = frames - 1;
+    while (first < frames && (take[first] < 0 ? -take[first] : take[first]) < threshold)
+        first++;
+    while (last > first && (take[last] < 0 ? -take[last] : take[last]) < threshold)
+        last--;
+    const uint32_t pre = kRate / 200, post = kRate * 15 / 100;
+    first = first > pre ? first - pre : 0;
+    last = last + post < frames ? last + post : frames - 1;
+    const uint32_t kept = last - first + 1;
+
+    // louder: up to -0.3 dBFS, at most 16x (+24 dB)
+    float gain = 31700.0f / (float)peak;
+    gain = gain > 16.0f ? 16.0f : (gain < 1.0f ? 1.0f : gain);
+    if (gain > 1.01f)
+    {
+        for (uint32_t i = first; i <= last; i++)
+        {
+            int v = (int)((float)take[i] * gain);
+            take[i] = (int16_t)(v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
+        }
+    }
+    State& s = st();
+    s.keptSeconds = kept / (float)kRate;
+    s.trimmedSeconds = (frames - kept) / (float)kRate;
+    s.gainDb = 20.0f * log10f(gain);
+    take += first;
+    frames = kept;
+    return true;
 }
 } // namespace
 
@@ -204,19 +253,29 @@ bool stopAndSave(const char* folder, char* path, int pathLen, char* why, int why
         recorder.stop();
     restoreInput();
     st().active = false;
-    const uint32_t frames = recorder.getLength();
+    uint32_t frames = recorder.getLength();
     if (frames < kRate / 10)
     {
         snprintf(why, (size_t)whyLen, "Too short: nothing kept");
         return false;
     }
 
+    // trim the silence at both ends, then make it louder (see trimAndNormalize)
+    int16_t* take = s_buffer;
+    uint32_t total = frames;
+    if (!trimAndNormalize(take, total))
+    {
+        snprintf(why, (size_t)whyLen, "Only silence: nothing kept");
+        return false;
+    }
+    frames = total;
+
     // short fades so the ends do not click
     const uint32_t fade = frames > 4410 ? 220 : frames / 20;
     for (uint32_t i = 0; i < fade; i++)
     {
-        s_buffer[i] = (int16_t)((int32_t)s_buffer[i] * (int32_t)i / (int32_t)fade);
-        s_buffer[frames - 1 - i] = (int16_t)((int32_t)s_buffer[frames - 1 - i] * (int32_t)i / (int32_t)fade);
+        take[i] = (int16_t)((int32_t)take[i] * (int32_t)i / (int32_t)fade);
+        take[frames - 1 - i] = (int16_t)((int32_t)take[frames - 1 - i] * (int32_t)i / (int32_t)fade);
     }
 
     FileSystem* fs = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
@@ -262,7 +321,7 @@ bool stopAndSave(const char* folder, char* path, int pathLen, char* why, int why
     memcpy(h + 36, "data", 4);
     writeLE32(h + 40, dataBytes);
     bool good = fs->writeFile(h, sizeof(h), fh) == (int32_t)sizeof(h);
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(s_buffer);
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(take);
     for (uint32_t off = 0; good && off < dataBytes; off += 16384)
     {
         const uint32_t chunk = dataBytes - off < 16384 ? dataBytes - off : 16384;

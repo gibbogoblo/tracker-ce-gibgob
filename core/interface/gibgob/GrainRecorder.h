@@ -24,6 +24,10 @@ struct State
     float level;        // the input now, 0..1
     uint8_t peaks[kPeakBins];
     bool full;          // reached maxFrames (the caller saves it)
+    // what the last save did: the silence cut off, how much louder it was made
+    float keptSeconds;
+    float trimmedSeconds;
+    float gainDb;
 };
 
 // starts recording; false (with why in `why`) if it cannot
@@ -31,8 +35,10 @@ bool start(char* why, int whyLen);
 // call often while active: follows the recording for the picture
 void poll();
 const State& state();
-// stops; saves the take into `folder` and returns its full path in `path`
-// (empty if nothing was recorded or saving failed: why in `why`)
+// stops; trims the silence at both ends, brings the loudest point up to just
+// under full scale (at most +24 dB), saves the take into `folder` and returns
+// its full path in `path` (empty if nothing was recorded or saving failed:
+// why in `why`)
 bool stopAndSave(const char* folder, char* path, int pathLen, char* why, int whyLen);
 // stops without keeping anything
 void cancel();

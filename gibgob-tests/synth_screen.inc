@@ -240,12 +240,6 @@ static int synthTests(int limit)
         render(sc, "synth GORILLAGRAIN grains jungle", limit, false);
         gv.shift = true;
         render(sc, "synth GORILLAGRAIN jungle shift", limit, true);
-        G.hasDiag = true;
-        const uint8_t busy = G.grains; G.grains = 8; // the diagnosis build sends 8 a voice
-        for (int d = 0; d < 12; d++) G.diag[d] = 0.123f * (d + 1);
-        G.diag[7] = 2; G.diag[8] = 18000; G.diag[5] = 999;
-        render(sc, "synth GORILLAGRAIN diagnosis", limit, false);
-        G.hasDiag = false; G.grains = busy;
         gv.shift = false;
         G.recording = true; G.recSeconds = 12.3f; G.recMaxSeconds = 20.0f; G.recLevel = 0.95f;
         render(sc, "synth GORILLAGRAIN recording", limit, false);
