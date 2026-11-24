@@ -44,6 +44,22 @@ struct CanopyView
 
     bool shift = false;
     BottomBar bar;
+
+    // the chord list (Insert): ready-made progressions to load into 1-8
+    static constexpr int kListRows = 8;
+    struct ListRow
+    {
+        char name[20];
+        char chords[64]; // "Dm9 G13 Cmaj9 ..."
+        uint8_t style;   // ChordListStyle
+    };
+    bool listOpen = false;
+    ListRow listRows[kListRows];
+    int listShown = 0;   // rows filled
+    int listCursor = 0;  // the highlighted row (of the shown ones)
+    int listIndex = 0;   // its number in the whole list (0-based)
+    int listCount = 0;
+    char listKey[4] = { 0 };
 };
 
 // draws the whole page (inside a display update)

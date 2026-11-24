@@ -1,4 +1,5 @@
 #include "gibgob/ChordCanopy.h"
+#include "gibgob/gibgobChordList.h"
 
 #include "FT812.h"
 #include "display.h"
@@ -110,10 +111,53 @@ void canopyKeyRange(const uint8_t* notes, int count, int& lowC, int& octaves)
         lowC = 128 - 12 * octaves;
 }
 
+// the chord list over the canopy: one row per progression, its style, name
+// and chords; the highlighted one in fruit gold
+void drawChordList(const CanopyView& v, int fRegular, int fBold)
+{
+    static const uint32_t kStyleColor[4] = { 0xE88AC0, 0xFFC83A, 0x5AC8FA, 0xB69CFF };
+    const int x1 = 12, x2 = kScreenW - 13, y1 = kCanopyY1 + 2, y2 = kFieldsY2;
+    draw::color(kWood);
+    draw::roundRect(x1, y1, x2, y2, 14);
+    char head[64];
+    snprintf(head, sizeof(head), "Chord list  %d/%d      Key: %s", v.listIndex + 1, v.listCount, v.listKey);
+    draw::color(kFruitLit);
+    draw::text(x1 + 18, y1 + 18, fBold, OPT_CENTERY, head);
+    draw::color(color::kTextDim);
+    draw::text(x2 - 16, y1 + 18, fRegular, OPT_CENTERY | OPT_RIGHTX, "Left/Right: key   Middle: load into 1-8");
+    const int rowH = 38, top = y1 + 40;
+    for (int i = 0; i < v.listShown && i < CanopyView::kListRows; i++)
+    {
+        const CanopyView::ListRow& r = v.listRows[i];
+        const int ry = top + i * rowH;
+        const bool cur = i == v.listCursor;
+        if (cur)
+        {
+            draw::color(kFruitLit);
+            draw::roundRect(x1 + 8, ry, x2 - 8, ry + rowH - 4, 12);
+        }
+        const uint32_t sc = kStyleColor[r.style & 3];
+        draw::color(cur ? color::kTextDark : sc);
+        draw::text(x1 + 22, ry + rowH / 2 - 2, fRegular, OPT_CENTERY, kChordListStyleNames[r.style & 3]);
+        draw::color(cur ? color::kTextDark : color::kText);
+        draw::text(x1 + 112, ry + rowH / 2 - 2, fBold, OPT_CENTERY, r.name);
+        draw::color(cur ? color::kTextDark : color::kTextDim);
+        draw::text(x1 + 290, ry + rowH / 2 - 2, fRegular, OPT_CENTERY, r.chords);
+    }
+}
+
 void drawChordCanopy(const CanopyView& v, int fRegular, int fBold)
 {
     draw::color(kSky);
     draw::rect(0, kScreenTop, kScreenW - 1, kScreenTop + kScreenH - 1);
+
+    if (v.listOpen)
+    {
+        drawChordList(v, fRegular, fBold);
+        drawInfoStrip(10, v.title, nullptr, 0, v.params, v.mode, fRegular, fBold);
+        drawBottomBar(v.bar, fBold);
+        return;
+    }
 
     // ---- the canopy ----
     draw::fadeRect(0, kCanopyY1, kScreenW - 1, kFruitY + 20, kCanopyTop, kSky, true);

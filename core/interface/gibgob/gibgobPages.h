@@ -44,6 +44,9 @@ class cGibGobPages : public ModuleBase
     void switchPage(Page newPage);
     void setFeelMode(int mode); // the Chord Canopy: plain chord, strum, arp or human
     void pressMiddle();
+    void toggleChordList();   // the Chord Canopy: Insert
+    void auditionListChord(); // the list's highlighted progression, chord 1
+    void loadChordList();     // ... into chords 1-8
     void loadSample();  // the folder browser
     void openLibrary(); // the sample library (Middle on Sound)
     void prepareImport();

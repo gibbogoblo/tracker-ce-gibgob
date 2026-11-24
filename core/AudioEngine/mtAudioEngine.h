@@ -76,6 +76,9 @@ class audioEngine
     void enableLineInImpact();
     void setHeadphonesVolume(uint8_t value);
     void setPreviewVolume(uint8_t value);
+    // GibGob: a trim on the SD preview (the library plays it quieter, to sit
+    // with the tracks); 1.0 = the normal preview level
+    void setPreviewTrim(float mul);
     void muteHeadphones();
     void unmuteHeadphones();
     void setDelayFeedback(uint8_t value);

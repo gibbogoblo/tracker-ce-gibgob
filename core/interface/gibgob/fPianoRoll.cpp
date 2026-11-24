@@ -1911,6 +1911,8 @@ static void functEncoder(int16_t value)
 static void functTopRow(uint8_t button, uint8_t state)
 {
     int idx = button - interfaceButton0;
+    if (topRowBounce(idx, state))
+        return; // the contact bouncing as the button is let go
     if (inMenu())
     {
         if (state == buttonPress)

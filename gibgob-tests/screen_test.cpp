@@ -6,6 +6,7 @@
 #include "gibgob/VisionControl.h"
 #include "gibgob/DrumOverviewControl.h"
 #include "gibgob/PerformFx.h"
+#include "gibgob/gibgobChordList.h"
 #include <algorithm>
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/MelodicTrack.h"
@@ -211,6 +212,26 @@ void gibgobMiddleEvent(uint8_t value);
 
 // Middle opening a screen must not act on the new screen: the press (and
 // the Mini's repeats of it while held) is ignored there until it is let go
+#include "elapsedMillis.h"
+static void testTopRowBounce()
+{
+    g_testMillis = 1000;
+    bool ok = !gibgob::topRowBounce(2, buttonPress);
+    g_testMillis = 1300;
+    ok = ok && !gibgob::topRowBounce(2, buttonRelease);
+    // the contact bounces as the finger lifts: press + release again within a few ms
+    g_testMillis = 1305;
+    ok = ok && gibgob::topRowBounce(2, buttonPress);
+    g_testMillis = 1309;
+    ok = ok && gibgob::topRowBounce(2, buttonRelease);
+    // another button is not affected; a real press later is a press
+    ok = ok && !gibgob::topRowBounce(3, buttonPress) && !gibgob::topRowBounce(3, buttonRelease);
+    g_testMillis = 1500;
+    ok = ok && !gibgob::topRowBounce(2, buttonPress) && !gibgob::topRowBounce(2, buttonRelease);
+    if (!ok) { printf("top row: a bounce on release played again (or a real press was lost)\n"); fails++; }
+    g_testMillis = 0;
+}
+
 static void testMiddleCarryOver()
 {
     // Middle pressed: the event is noted first, then the old screen opens the new one
@@ -239,6 +260,7 @@ int main()
 {
     const int kLimit = 1500; // whole frame may hold about 2040; title bar and popups need the rest
     testMiddleCarryOver();
+    testTopRowBounce();
     for (auto& t : pat.track) { t.length = 63; }
     memset(&mtProject, 0, sizeof(mtProject));
     for (auto& i : mtProject.instrument) i.isActive = 1;
@@ -612,6 +634,65 @@ int main()
                 render(cc, "chord canopy (svg)", kLimit, false);
                 fprintf(g_svg, "</svg>\n");
                 fclose(g_svg); g_svg = nullptr;
+            }
+            // the chord list open: every row full (the longest names), Shift on and off
+            {
+                cv.listOpen = true;
+                cv.listCount = kChordListCount;
+                snprintf(cv.listKey, sizeof(cv.listKey), "Db");
+                cv.listShown = CanopyView::kListRows;
+                cv.listIndex = 4; cv.listCursor = 4;
+                for (int i = 0; i < CanopyView::kListRows; i++)
+                {
+                    CanopyView::ListRow& r = cv.listRows[i];
+                    const ChordListEntry& e = kChordList[(i * 7 + 2) % kChordListCount]; // a mix of them
+                    snprintf(r.name, sizeof(r.name), "%s", e.name);
+                    r.style = e.style;
+                    // the widest key of this progression (most letters)
+                    size_t widest = 0;
+                    for (int key = 0; key < 12; key++)
+                    {
+                        char line[64];
+                        int len = 0;
+                        for (int k = 0; k < 8; k++)
+                        {
+                            char nm[12];
+                            chordListShortName(key + e.root[k], e.type[k], nm, sizeof(nm));
+                            len += snprintf(line + len, sizeof(line) - (size_t)len, k ? " %s" : "%s", nm);
+                        }
+                        if (strlen(line) > widest) { widest = strlen(line); snprintf(r.chords, sizeof(r.chords), "%s", line); }
+                    }
+                    // the row must fit before the panel's right edge (~9 px a letter, bold ~11)
+                    if (302 + (int)strlen(r.chords) * 9 > 787) { printf("  chord list row too wide: %s\n", r.chords); fails++; }
+                    if (124 + (int)strlen(r.name) * 11 > 296) { printf("  chord list name too wide: %s\n", r.name); fails++; }
+                }
+                snprintf(cv.title, sizeof(cv.title), "Track 8   Insert: close the list");
+                ct.shift = true;
+                render(cc, "chord canopy, chord list, shift", kLimit);
+                ct.shift = false;
+                render(cc, "chord canopy, chord list", kLimit, false);
+                if (const char* out = getenv("PALETTE_SVG3"))
+                {
+                    // the real list for the picture
+                    for (int i = 0; i < CanopyView::kListRows; i++)
+                    {
+                        CanopyView::ListRow& r = cv.listRows[i];
+                        const ChordListEntry& e = kChordList[i];
+                        int len = 0;
+                        for (int k = 0; k < 8; k++)
+                        {
+                            char nm[12];
+                            chordListShortName(1 + e.root[k], e.type[k], nm, sizeof(nm));
+                            len += snprintf(r.chords + len, sizeof(r.chords) - (size_t)len, k ? " %s" : "%s", nm);
+                        }
+                    }
+                    g_svg = fopen(out, "w");
+                    fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                    render(cc, "chord list (svg)", kLimit, false);
+                    fprintf(g_svg, "</svg>\n");
+                    fclose(g_svg); g_svg = nullptr;
+                }
+                cv.listOpen = false;
             }
             prop.data = &pv2;
     }

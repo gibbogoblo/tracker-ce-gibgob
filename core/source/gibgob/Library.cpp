@@ -87,14 +87,30 @@ int Index::guessCategory(const char* path)
     static const Rule kRules[] = { { kKick, kCatKicks }, { kSnare, kCatSnares }, { kHat, kCatHats },
                                    { kPerc, kCatPerc },   { kBass, kCatBass },     { kVox, kCatVocals },
                                    { kKeys, kCatKeys },   { kFx, kCatFx } };
-    // the file name first, then the whole path (its folders)
+    // the folders say most (people sort their samples): the innermost folder
+    // first, then the ones around it; the file name only when no folder says
+    // anything ("Vocals/rim vox.wav" is a vocal, not a snare)
     const char* slash = strrchr(path, '/');
     const char* file = slash ? slash + 1 : path;
+    char seg[64];
+    for (const char* end = slash; end != nullptr && end > path;)
+    {
+        // the folder name that ends at `end`
+        const char* start = end;
+        while (start > path && start[-1] != '/')
+            --start;
+        int len = (int)(end - start);
+        if (len >= (int)sizeof(seg))
+            len = (int)sizeof(seg) - 1;
+        memcpy(seg, start, (size_t)len);
+        seg[len] = 0;
+        for (const Rule& r : kRules)
+            if (anyWord(seg, r.words))
+                return r.cat;
+        end = start > path ? start - 1 : nullptr;
+    }
     for (const Rule& r : kRules)
         if (anyWord(file, r.words))
-            return r.cat;
-    for (const Rule& r : kRules)
-        if (anyWord(path, r.words))
             return r.cat;
     return kCatNone;
 }

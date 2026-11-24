@@ -18,6 +18,7 @@
 #include "gibgob/gibgobUi.h"
 #include "gibgob/pianoRoll.h"
 #include "instrumentEditor/instrumentEditor.h"
+#include "gibgob/gibgobChordList.h"
 #include "mtAudioEngine.h"
 #include "mtStructs.h"
 
@@ -31,6 +32,10 @@ cGibGobPages gibgobPages;
 static cGibGobPages* GP = &gibgobPages;
 static elapsedMillis s_clock;
 static uint32_t s_auditionOffAt = 0;
+// the Chord Canopy's chord list (Insert)
+static bool s_listOpen = false;
+static int s_listIndex = 0;
+static int s_listKey = 0;
 
 // a sample import started from the track page
 static bool s_importPending = false;
@@ -145,6 +150,7 @@ static void functMiddle(uint8_t state);
 static void functShift(uint8_t state);
 static void functTopRow(uint8_t button, uint8_t state);
 static void functEncoder(int16_t value);
+static void functInsert(uint8_t state);
 static void functPattern(uint8_t state);
 static void functParams(uint8_t state);
 static void functSwitchModule(uint8_t button);
@@ -225,6 +231,7 @@ void cGibGobPages::stop()
     auditionOff(track);
     auditioning = false;
     s_auditionOffAt = 0;
+    s_listOpen = false;
     moduleRefresh = 0;
 }
 
@@ -258,6 +265,7 @@ void cGibGobPages::setDefaultScreenFunct()
         ip->setButtonObj(interfaceButtonInstr, functColour);
         ip->setButtonObj(physFx1Button(), functColour);
         ip->setButtonObj(physFx2Button(), functColour);
+        ip->setButtonObj(interfaceButtonInsert, functInsert); // the chord list
     }
 }
 
@@ -301,6 +309,7 @@ static void functColour(uint8_t button, uint8_t state)
 void cGibGobPages::switchPage(Page newPage)
 {
     auditionOff(track);
+    s_listOpen = false;
     page = newPage;
     row = 0;
     col = page == kPagePalette ? 0 : 1;
@@ -415,7 +424,39 @@ void cGibGobPages::refresh()
         paletteChordName(c, v.chordName, sizeof(v.chordName));
         v.noteCount = buildPaletteChord(c, v.notes, CanopyView::kMaxNotes);
         v.soundingCount = auditionSounding(track, v.sounding, CanopyView::kMaxNotes);
-        snprintf(v.title, sizeof(v.title), "Track %d", track + 1);
+        snprintf(v.title, sizeof(v.title), s_listOpen ? "Track %d   Insert: close the list" : "Track %d   Insert: Chord list",
+                 track + 1);
+        v.listOpen = s_listOpen;
+        if (s_listOpen)
+        {
+            static const char* const kKeys[12] = { "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
+            v.listCount = kChordListCount;
+            s_listIndex = clampInt(s_listIndex, 0, kChordListCount - 1);
+            v.listIndex = s_listIndex;
+            snprintf(v.listKey, sizeof(v.listKey), "%s", kKeys[s_listKey % 12]);
+            // a window of rows around the highlighted one
+            const int rows = CanopyView::kListRows;
+            int first = clampInt(s_listIndex - rows / 2, 0, kChordListCount > rows ? kChordListCount - rows : 0);
+            v.listShown = 0;
+            for (int i = first; i < kChordListCount && v.listShown < rows; i++)
+            {
+                CanopyView::ListRow& r = v.listRows[v.listShown];
+                const ChordListEntry& e = kChordList[i];
+                snprintf(r.name, sizeof(r.name), "%s", e.name);
+                r.style = e.style;
+                int len = 0;
+                r.chords[0] = 0;
+                for (int k = 0; k < 8 && len < (int)sizeof(r.chords) - 1; k++)
+                {
+                    char nm[12];
+                    chordListShortName(s_listKey + e.root[k], e.type[k], nm, sizeof(nm));
+                    len += snprintf(r.chords + len, sizeof(r.chords) - (size_t)len, k ? " %s" : "%s", nm);
+                }
+                if (i == s_listIndex)
+                    v.listCursor = v.listShown;
+                v.listShown++;
+            }
+        }
 
         // the four ways of playing on the coloured buttons
         for (int m = 0; m < kFeelModeCount; m++)
@@ -641,8 +682,54 @@ void cGibGobPages::loadSample()
     openGlobalFileBrowser(cfg);
 }
 
+// the chord list: open it (the key of chord 1) or close it
+void cGibGobPages::toggleChordList()
+{
+    if (page != kPagePalette)
+        return;
+    s_listOpen = !s_listOpen;
+    if (s_listOpen)
+        s_listKey = getPaletteChord(current(), 0).root % 12;
+    refresh();
+}
+
+// the first chord of the highlighted progression, briefly
+void cGibGobPages::auditionListChord()
+{
+    PaletteChord pc[8];
+    chordListChords(s_listIndex, s_listKey, pc);
+    uint8_t notes[kMaxChordNotes];
+    const int n = buildPaletteChord(pc[0], notes, kMaxChordNotes);
+    if (n > 0)
+        auditionBriefly(track, notes, n);
+}
+
+// the highlighted progression into chords 1-8 (Shift + Rec undoes it)
+void cGibGobPages::loadChordList()
+{
+    Sequencer::strPattern* p = current();
+    PaletteChord pc[8];
+    chordListChords(s_listIndex, s_listKey, pc);
+    beginEdit(kEditPalette);
+    for (int i = 0; i < 8; i++)
+        setPaletteChord(p, i, pc[i]);
+    markChanged();
+    s_listOpen = false;
+    row = 0;
+    uint8_t notes[kMaxChordNotes];
+    const int n = buildPaletteChord(pc[0], notes, kMaxChordNotes);
+    if (n > 0)
+        auditionBriefly(track, notes, n);
+    refresh();
+}
+
 void cGibGobPages::pressMiddle()
 {
+    if (page == kPagePalette && s_listOpen)
+    {
+        loadChordList();
+        return;
+    }
     if (page == kPageTrack && row == kRowSound)
         openLibrary();
     else if (page == kPageTrack && row == kRowName)
@@ -740,6 +827,22 @@ void cGibGobPages::moveCursor(int dCol, int dRow)
     }
     else
     {
+        if (s_listOpen)
+        {
+            // the list: Up/Down a progression, Left/Right the key
+            if (dRow != 0)
+            {
+                s_listIndex = clampInt(s_listIndex + dRow, 0, kChordListCount - 1);
+                auditionListChord();
+            }
+            if (dCol != 0)
+            {
+                s_listKey = ((s_listKey + dCol) % 12 + 12) % 12;
+                auditionListChord();
+            }
+            refresh();
+            return;
+        }
         uint8_t ids[CanopyView::kMaxFields];
         const int n = canopyFields(getSettings(current(), track).feel.mode, ids);
         row = clampInt(row + dRow, 0, 7); // Up/Down: the previous / next chord
@@ -752,6 +855,13 @@ void cGibGobPages::changeValue(int delta, bool big)
 {
     Sequencer::strPattern* p = current();
 
+    if (page == kPagePalette && s_listOpen)
+    {
+        s_listIndex = clampInt(s_listIndex + delta * (big ? 4 : 1), 0, kChordListCount - 1);
+        auditionListChord();
+        refresh();
+        return;
+    }
     if (page == kPagePalette)
     {
         TrackSettings s = getSettings(p, track);
@@ -989,12 +1099,20 @@ static void functShift(uint8_t state)
 static void functTopRow(uint8_t button, uint8_t state)
 {
     int idx = button - interfaceButton0;
+    if (topRowBounce(idx, state))
+        return; // the contact bouncing as the button is let go
     if (idx < 0 || idx > 7)
         return;
     if (state == buttonPress)
         GP->topButton(idx, true);
     else if (state == buttonRelease)
         GP->topButton(idx, false);
+}
+
+static void functInsert(uint8_t state)
+{
+    if (state == buttonPress)
+        GP->toggleChordList();
 }
 
 static void functEncoder(int16_t value)

@@ -60,6 +60,10 @@ void undoEdit();
 // display name of a track: its name if renamed, else its sound's name
 void trackDisplayName(int track, char* out, int outLen);
 
+// A top-row button's press that comes right after its release (the contact
+// bouncing as the finger lifts) is not a new press: true = ignore this event.
+bool topRowBounce(int button, uint8_t state);
+
 // Called by every GibGob screen when it opens: Shift starts off.
 void screenOpened();
 // true while the Middle press that opened this screen is still held (and for

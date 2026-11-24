@@ -758,6 +758,43 @@ int main()
         }
         CHECK(lateCount > 10); // with up to 80 ms, many chords still have a note to come at +40 ms
         CHECK(stuckSynth() == 0);
+        // a sample track strummed while every other track has notes of its own:
+        // the earlier notes of the strum keep sounding (none is cut by the next)
+        {
+            static Sequencer::strPattern saved;
+            memcpy(&saved, &pat, sizeof(saved));
+            freshPattern();
+            setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 4);
+            for (int t = 0; t < 8; t++)
+                if (t != 5) addNote(&pat, t, mk(0, 10, 60));
+            TrackSettings ss = getSettings(&pat, 5);
+            ss.feel = ChordFeel{}; ss.feel.mode = kFeelStrum; ss.feel.strum = 5; ss.feel.strumDir = kStrumUp;
+            setSettings(&pat, 5, ss);
+            const uint8_t ch4[4] = { 60, 64, 67, 71 };
+            chordPoll(40000);
+            events.clear();
+            chordPress(5, 0, ch4, 4, 100);
+            for (uint32_t t = 40000; t <= 40400; t += 5) chordPoll(t);
+            int started = 0, cut = 0;
+            for (auto& e : events) { if (e.kind == 'S') started++; if (e.kind == 's') cut++; }
+            int sounding = 0; for (bool b : voiceSounding) sounding += b;
+            printf("  strum on a busy sample track: %d started, %d cut, %d sounding\n", started, cut, sounding);
+            CHECK(started == 4 && cut == 0);
+            chordRelease(5, 0);
+            // and the plain chord the same
+            events.clear();
+            ss.feel.mode = kFeelChord; setSettings(&pat, 5, ss);
+            chordPoll(41000);
+            chordPress(5, 0, ch4, 4, 100);
+            chordPoll(41010);
+            started = cut = 0;
+            for (auto& e : events) { if (e.kind == 'S') started++; if (e.kind == 's') cut++; }
+            printf("  chord on a busy sample track: %d started, %d cut\n", started, cut);
+            chordRelease(5, 0);
+            memcpy(&pat, &saved, sizeof(pat)); // back to the synth track the next tests use
+            for (int i = 0; i < 8; i++) instrumentPlayer[i].index = i;
+            events.clear();
+        }
         // arp, free running at 120 bpm: 1/16 = 125 ms, gate 50 %
         s.feel = ChordFeel{}; s.feel.mode = kFeelArp; s.feel.arpMode = kArpUp; s.feel.strum = 10;
         s.arpMode = kArpOff; s.arpRate = 3; s.arpOctaves = 2; s.arpGate = 50;

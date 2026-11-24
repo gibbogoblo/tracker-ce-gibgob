@@ -457,7 +457,7 @@ inline uint8_t instrumentOrDefault(uint8_t sound, int track)
 }
 
 // audio interrupt must be blocked (or we are inside it)
-int allocVoice(int track, uint8_t serial, int forceVoice = -1)
+int allocVoice(int track, uint8_t serial, int forceVoice = -1, bool live = false)
 {
     int v = track;
     if (forceVoice >= 0)
@@ -466,18 +466,29 @@ int allocVoice(int track, uint8_t serial, int forceVoice = -1)
     }
     else if (voiceUse[track].on)
     {
+        // another track's voice that is silent right now (never a muted
+        // track's: its voice is silenced): first one whose track has no notes
+        // of its own (nothing will cut in); then, for a chord played live,
+        // any silent voice, so a strum is not cut by its own next note (while
+        // the sequencer plays, that track's next note takes the voice back)
         const Sequencer::strPattern* p = current();
-        for (int c = 0; c < kTracks; c++)
+        for (int pass = 0; pass < (live ? 2 : 1) && v == track; pass++)
         {
-            if (c == track || voiceUse[c].on || s_legacyPlayed[c] || audition[c].on)
-                continue;
-            if (mtProject.values.trackMute[c])
-                continue;
-            Header h;
-            if (readHeader(p, c, h) && h.count > 0)
-                continue; // that track has its own notes in this pattern
-            v = c;
-            break;
+            for (int c = 0; c < kTracks; c++)
+            {
+                if (c == track || voiceUse[c].on || s_legacyPlayed[c] || audition[c].on)
+                    continue;
+                if (mtProject.values.trackMute[c])
+                    continue;
+                if (pass == 0)
+                {
+                    Header h;
+                    if (readHeader(p, c, h) && h.count > 0)
+                        continue; // that track has its own notes in this pattern
+                }
+                v = c;
+                break;
+            }
         }
     }
     voiceUse[v].track = (int8_t)track;
@@ -1919,7 +1930,7 @@ void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocit
             {
                 AudioLock lock;
                 serial = ++playState[track].serialCounter;
-                voice = allocVoice(track, serial);
+                voice = allocVoice(track, serial, -1, true);
             }
             instrumentPlayer[voice].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), 0, 0, 0,
                                            0);
@@ -1966,7 +1977,7 @@ void auditionAdd(int track, uint8_t pitch, uint8_t velocity)
         {
             AudioLock lock;
             serial = ++playState[track].serialCounter;
-            voice = allocVoice(track, serial);
+            voice = allocVoice(track, serial, -1, true);
         }
         instrumentPlayer[voice].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), 0, 0, 0, 0);
     }

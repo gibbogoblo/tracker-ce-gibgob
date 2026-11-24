@@ -39,15 +39,16 @@ struct DrumOverviewView
     char lockTop[kSteps][2][8] = { { { 0 } } };
     char lockBot[kSteps][2][8] = { { { 0 } } };
 
-    // clouds: the 4 coloured-button values of the cursor step, then the length
+    // the info strip: the 4 coloured-button values of the cursor step, then the length
     char cloudLabel[4][10] = { { 0 } };
     char cloudValue[4][10] = { { 0 } };
     int cloudLit = -1; // the held button's cloud
     char lengthText[12] = { 0 };
-    char pageText[8] = { 0 }; // in the sun
+    char pageText[8] = { 0 }; // "2/4": this page of 8 steps of all
+    int firstStep = 0;        // the first step on screen (0-based)
 
     bool shift = false;
-    BottomBar bar; // with Shift on: the CHIMP OUT effects (else the coconuts)
+    BottomBar bar; // with Shift on: the CHIMP OUT effects (else the 8 steps on screen)
     char message[48] = { 0 }; // shown instead of the bands (no drum tracks)
     HelpView help;
 };

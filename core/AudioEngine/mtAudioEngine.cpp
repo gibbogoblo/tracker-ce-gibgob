@@ -1047,12 +1047,20 @@ void audioEngine::unmuteHeadphones()
     codec->setMasterVolume((float)mtConfig.audioCodecConfig.volume / 100.0f);
 }
 
+static float s_previewTrim = 1.0f;
+
 void audioEngine::setPreviewVolume(uint8_t value)
 {
     finalMixer[AudioOutput::OutputChannels::kLeft]->gain(
-      AudioOutput::FinalMixInputs::kSdCardPreview, mixAmpLogValues[value]);
+      AudioOutput::FinalMixInputs::kSdCardPreview, mixAmpLogValues[value] * s_previewTrim);
     finalMixer[AudioOutput::OutputChannels::kRight]->gain(
-      AudioOutput::FinalMixInputs::kSdCardPreview, mixAmpLogValues[value]);
+      AudioOutput::FinalMixInputs::kSdCardPreview, mixAmpLogValues[value] * s_previewTrim);
+}
+
+void audioEngine::setPreviewTrim(float mul)
+{
+    s_previewTrim = mul;
+    setPreviewVolume(mtConfig.general.previewVolume);
 }
 
 void audioEngine::setInterpolationEnable(bool value)

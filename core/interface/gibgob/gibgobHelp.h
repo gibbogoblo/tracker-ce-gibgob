@@ -106,6 +106,8 @@ static const char* const kHelpPalette[] = {
     "Arp: mode; rate/oct/gate = Arp menu (Shift+FX1)",
     "Human: Time = late notes, Vel = loose velocity",
     "Rec on while playing: what you play is recorded",
+    "Insert: chord list (neo-soul, jazz, city pop, J-jazz)",
+    "List: Up/Down pick, Left/Right key, Middle load 1-8",
     "Button 2: back to the sound parameters",
     "Button 1: back (from Shift+FX2: piano roll)",
 };
@@ -227,7 +229,7 @@ static const char* const kHelpDrumOverview[] = {
     "Hold Insert while playing: the fill",
     "Copy: copy the 8 steps   Shift+Copy: paste",
     "Delete: the hit   Shift+Delete: clear track",
-    "Middle on a step: this drum in close-up",
+    "Middle on a step: the hit on / off",
     "Shift+top row: CHIMP OUT FX",
     "Rec / Shift+Rec: rec on / undo",
     "Play: play / stop   Shift+Play: song",

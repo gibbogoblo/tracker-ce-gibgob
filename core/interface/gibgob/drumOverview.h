@@ -42,7 +42,6 @@ class cDrumOverview : public ModuleBase
     void clearFillMark();
     void copyPage();
     void pastePage();
-    void openCloseUp();
     void openTrackPage();
     void goHome();
     void topButton(int button, bool pressed);

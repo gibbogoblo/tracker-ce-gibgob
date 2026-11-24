@@ -35,7 +35,7 @@ static constexpr int kMaxActiveNotes = 16;    // sounding notes per track
 static constexpr int kMaxChordNotes = 6;
 static constexpr int kPaletteSize = 16;       // 2 banks of 8 chords
 static constexpr int kDefaultBaseNote = 60;   // C5 = sample at original pitch
-static constexpr int kChordTypeCount = 22;    // size of the chord type pool (gibgobChords.h)
+static constexpr int kChordTypeCount = 28;    // size of the chord type pool (gibgobChords.h)
 static constexpr int kVoicingCount = 4;
 
 enum class TrackType : uint8_t

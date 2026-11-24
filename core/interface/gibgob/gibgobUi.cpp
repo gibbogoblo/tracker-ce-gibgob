@@ -30,6 +30,29 @@ bool shiftActive()
     return g_shiftLatched;
 }
 
+bool topRowBounce(int button, uint8_t state)
+{
+    constexpr uint32_t kBounceMs = 60;
+    static uint32_t s_releasedAt[8] = { 0 };
+    static bool s_ignoredPress[8] = { false };
+    if (button < 0 || button > 7)
+        return false;
+    const uint32_t now = (uint32_t)s_uiClock;
+    if (state == buttonPress)
+    {
+        s_ignoredPress[button] = s_releasedAt[button] != 0 && now - s_releasedAt[button] < kBounceMs;
+        return s_ignoredPress[button];
+    }
+    if (state == buttonRelease)
+    {
+        const bool ignore = s_ignoredPress[button]; // the end of a bounce: the button was already let go
+        s_ignoredPress[button] = false;
+        s_releasedAt[button] = now == 0 ? 1 : now;
+        return ignore;
+    }
+    return false;
+}
+
 bool shiftButton(uint8_t state)
 {
     constexpr uint32_t kTapMs = 400;      // longer = held for something else

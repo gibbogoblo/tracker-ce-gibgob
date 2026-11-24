@@ -295,6 +295,8 @@ void scanStep()
     }
 }
 
+constexpr float kPreviewTrim = 0.355f; // -9 dB
+
 void stopPreview()
 {
     S->previewAt = 0;
@@ -343,6 +345,9 @@ void cGibGobLibrary::start(uint32_t options)
     S->held = 0;
     S->previewAt = 0;
     S->previewing = false;
+    // previews straight from the card skip the tracks' mix: about 9 dB down
+    // so they sit with what's playing
+    engine.setPreviewTrim(kPreviewTrim);
     S->memoryOk = borrowMemory();
     S->listCount = 0;
     if (S->memoryOk)
@@ -370,6 +375,7 @@ void cGibGobLibrary::start(uint32_t options)
 
 void cGibGobLibrary::stop()
 {
+    engine.setPreviewTrim(1.0f); // the other browsers keep their own level
     if (S->memoryOk)
     {
         stopPreview();

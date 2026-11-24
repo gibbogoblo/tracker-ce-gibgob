@@ -11,7 +11,6 @@
 #include "gibgob/MelodicTrack.h"
 #include "gibgob/Perform.h"
 #include "gibgob/PerformControl.h"
-#include "gibgob/drumSeq.h"
 #include "gibgob/gibgobHelp.h"
 #include "gibgob/gibgobHome.h"
 #include "gibgob/gibgobPages.h"
@@ -137,9 +136,9 @@ void cDrumOverview::start(uint32_t options)
         perfHeld[i] = false;
     lastPlayStep = -2;
 
-    // this screen draws its own sky where the title bar would be
-    songTimer.hide();
-    titleBar->hide();
+    songTimer.show();
+    titleBar->show();
+    titleBar->setTitle("Drum overview");
 
     setDefaultScreenFunct();
     refresh();
@@ -243,6 +242,7 @@ void cDrumOverview::refresh()
     const int playStep = ph < 0 ? -1 : (ph / kTicksPerStep) % steps;
     v.play = (playStep >= first && playStep < first + kSteps) ? playStep - first : -1;
     snprintf(v.pageText, sizeof(v.pageText), "%d/%d", page + 1, pages);
+    v.firstStep = first;
     snprintf(v.lengthText, sizeof(v.lengthText), "%d steps", steps);
 
     int idx[kMaxNotes];
@@ -704,16 +704,6 @@ void cDrumOverview::pastePage()
     refresh();
 }
 
-void cDrumOverview::openCloseUp()
-{
-    const int t = track();
-    if (t < 0)
-        return;
-    drumSeq.cursorStep = cursor;
-    mtInterface.deactivateModule(this);
-    mtInterface.activateModule(&drumSeq, (uint32_t)t);
-}
-
 void cDrumOverview::goHome()
 {
     const int t = track() >= 0 ? track() : 0;
@@ -833,7 +823,7 @@ static void functMiddle(uint8_t state)
     if (DO->onName)
         DO->openTrackPage(); // on the name: the track's settings
     else
-        DO->openCloseUp(); // on a step: the selected drum in close-up (one track, every step)
+        DO->toggleStep(DO->cursor); // on a step: that hit on / off
 }
 
 // Insert: held while playing = the fill; Insert + plus / minus marks the step;

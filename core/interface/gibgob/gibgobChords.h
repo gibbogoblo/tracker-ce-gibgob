@@ -42,6 +42,13 @@ static const ChordType kChordPool[kChordTypeCount] = {
     { "Sus4", 4, { 0, 5, 7, 12 } },       // 19
     { "Dim", 4, { 0, 3, 6, 12 } },        // 20
     { "Aug", 4, { 0, 4, 8, 12 } },        // 21
+    // added for the chord list (jazz, soul, city pop): new types only at the end
+    { "13", 5, { 0, 4, 10, 14, 21 } },    // 22: dominant 13 (no 5th)
+    { "7#9", 5, { 0, 4, 7, 10, 15 } },    // 23
+    { "7b9", 5, { 0, 4, 7, 10, 13 } },    // 24
+    { "9sus4", 5, { 0, 5, 7, 10, 14 } },  // 25
+    { "Maj7#11", 5, { 0, 4, 7, 11, 18 } },// 26
+    { "m6/9", 5, { 0, 3, 7, 9, 14 } },    // 27
 };
 
 enum Voicing : uint8_t

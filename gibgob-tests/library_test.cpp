@@ -22,6 +22,14 @@ int main()
     CHECK(Index::guessCategory("/Samples/Vox/hey.wav") == kCatVocals);
     CHECK(Index::guessCategory("/Samples/Snares/one.wav") == kCatSnares); // from the folder
     CHECK(Index::guessCategory("/Samples/misc/thing.wav") == kCatNone);
+    // the folder beats the file name: a vocal called "rim" stays a vocal
+    CHECK(Index::guessCategory("/Samples/Vocals/rim vox.wav") == kCatVocals);
+    CHECK(Index::guessCategory("/Samples/Vocals/Rim_01.wav") == kCatVocals);
+    // the innermost folder first
+    CHECK(Index::guessCategory("/Samples/Vocal Kit/Kicks/shout kick.wav") == kCatKicks);
+    CHECK(Index::guessCategory("/Samples/Kicks/Vocals/kick me.wav") == kCatVocals);
+    // no folder says anything: the file name
+    CHECK(Index::guessCategory("/Samples/Pack 3/rim 2.wav") == kCatSnares);
     CHECK(Index::guessGenre("/Samples/UKG/hat.wav") == kGenreGarage);
     CHECK(Index::guessGenre("/Samples/Amen breaks/a.wav") == kGenreJungle);
     CHECK(Index::guessGenre("/Recordings 2/take.wav") == kGenreMine);

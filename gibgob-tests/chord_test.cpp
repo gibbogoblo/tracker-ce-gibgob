@@ -1,4 +1,5 @@
 #include "gibgobChords.h"
+#include "gibgobChordList.h"
 #include <cstdio>
 using namespace gibgob;
 const char mtNotes[128][5] = {};
@@ -33,6 +34,56 @@ int main()
     if (!(out[0] == 64 && out[3] == 72)) { printf("inv wrong\n"); fail++; }
     n = buildChordNotes(0, 60, 0, kVoicingDrop2, out, 6);
     if (!(out[0] == 55 && out[1] == 60)) { printf("drop2 wrong\n"); fail++; }
+    // the chord list: every progression in every key gives its 8 chords (the
+    // right notes, whatever the inversion), in a warm range, moving smoothly
+    {
+        double totalMove = 0;
+        int moves = 0, worst = 0;
+        for (int e = 0; e < kChordListCount; e++)
+            for (int key = 0; key < 12; key++)
+            {
+                PaletteChord pc[8];
+                chordListChords(e, key, pc);
+                uint8_t prev[kMaxChordNotes];
+                int prevN = 0;
+                for (int i = 0; i < 8; i++)
+                {
+                    uint8_t notes[kMaxChordNotes];
+                    const int cn = buildPaletteChord(pc[i], notes, kMaxChordNotes);
+                    if (cn != chordType(kChordList[e].type[i]).count) { printf("list %d key %d chord %d: %d notes\n", e, key, i, cn); fail++; }
+                    if (pc[i].type != kChordList[e].type[i]) { printf("list %d: type changed\n", e); fail++; }
+                    // the pitch classes are the chord's
+                    const int rootPc = (key + kChordList[e].root[i] % 12 + 12) % 12;
+                    if (pc[i].root % 12 != rootPc) { printf("list %d key %d chord %d: root %d\n", e, key, i, pc[i].root); fail++; }
+                    for (int k = 0; k < cn; k++)
+                    {
+                        bool ok = false;
+                        for (int q = 0; q < chordType(pc[i].type).count; q++)
+                            ok = ok || (notes[k] % 12) == (rootPc + chordType(pc[i].type).intervals[q]) % 12;
+                        if (!ok) { printf("list %d key %d chord %d: stray note %d\n", e, key, i, notes[k]); fail++; }
+                    }
+                    if (cn > 0 && (notes[0] < 36 || notes[cn - 1] > 84)) { printf("list %d key %d chord %d: range %d-%d\n", e, key, i, notes[0], notes[cn - 1]); fail++; }
+                    if (prevN > 0)
+                    {
+                        int move = 0;
+                        for (int k = 0; k < cn; k++)
+                        {
+                            int d = 128;
+                            for (int q = 0; q < prevN; q++) d = abs(notes[k] - prev[q]) < d ? abs(notes[k] - prev[q]) : d;
+                            move += d;
+                        }
+                        totalMove += (double)move / cn;
+                        moves++;
+                        worst = move / cn > worst ? move / cn : worst;
+                    }
+                    for (int k = 0; k < cn; k++) prev[k] = notes[k];
+                    prevN = cn;
+                }
+            }
+        const double avg = totalMove / moves;
+        printf("  chord list: %d progressions, voices move %.2f semitones on average (worst %d)\n", kChordListCount, avg, worst);
+        if (avg > 2.5 || worst > 7) { printf("chord list: the voices jump\n"); fail++; }
+    }
     printf(fail ? "CHORD TEST FAILED %d\n" : "ALL CHORD TESTS PASSED\n", fail);
     return fail;
 }
