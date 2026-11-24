@@ -153,6 +153,11 @@ int main()
     // loops and one-shots: the name first, then the length (3 s or longer: a loop)
     {
         CHECK(Index::guessKind("/Samples/Loops/thing.wav", kLengthUnread) == kKindLoop);
+        // a pack's folder says loops or a tempo, but the sample is short: the length wins
+        CHECK(Index::guessKind("/Samples/Boom Bap Kit 90 BPM/kick.wav", 4) == kKindShot);
+        CHECK(Index::guessKind("/Samples/Loops and Shots/snare.wav", 3) == kKindShot);
+        CHECK(Index::guessKind("/Samples/Boom Bap Kit 90 BPM/kick.wav", kLengthUnread) == kKindLoop); // until read
+        CHECK(Index::guessKind("/Samples/x/drum loop.wav", 14) == kKindLoop); // a 1.4 s loop: its name
         CHECK(Index::guessKind("/Samples/x/drums 92bpm.wav", kLengthUnread) == kKindLoop);
         CHECK(Index::guessKind("/Samples/x/amen break.wav", 12) == kKindLoop);
         CHECK(Index::guessKind("/Samples/One Shots/pad.wav", 80) == kKindShot);

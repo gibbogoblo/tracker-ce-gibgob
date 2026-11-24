@@ -576,9 +576,9 @@ void cGibGobLibrary::refresh()
     v.canopy = nullptr;
     v.cols = 4;
     v.colX[0] = 24;
-    v.colX[1] = 430;
-    v.colX[2] = 560;
-    v.colX[3] = 700;
+    v.colX[1] = 400;
+    v.colX[2] = 520;
+    v.colX[3] = 650;
     v.header[0] = "Sample";
     v.header[1] = "Genre";
     v.header[2] = "Category";
@@ -633,7 +633,16 @@ void cGibGobLibrary::refresh()
             snprintf(v.cell[r][0], 20, "%.19s", S->idx.name(i));
             snprintf(v.cell[r][1], 20, "%s", lib::kGenreNames[e.genre % lib::kGenreCount]);
             snprintf(v.cell[r][2], 20, "%s", lib::kCategoryNames[e.category % lib::kCatCount]);
-            snprintf(v.cell[r][3], 20, "%s%s", lib::kKindNames[e.kind % lib::kKindCount],
+            // the type and the length it was read from ("Shot 0.4s", "Loop 8s")
+            char len[8] = "";
+            if (e.tenths != lib::kLengthUnread && e.tenths != lib::kLengthBad)
+            {
+                if (e.tenths < 100)
+                    snprintf(len, sizeof(len), " %d.%ds", e.tenths / 10, e.tenths % 10);
+                else
+                    snprintf(len, sizeof(len), " %ds", e.tenths / 10);
+            }
+            snprintf(v.cell[r][3], 20, "%s%s%s", lib::kKindNames[e.kind % lib::kKindCount], len,
                      (e.flags & lib::kFlagFavourite) ? " *" : "");
             v.rowColor[r] = color::kBox;
         }

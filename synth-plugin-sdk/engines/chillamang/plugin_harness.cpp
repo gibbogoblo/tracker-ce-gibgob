@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace
@@ -316,6 +317,87 @@ int main(int argc, char** argv)
         }
         api->destroy_voice(v1);
         g_biggest = before;
+    }
+    // randomised patches (APE) and back to the init patch: the sound must come
+    // back every time (on the Mini it stayed silent until a restart)
+    {
+        auto playRms = [&](int blocks)
+        {
+            PsynMidiEvent on2{};
+            on2.type = PSYN_MIDI_NOTE_ON;
+            on2.data1 = 60;
+            on2.data2 = 100;
+            api->voice_on_midi_event(voice, &ctx, &on2);
+            double e = 0;
+            bool bad = false;
+            for (int b = 0; b < blocks; b++)
+            {
+                std::fill(L.begin(), L.end(), 0.0f);
+                std::fill(R.begin(), R.end(), 0.0f);
+                api->voice_render_audio(voice, &ctx, L.data(), R.data(), nullptr, 0);
+                api->voice_render_post_process(voice, &ctx, L.data(), R.data());
+                for (int i = 0; i < n; i++)
+                {
+                    bad = bad || !std::isfinite(L[i]) || !std::isfinite(R[i]);
+                    e += L[i] * L[i] + R[i] * R[i];
+                }
+            }
+            PsynMidiEvent off2{};
+            off2.type = PSYN_MIDI_NOTE_OFF;
+            off2.data1 = 60;
+            api->voice_on_midi_event(voice, &ctx, &off2);
+            for (int b = 0; b < 200 && api->voice_is_active(voice); b++)
+            {
+                api->voice_render_audio(voice, &ctx, L.data(), R.data(), nullptr, 0);
+                api->voice_render_post_process(voice, &ctx, L.data(), R.data());
+            }
+            return bad ? -1.0 : std::sqrt(e / (2.0 * n * blocks));
+        };
+        auto setAll = [&](bool random)
+        {
+            for (int i = 0; i < g_meta.paramCount; i++)
+            {
+                const PsynParamDesc& d = g_meta.params[i];
+                float v = d.has_default ? d.default_value : 0.0f;
+                if (random && g_meta.names[i].find("olume") == std::string::npos)
+                {
+                    const float u = (float)(rand() % 10001) / 10000.0f;
+                    v = d.min_value + (d.max_value - d.min_value) * u;
+                    if (d.is_enum)
+                        v = std::round(v);
+                }
+                g_patch.values[i] = v;
+                g_patch.has[i] = true;
+                api->voice_on_param_change(voice, i, true, v);
+            }
+        };
+        setAll(false);
+        const double base = playRms(60);
+        int lost = 0, silentRandom = 0;
+        srand(7);
+        for (int k = 0; k < 200; k++)
+        {
+            setAll(true);
+            const double r = playRms(30);
+            if (r <= 0.0005)
+                silentRandom++;
+            setAll(false); // init patch
+            const double back = playRms(60);
+            // granular sound moves on by itself (the playhead, the LFOs): only
+            // silence counts as broken
+            if (back < base * 0.1 || back < 0)
+            {
+                if (lost < 3)
+                    printf("  random patch %d: init patch afterwards plays rms %.4f (was %.4f)\n", k, back, base);
+                lost++;
+            }
+        }
+        printf("random patches: %d silent themselves, %d left the init patch silent\n", silentRandom, lost);
+        if (lost > 0)
+        {
+            printf("FAIL: a random patch broke the sound for good\n");
+            fails++;
+        }
     }
     float graph[64];
     api->voice_render_graph(voice, graph, 64);

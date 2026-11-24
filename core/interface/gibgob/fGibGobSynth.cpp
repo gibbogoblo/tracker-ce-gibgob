@@ -328,24 +328,53 @@ bool isVolume(int id)
     return strstr(n, "volume") != nullptr;
 }
 
-// randomises one parameter by `amount` (0..1) of its range; the volume
-// stays (a silent patch is no fun)
+// lower case copy of a parameter's name (or of a value's text)
+void lowerCopy(char* out, int len, const char* in)
+{
+    polystrncpy(out, in ? in : "", len);
+    for (char* c = out; *c; c++)
+        *c = (char)tolower((unsigned char)*c);
+}
+
+// randomises one parameter by `amount` (0..1) of its range. A silent patch is
+// no fun: the volume stays, a modulation never goes to the volume, and the
+// amp's attack stays in its faster half
 void apeParam(int id, float amount)
 {
     if (!validParam(id) || isVolume(id))
         return;
     const auto& p = meta().params[id];
+    char name[32];
+    lowerCopy(name, sizeof(name), p.displayName.c_str());
     remember(id);
     if (p.isEnum)
     {
         if (random01() < amount)
         {
             const int lo = (int)lroundf(minOf(id)), hi = (int)lroundf(maxOf(id));
-            setRaw(id, (float)(lo + (int)(random01() * (hi - lo + 1) * 0.9999f)));
+            const bool dest = strstr(name, "dest") != nullptr;
+            for (int tries = 0; tries < 6; tries++)
+            {
+                const float v = (float)(lo + (int)(random01() * (hi - lo + 1) * 0.9999f));
+                if (dest)
+                {
+                    char t[24], tl[24];
+                    formatValue(id, v, t, sizeof(t));
+                    lowerCopy(tl, sizeof(tl), t);
+                    if (strstr(tl, "vol") != nullptr)
+                        continue; // a modulation on the volume can silence it: another one
+                }
+                setRaw(id, v);
+                break;
+            }
         }
         return;
     }
-    setMapped(id, mappedValue(id) + (random01() * 2 - 1) * amount);
+    float m = mappedValue(id) + (random01() * 2 - 1) * amount;
+    const bool ampAttack = strcmp(name, "attack") == 0 || strcmp(name, "amp attack") == 0;
+    if (ampAttack && m > 0.45f)
+        m = 0.45f;
+    setMapped(id, m);
 }
 
 // text for the coloured boxes and the headers

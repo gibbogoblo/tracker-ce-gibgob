@@ -85,6 +85,26 @@ static constexpr int kInstrumentTypeMult = 1000;
 static constexpr auto kPatchNameFormat = "%02d-%02d "; // TT-PP type-program
 static constexpr auto kPatchNameTypeLen = 3;           // 2 chars of type idx + '-'
 
+// GibGob OS: a new patch has no values at all ("not set"), and a synth keeps
+// what its voices had for a parameter that is not set: after a wild patch the
+// init patch stayed silent until a restart. Every parameter gets its start
+// value, before the patch is handed to the instrument.
+template<typename P>
+static P withDefaults(P patch)
+{
+    if (!patch)
+        return patch;
+    const auto& meta = patch->getMetadata();
+    patch->startBatchUpdate();
+    for (int i = 0; i < static_cast<int>(meta.params.size()); i++)
+    {
+        if (!patch->getParamValue(i).has_value() && meta.params[i].defaultValue.has_value())
+            patch->setParamValue(i, meta.params[i].defaultValue, polysynth::Patch::ParamChangeSource::kPatchAssign);
+    }
+    patch->finishBatchUpdate();
+    return patch;
+}
+
 // required because of forward declarations of polysynth classes in the header
 Synth::Synth() = default;
 Synth::~Synth() = default;
@@ -176,7 +196,7 @@ void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTe
 
         part.instrumentTypeId = synthTypes[partIdx % synthTypes.size()];
         part.patchName = kInitPatchName;
-        setPatch(partIdx, patchStore->createPatch(*part.instrumentTypeId), part.patchName);
+        setPatch(partIdx, withDefaults(patchStore->createPatch(*part.instrumentTypeId)), part.patchName);
 
         instrument = synth->createInstrument(partIdx);
         instrument->assignPatch(part.patch);
@@ -482,7 +502,7 @@ void Synth::initPatch(int part)
     assert(part < kSynthParts);
 
     std::shared_ptr<polysynth::Patch> newPatch =
-      patchStore->createPatch(*parts[part].instrumentTypeId);
+      withDefaults(std::shared_ptr<polysynth::Patch>(patchStore->createPatch(*parts[part].instrumentTypeId)));
 
     DISABLE_AUDIO_INTERRUPTS();
     parts[part].instrument->assignPatch(newPatch);
@@ -571,7 +591,7 @@ void Synth::setInstrumentType(int partIdx, polysynth::InstrumentTypeId typeId)
     if (part.instrumentTypeId != typeId)
     {
         part.instrumentTypeId = typeId;
-        setPatch(partIdx, patchStore->createPatch(*typeId), kInitPatchName);
+        setPatch(partIdx, withDefaults(patchStore->createPatch(*typeId)), kInitPatchName);
 
         if (part.instrument->getVoiceCount() > getMaxVoiceCount(partIdx))
         {

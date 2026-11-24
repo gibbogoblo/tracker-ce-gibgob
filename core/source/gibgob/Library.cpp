@@ -225,13 +225,38 @@ int Index::guessKind(const char* path, uint16_t tenths)
     static const char* const kLoop[] = { "loop", "loops", "break", "breaks", "groove", "grooves", nullptr };
     static const char* const kShot[] = { "one shot", "oneshot", "one-shot", "one shots", "oneshots", "one-shots",
                                          "hit", "hits", "shot", "shots", nullptr };
+    // the file name says it ("kick loop", "drums 92bpm", "snare one shot") ...
+    const char* slash = strrchr(path, '/');
+    const char* file = slash ? slash + 1 : path;
+    if (anyWord(file, kLoop) || tempoInName(file) > 0)
+        return kKindLoop;
+    if (anyWord(file, kShot))
+        return kKindShot;
+    // ... or the folder it is in, when that clearly says one or the other
+    // ("One Shots", "Drum Loops"; not "Loops & One Shots", not a tempo: a
+    // "90 BPM Kit" holds one-shots too) ...
+    if (slash != nullptr && slash > path)
+    {
+        const char* start = slash;
+        while (start > path && start[-1] != '/')
+            --start;
+        char folder[64];
+        int len = (int)(slash - start);
+        len = len < (int)sizeof(folder) - 1 ? len : (int)sizeof(folder) - 1;
+        memcpy(folder, start, (size_t)len);
+        folder[len] = 0;
+        const bool loop = anyWord(folder, kLoop), shot = anyWord(folder, kShot);
+        if (loop != shot)
+            return loop ? kKindLoop : kKindShot;
+    }
+    // ... else its length; the outer folders only while it is not read yet
+    if (tenths != kLengthUnread && tenths != kLengthBad)
+        return tenths >= kLoopTenths ? kKindLoop : kKindShot;
     if (anyWord(path, kLoop) || tempoInName(path) > 0)
         return kKindLoop;
     if (anyWord(path, kShot))
         return kKindShot;
-    if (tenths == kLengthUnread || tenths == kLengthBad)
-        return kKindUnknown;
-    return tenths >= kLoopTenths ? kKindLoop : kKindShot;
+    return kKindUnknown;
 }
 
 void Index::setLength(int i, uint32_t tenths)
