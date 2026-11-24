@@ -89,6 +89,33 @@ inline void setNoteEnv(Note& n, int env)
     n.flags = (uint8_t)((n.flags & 0x0F) | ((env & 0x0F) << 4));
 }
 
+// ---- drum steps: ratchet and sample per step (drum tracks, drum overview) ----
+// On a drum track that uses them (drumStepsOn), a note's bits 4-7 are its
+// ratchet and bits 2-3 its sample: 0 = the track's own, 1-3 = the track's
+// extra samples. (On melodic tracks the same bits are slide / accent and the
+// filter envelope or syllable.)
+static constexpr int kRatchetCount = 7;
+static constexpr uint8_t kRatchetHits[kRatchetCount] = { 1, 2, 3, 4, 6, 8, 12 }; // hits per step
+static constexpr int kAltSamples = 3;
+inline int noteRatchet(const Note& n)
+{
+    const int r = (n.flags >> 4) & 0x0F;
+    return r < kRatchetCount ? r : kRatchetCount - 1;
+}
+inline void setNoteRatchet(Note& n, int r)
+{
+    r = r < 0 ? 0 : (r >= kRatchetCount ? kRatchetCount - 1 : r);
+    n.flags = (uint8_t)((n.flags & 0x0F) | (r << 4));
+}
+inline int noteSample(const Note& n)
+{
+    return (n.flags >> 2) & 0x03;
+}
+inline void setNoteSample(Note& n, int k)
+{
+    n.flags = (uint8_t)((n.flags & ~0x0C) | ((k & 0x03) << 2));
+}
+
 // ---- per-track settings ----
 enum ArpMode : uint8_t
 {
@@ -145,6 +172,16 @@ void setSettings(Sequencer::strPattern* p, int track, const TrackSettings& s);
 
 PaletteChord getPaletteChord(const Sequencer::strPattern* p, int idx);
 void setPaletteChord(Sequencer::strPattern* p, int idx, const PaletteChord& c);
+
+// drum steps (see noteRatchet): on for this track? The first time they are
+// switched on, the notes' left-over melodic bits are cleared.
+bool drumStepsOn(const Sequencer::strPattern* p, int track);
+void enableDrumSteps(Sequencer::strPattern* p, int track);
+// the track's extra sample k (1..kAltSamples): its instrument, -1 if none
+int altSample(const Sequencer::strPattern* p, int track, int k);
+// the extra sample slot for `instrument` (0 if it is the track's own sound);
+// a free slot is taken, or one no note uses any more; -1 when all are in use
+int altSlotFor(Sequencer::strPattern* p, int track, uint8_t instrument);
 
 int noteCount(const Sequencer::strPattern* p, int track);
 Note getNote(const Sequencer::strPattern* p, int track, int idx);
@@ -302,6 +339,9 @@ bool chordHeld(int track);
 // ---- live playing (UI context) ----
 void auditionOn(int track, uint8_t pitch, uint8_t velocity);
 void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocity);
+// a step's own sample (drum steps): played on the track like auditionOn
+void auditionSample(int track, uint8_t instrument, uint8_t pitch, uint8_t velocity);
+void auditionChordWith(int track, int forceInstrument, const uint8_t* pitches, int count, uint8_t velocity);
 void auditionOff(int track);
 // the notes the track's audition is playing right now (for the Chord Canopy)
 int auditionSounding(int track, uint8_t* out, int max);

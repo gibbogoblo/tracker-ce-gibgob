@@ -68,6 +68,28 @@ enum EntryFlags : uint8_t
     kFlagSeen = 0x08,     // found by the scan that is running
 };
 
+// loop or one-shot: the name says it ("loop", "92bpm", "one shot"), else the
+// length does (3 s or longer: a loop)
+enum Kind : uint8_t
+{
+    kKindUnknown = 0, // the length is not read yet
+    kKindShot,
+    kKindLoop,
+    kKindCount
+};
+extern const char* const kKindNames[kKindCount];
+// the filter on the type: everything, only one-shots, only loops
+enum KindFilter : uint8_t
+{
+    kKindAll = 0,
+    kKindOnlyShots,
+    kKindOnlyLoops,
+    kKindFilterCount
+};
+static constexpr uint16_t kLengthUnread = 0;      // tenths of a second, 0: not read yet
+static constexpr uint16_t kLengthBad = 0xFFFF;    // could not be read
+static constexpr uint16_t kLoopTenths = 30;       // 3 s or longer: a loop
+
 struct Entry
 {
     uint32_t pathOff; // into the name pool
@@ -76,7 +98,8 @@ struct Entry
     uint8_t genre;
     uint8_t category;
     uint8_t flags;
-    uint8_t reserved[3];
+    uint8_t kind;     // Kind
+    uint16_t tenths;  // the length in tenths of a second (kLengthUnread / kLengthBad)
 };
 
 class Index
@@ -101,6 +124,10 @@ class Index
     int setGenreFolder(int i, int genre);
     int setCategoryFolder(int i, int category);
     void toggleFavourite(int i);
+    // the length read from the file (tenths of a second, kLengthBad if unreadable)
+    void setLength(int i, uint32_t tenths);
+    // the next entry from `from` on whose length is not read yet (-1: none)
+    int nextUnmeasured(int from) const;
     void markUsed(int i);
 
     // a scan starts: nothing seen yet; it ends: the files not seen are gone
@@ -109,7 +136,7 @@ class Index
 
     // the entries on a shelf, in a category (kCatNone: all), into `out`;
     // sorted by path (Recent: the latest first)
-    int filter(int shelf, int category, uint16_t* out, int max) const;
+    int filter(int shelf, int category, uint16_t* out, int max, int kindFilter = kKindAll) const;
 
     // the index file: one line per file "genre;category;flags;recent;path"
     // (only the parts set on the Mini are kept; guesses are made again)
@@ -122,6 +149,8 @@ class Index
 
     static int guessCategory(const char* path);
     static int guessGenre(const char* path);
+    // loop / one-shot from the name and the length (tenths; kLengthUnread: name only)
+    static int guessKind(const char* path, uint16_t tenths);
     static uint32_t hashOf(const char* s);
 
   private:

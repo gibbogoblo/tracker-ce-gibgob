@@ -195,7 +195,8 @@ static int render(cDisplayControl& c, const char* name, int limit, bool expectBo
     c.update();
     if (inBegin) { printf("%s: BEGIN left open\n", name); fails++; }
     // the Shift border (4 rectangles, drawn last) must always survive
-    if (expectBorder && borderRects < 8) { printf("%s: shift border missing (%d)\n", name, borderRects); fails++; }
+    // the frame (light screens draw no wash)
+    if (expectBorder && borderRects < 6) { printf("%s: shift border missing (%d)\n", name, borderRects); fails++; }
     if (verts % 2) { printf("%s: odd vertex count\n", name); fails++; }
     int est = draw::used();
     printf("%-34s %4d words (helper counted %4d)\n", name, words, est);

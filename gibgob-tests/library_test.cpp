@@ -69,7 +69,7 @@ int main()
     CHECK(idx.filter(kShelfRecent, kCatNone, list, 64) == 2 && list[0] == h && list[1] == k); // latest first
     static char text[8192];
     const int len = idx.save(text, sizeof(text));
-    CHECK(len > 0 && strncmp(text, "GIBGOBLIB 1\n", 12) == 0);
+    CHECK(len > 0 && strncmp(text, "GIBGOBLIB 2\n", 12) == 0);
     CHECK(strstr(text, "/Recordings/take 1.wav") == nullptr); // nothing set: not stored
 
     {
@@ -150,6 +150,54 @@ int main()
         CHECK(f.dirty);
     }
 
+    // loops and one-shots: the name first, then the length (3 s or longer: a loop)
+    {
+        CHECK(Index::guessKind("/Samples/Loops/thing.wav", kLengthUnread) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/x/drums 92bpm.wav", kLengthUnread) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/x/amen break.wav", 12) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/One Shots/pad.wav", 80) == kKindShot);
+        CHECK(Index::guessKind("/Samples/x/Kick Hit.wav", 60) == kKindShot);
+        CHECK(Index::guessKind("/Samples/x/white noise.wav", 10) == kKindShot); // "hit" inside "white" is no hit
+        CHECK(Index::guessKind("/Samples/x/pad.wav", 45) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/x/pad.wav", 29) == kKindShot);
+        CHECK(Index::guessKind("/Samples/x/pad.wav", kLengthUnread) == kKindUnknown);
+        CHECK(Index::guessKind("/Samples/x/pad.wav", kLengthBad) == kKindUnknown);
+
+        static char kp[4096];
+        static Entry ke[32];
+        static uint16_t out[32];
+        Index k;
+        k.init(kp, sizeof(kp), ke, 32);
+        const int a = k.add("/Samples/a/kick.wav");
+        const int b = k.add("/Samples/a/vocal phrase.wav");
+        const int c = k.add("/Samples/Loops/beat.wav");
+        CHECK(k.nextUnmeasured(0) == a);
+        k.setLength(a, 4);
+        k.setLength(b, 65);
+        CHECK(k.nextUnmeasured(0) == c);
+        k.setLength(c, kLengthBad);
+        CHECK(k.nextUnmeasured(0) == -1);
+        CHECK(k.entry(a).kind == kKindShot && k.entry(b).kind == kKindLoop && k.entry(c).kind == kKindLoop);
+        CHECK(k.filter(kShelfAll, kCatNone, out, 32, kKindOnlyShots) == 1 && out[0] == a);
+        CHECK(k.filter(kShelfAll, kCatNone, out, 32, kKindOnlyLoops) == 2);
+        CHECK(k.filter(kShelfAll, kCatNone, out, 32) == 3);
+        // the lengths are kept in the index file (version 2) ...
+        static char io[2048];
+        const int len = k.save(io, sizeof(io), true);
+        Index k2;
+        static char kp2[4096];
+        static Entry ke2[32];
+        k2.init(kp2, sizeof(kp2), ke2, 32);
+        k2.load(io, len);
+        const int b2 = k2.find("/Samples/a/vocal phrase.wav");
+        CHECK(b2 >= 0 && k2.entry(b2).tenths == 65 && k2.entry(b2).kind == kKindLoop);
+        CHECK(k2.nextUnmeasured(0) == -1);
+        // ... and an old index file (version 1, no lengths) still loads; its lengths are read again
+        const char* old = "GIBGOBLIB 1\n0;2;4;0;/Samples/a/kick.wav\n";
+        k2.load(old, (int)strlen(old));
+        CHECK(k2.count() == 1 && k2.entry(0).category == kCatSnares && k2.entry(0).tenths == kLengthUnread);
+        CHECK(k2.nextUnmeasured(0) == 0);
+    }
     printf(failures ? "FAILED: %d\n" : "ALL LIBRARY TESTS PASSED\n", failures);
     return failures ? 1 : 0;
 }

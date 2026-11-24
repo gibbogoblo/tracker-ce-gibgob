@@ -1093,7 +1093,9 @@ void SynthEditControl::update()
     if (view == nullptr)
         return;
     const SynthView& v = *view;
-    const Fonts f{ fonts[0].handle, fonts[2].handle, fonts[3].handle, fonts[4].handle };
+    // the angelic look is light: its labels in the regular weight (the thin
+    // one fades into the pearl), same width
+    const Fonts f{ v.angelic ? fonts[2].handle : fonts[0].handle, fonts[2].handle, fonts[3].handle, fonts[4].handle };
 
     draw::begin(kBudget);
     if (drawHelp(v.help, fonts[1].handle, fonts[3].handle))
@@ -1150,7 +1152,7 @@ void SynthEditControl::update()
             draw::text(400, 408, f.bold, OPT_CENTER, v.message);
         }
         if (v.shift)
-            drawShiftBorder(); // last: the wash lies over everything
+            drawShiftBorder(kScreenTop, !v.angelic); // last; a light screen: the frame only (the wash would bleach it)
         draw::end();
         return;
     }

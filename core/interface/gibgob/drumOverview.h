@@ -17,7 +17,9 @@ class cDrumOverview : public ModuleBase
         kParamVelocity, // Instr
         kParamNudge,    // FX1
         kParamPitch,    // FX2
-        kParamShift,    // Shift + a coloured button: ratchet / sample / FX (next version)
+        kParamShift,    // Shift + FX1 / FX2: effects per step (next version)
+        kParamRatchet,  // Shift + Note: small +/- speed, big +/- length
+        kParamSample,   // Shift + Instr: the step's own sample
     };
 
     virtual void update();
@@ -37,7 +39,8 @@ class cDrumOverview : public ModuleBase
     void deleteStep();
     void clearTrack();
     void changeParam(int dir, bool big);
-    void changeLength(int dir);
+    void changeLength(int dir, bool fine = false);
+    void changeDrumStep(int track, const int* idx, int n, int dir, bool big); // ratchet / sample
     void markFill(int fill);
     void clearFillMark();
     void copyPage();

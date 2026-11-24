@@ -12,6 +12,7 @@ namespace library
 {
 
 const char* const kGenreNames[kGenreCount] = { "-", "Hiphop", "Garage", "Jungle", "Vocal", "Mine" };
+const char* const kKindNames[kKindCount] = { "", "Shot", "Loop" };
 const char* const kCategoryNames[kCatCount] = { "-", "Kicks", "Snares", "Hats", "Perc",
                                                 "Bass", "Keys", "Vocals", "FX" };
 const char* const kShelfNames[kShelfCount] = { "All",  "Hiphop", "Garage",     "Jungle",
@@ -65,6 +66,8 @@ uint32_t Index::hashOf(const char* s)
         h = (h ^ (uint8_t)tolower((unsigned char)*s)) * 16777619u;
     return h;
 }
+
+static int tempoInName(const char* path);
 
 int Index::guessCategory(const char* path)
 {
@@ -214,6 +217,44 @@ void Index::guess(Entry& x) const
         x.genre = (uint8_t)guessGenre(p);
     if (!(x.flags & kFlagCatSet))
         x.category = (uint8_t)guessCategory(p);
+    x.kind = (uint8_t)guessKind(p, x.tenths);
+}
+
+int Index::guessKind(const char* path, uint16_t tenths)
+{
+    static const char* const kLoop[] = { "loop", "loops", "break", "breaks", "groove", "grooves", nullptr };
+    static const char* const kShot[] = { "one shot", "oneshot", "one-shot", "one shots", "oneshots", "one-shots",
+                                         "hit", "hits", "shot", "shots", nullptr };
+    if (anyWord(path, kLoop) || tempoInName(path) > 0)
+        return kKindLoop;
+    if (anyWord(path, kShot))
+        return kKindShot;
+    if (tenths == kLengthUnread || tenths == kLengthBad)
+        return kKindUnknown;
+    return tenths >= kLoopTenths ? kKindLoop : kKindShot;
+}
+
+void Index::setLength(int i, uint32_t tenths)
+{
+    if (i < 0 || i >= n)
+        return;
+    const uint16_t t = (uint16_t)(tenths == 0 ? 1 : (tenths >= kLengthBad ? kLengthBad : tenths));
+    if (e[i].tenths == t)
+        return;
+    e[i].tenths = t;
+    e[i].kind = (uint8_t)guessKind(pool + e[i].pathOff, t);
+    dirty = true;
+}
+
+int Index::nextUnmeasured(int from) const
+{
+    for (int k = 0; k < n; ++k)
+    {
+        const int i = (from + k) % n;
+        if (e[i].tenths == kLengthUnread)
+            return i;
+    }
+    return -1;
 }
 
 int Index::addRaw(const char* p, uint32_t h)
@@ -365,7 +406,7 @@ void Index::endScan()
     full = false;
 }
 
-int Index::filter(int shelf, int category, uint16_t* out, int max) const
+int Index::filter(int shelf, int category, uint16_t* out, int max, int kindFilter) const
 {
     int c = 0;
     for (int i = 0; i < n && c < max; ++i)
@@ -381,6 +422,10 @@ int Index::filter(int shelf, int category, uint16_t* out, int max) const
         }
         if (ok && category != kCatNone)
             ok = x.category == (uint8_t)category;
+        if (ok && kindFilter == kKindOnlyShots)
+            ok = x.kind == kKindShot;
+        else if (ok && kindFilter == kKindOnlyLoops)
+            ok = x.kind == kKindLoop;
         if (ok)
             out[c++] = (uint16_t)i;
     }
@@ -409,16 +454,17 @@ int Index::filter(int shelf, int category, uint16_t* out, int max) const
 int Index::save(char* out, int outLen, bool all) const
 {
     int w = 0;
-    w += snprintf(out + w, (size_t)(outLen - w), "GIBGOBLIB 1\n");
+    w += snprintf(out + w, (size_t)(outLen - w), "GIBGOBLIB 2\n");
     for (int i = 0; i < n && w < outLen; ++i)
     {
         const Entry& x = e[i];
         const uint8_t keep = x.flags & (kFlagFavourite | kFlagGenreSet | kFlagCatSet);
         if (!all && keep == 0 && x.recent == 0)
             continue; // nothing set on the Mini: found again by the next scan
-        const int r = snprintf(out + w, (size_t)(outLen - w), "%d;%d;%d;%d;%s\n",
+        // version 2: the length (tenths of a second) before the path
+        const int r = snprintf(out + w, (size_t)(outLen - w), "%d;%d;%d;%d;%u;%s\n",
                                (x.flags & kFlagGenreSet) ? x.genre : 0, (x.flags & kFlagCatSet) ? x.category : 0,
-                               keep, x.recent, pool + x.pathOff);
+                               keep, x.recent, (unsigned)x.tenths, pool + x.pathOff);
         if (r < 0 || w + r >= outLen)
             break;
         w += r;
@@ -447,8 +493,18 @@ void Index::load(const char* text, int len)
         if (l < 9)
             continue;
         int genre = 0, cat = 0, flags = 0, recent = 0, used = 0;
-        if (sscanf(line, "%d;%d;%d;%d;%n", &genre, &cat, &flags, &recent, &used) < 4 || used <= 0 ||
-            line[used] != '/')
+        if (sscanf(line, "%d;%d;%d;%d;%n", &genre, &cat, &flags, &recent, &used) < 4 || used <= 0)
+            continue;
+        // version 2 lines have the length before the path (version 1: the path right away)
+        unsigned tenths = 0;
+        if (line[used] != '/')
+        {
+            int more = 0;
+            if (sscanf(line + used, "%u;%n", &tenths, &more) < 1 || more <= 0)
+                continue;
+            used += more;
+        }
+        if (line[used] != '/')
             continue;
         const int i = addRaw(line + used, hashOf(line + used));
         if (i < 0)
@@ -460,6 +516,7 @@ void Index::load(const char* text, int len)
         if (x.flags & kFlagCatSet)
             x.category = (uint8_t)(cat >= 0 && cat < kCatCount ? cat : 0);
         x.recent = (uint16_t)(recent < 0 ? 0 : (recent > 0xFFFF ? 0xFFFF : recent));
+        x.tenths = (uint16_t)(tenths > kLengthBad ? kLengthBad : tenths);
         if (x.recent > recentCounter)
             recentCounter = x.recent;
         guess(x);

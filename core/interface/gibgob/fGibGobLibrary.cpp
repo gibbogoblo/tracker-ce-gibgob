@@ -39,6 +39,7 @@ using namespace gibgob;
 namespace lib = gibgob::library;
 
 static void functPlay(uint8_t state);
+static void functInsert(uint8_t state);
 static void functUp(uint8_t state);
 static void functDown(uint8_t state);
 static void functLeft(uint8_t state);
@@ -84,6 +85,10 @@ struct Small
 
     int shelf;
     int category;
+    int kindFilter;        // Insert: all / one-shots / loops
+    int measureAt;         // the background reading of lengths: where it goes on
+    uint32_t nextMeasureAt;
+    int measuredSinceShow;
     int listCount;
     int cursor;
     int top;
@@ -131,8 +136,8 @@ bool borrowMemory()
     {
         const int entries = 6000 / scale;
         // io holds the whole index file: every path (at most the pool) plus
-        // "g;c;f;recent;" and a line end (at most 13) for each file
-        const uint32_t pool = 393216u / scale, io = pool + entries * 16u + 64u, names = 32768u;
+        // "g;c;f;recent;len;" and a line end (at most 19) for each file
+        const uint32_t pool = 393216u / scale, io = pool + entries * 22u + 64u, names = 32768u;
         const int nameListMax = 1024, stackMax = 256;
         const uint32_t need = entries * sizeof(lib::Entry) + pool + entries * sizeof(uint16_t) + io + names +
                               nameListMax * sizeof(char*) + stackMax * kPathMax + 64;
@@ -297,6 +302,72 @@ void scanStep()
 
 constexpr float kPreviewTrim = 0.355f; // -9 dB
 
+uint32_t le32(const uint8_t* b)
+{
+    return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+}
+
+// a WAV's length from its header, in tenths of a second (kLengthBad if it can't be read)
+uint32_t wavTenths(const char* path)
+{
+    FileSystem* fs = fileSystem();
+    if (fs == nullptr)
+        return lib::kLengthBad;
+    auto [ok, fh] = fs->openFile(path, FileSystem::kRead);
+    if (!ok || fh == nullptr)
+        return lib::kLengthBad;
+    uint8_t h[24];
+    uint32_t result = lib::kLengthBad;
+    if (fs->readFile(h, 12, fh) == 12 && memcmp(h, "RIFF", 4) == 0 && memcmp(h + 8, "WAVE", 4) == 0)
+    {
+        uint32_t pos = 12, byteRate = 0;
+        for (int k = 0; k < 24; k++) // the chunks, up to "data"
+        {
+            if (!fs->seekFile(pos, fh) || fs->readFile(h, 8, fh) != 8)
+                break;
+            const uint32_t size = le32(h + 4);
+            if (memcmp(h, "fmt ", 4) == 0)
+            {
+                if (fs->readFile(h, 16, fh) != 16)
+                    break;
+                byteRate = le32(h + 8);
+            }
+            else if (memcmp(h, "data", 4) == 0)
+            {
+                if (byteRate > 0)
+                {
+                    const uint64_t t = (uint64_t)size * 10u / byteRate;
+                    result = t >= lib::kLengthBad ? lib::kLengthBad - 1 : (uint32_t)t;
+                }
+                break;
+            }
+            if (size > 0x7FFFFFFFu)
+                break;
+            pos += 8 + size + (size & 1u);
+        }
+    }
+    fs->closeFile(fh);
+    return result;
+}
+
+// a few lengths at a time in the background (fewer while a preview streams from the card)
+void measureStep()
+{
+    if ((uint32_t)s_clock < S->nextMeasureAt)
+        return;
+    const bool busy = S->previewing;
+    S->nextMeasureAt = (uint32_t)s_clock + (busy ? 120u : 8u);
+    for (int k = 0; k < (busy ? 1 : 3); k++)
+    {
+        const int i = S->idx.nextUnmeasured(S->measureAt);
+        if (i < 0)
+            return;
+        S->idx.setLength(i, wavTenths(S->idx.path(i)));
+        S->measureAt = i + 1;
+        S->measuredSinceShow++;
+    }
+}
+
 void stopPreview()
 {
     S->previewAt = 0;
@@ -354,6 +425,10 @@ void cGibGobLibrary::start(uint32_t options)
     {
         S->shelf = clampInt(S->shelf, 0, lib::kShelfCount - 1);
         S->category = clampInt(S->category, 0, lib::kCatCount - 1);
+        S->kindFilter = clampInt(S->kindFilter, 0, lib::kKindFilterCount - 1);
+        S->measureAt = 0;
+        S->nextMeasureAt = 0;
+        S->measuredSinceShow = 0;
         loadIndex(); // what was there last time, at once
         S->idx.beginScan();
         S->scanning = true;
@@ -412,6 +487,7 @@ void cGibGobLibrary::setDefaultScreenFunct()
     ip->setButtonObj(physFx2Button(), functColour);
     bindModuleSwitchButtons(ip, functSwitchModule);
     ip->setButtonObj(interfaceButtonPattern, functPattern);
+    ip->setButtonObj(interfaceButtonInsert, functInsert); // all / one-shots / loops
     ip->setPotObj(interfacePot0, functEncoder, false);
 }
 
@@ -427,6 +503,15 @@ void cGibGobLibrary::update()
             refresh(); // the scan is done
         else if (S->dirsSinceFilter == 0)
             refresh();
+    }
+    measureStep();
+    if (S->measuredSinceShow >= 24 || (S->measuredSinceShow > 0 && S->idx.nextUnmeasured(0) < 0))
+    {
+        // new lengths: the Type column, and the list if it is filtered by type
+        S->measuredSinceShow = 0;
+        if (S->kindFilter != lib::kKindAll)
+            refilter();
+        refresh();
     }
     if (S->previewAt != 0 && (uint32_t)s_clock >= S->previewAt)
     {
@@ -445,7 +530,7 @@ void cGibGobLibrary::update()
 void cGibGobLibrary::refilter()
 {
     const int keep = cursorEntry();
-    S->listCount = S->idx.filter(S->shelf, S->category, S->list, S->maxEntries);
+    S->listCount = S->idx.filter(S->shelf, S->category, S->list, S->maxEntries, S->kindFilter);
     // stay on the same sample when it is still there
     if (keep >= 0)
         for (int k = 0; k < S->listCount; k++)
@@ -476,7 +561,7 @@ void cGibGobLibrary::refresh()
     v.header[0] = "Sample";
     v.header[1] = "Genre";
     v.header[2] = "Category";
-    v.header[3] = "Fav";
+    v.header[3] = "Type";
     v.mode[0] = 0;
     const bool genres = !shiftActive();
 
@@ -523,17 +608,21 @@ void cGibGobLibrary::refresh()
             snprintf(v.cell[r][0], 20, "%.19s", S->idx.name(i));
             snprintf(v.cell[r][1], 20, "%s", lib::kGenreNames[e.genre % lib::kGenreCount]);
             snprintf(v.cell[r][2], 20, "%s", lib::kCategoryNames[e.category % lib::kCatCount]);
-            snprintf(v.cell[r][3], 20, "%s", (e.flags & lib::kFlagFavourite) ? "*" : "");
+            snprintf(v.cell[r][3], 20, "%s%s", lib::kKindNames[e.kind % lib::kKindCount],
+                     (e.flags & lib::kFlagFavourite) ? " *" : "");
             v.rowColor[r] = color::kBox;
         }
     }
 
     // where we are
-    char where[40];
+    char where[48];
+    static const char* const kKindFilterNames[lib::kKindFilterCount] = { "", " > Shots", " > Loops" };
     if (S->category != lib::kCatNone)
-        snprintf(where, sizeof(where), "%s > %s", lib::kShelfNames[S->shelf], lib::kCategoryNames[S->category]);
+        snprintf(where, sizeof(where), "%s > %s%s", lib::kShelfNames[S->shelf], lib::kCategoryNames[S->category],
+                 kKindFilterNames[S->kindFilter % lib::kKindFilterCount]);
     else
-        snprintf(where, sizeof(where), "%s", lib::kShelfNames[S->shelf]);
+        snprintf(where, sizeof(where), "%s%s", lib::kShelfNames[S->shelf],
+                 kKindFilterNames[S->kindFilter % lib::kKindFilterCount]);
     snprintf(v.title, sizeof(v.title), "Track %d  %s  (%d)", track + 1, where, S->listCount);
     if (S->scanning)
     {
@@ -681,6 +770,18 @@ void cGibGobLibrary::back(bool folders)
 static bool pressOrRepeat(uint8_t s)
 {
     return s == buttonPress || s == buttonHold;
+}
+
+// Insert: all / only one-shots / only loops
+static void functInsert(uint8_t state)
+{
+    if (state != buttonPress || !S->memoryOk)
+        return;
+    stopPreview();
+    S->kindFilter = (S->kindFilter + 1) % lib::kKindFilterCount;
+    S->top = 0;
+    LB->refilter();
+    LB->refresh();
 }
 
 static void functPlay(uint8_t state)

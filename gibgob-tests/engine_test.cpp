@@ -34,12 +34,14 @@ static std::map<int,int> synthOn; // ch*128+pitch -> count
 static bool voiceSounding[8];
 
 static int lastSampleVolume = -1;
+static std::vector<int> sInstr; // the instrument of each sample note-on
 uint8_t playerEngine::noteOn(uint8_t instr, int8_t note, int8_t vel, uint8_t, uint8_t, uint8_t, uint8_t)
 {
     lastSampleVolume = vel;
     if (irqDepth) { printf("FAIL noteOn under lock\n"); failures++; }
     (void)instr; (void)vel;
     events.push_back({nowTick, 'S', index, note});
+    sInstr.push_back(instr);
     voiceSounding[index] = true;
     return 1;
 }
@@ -271,6 +273,68 @@ int main()
     addNote(&pat, 0, mk(0, 96, 60));
     runTicks(0, 300);
     CHECK(countKind('S') == 1 && countKind('s') == 1);
+
+    // T3b: drum steps: a ratchet, an extra sample per step
+    {
+        freshPattern();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        Note n = mk(0, 48, 60);
+        setNoteRatchet(n, 3); // 4 hits a step
+        addNote(&pat, 0, n);
+        runTicks(0, 96);
+        CHECK(countKind('S') == 1); // drum steps not switched on: the bits mean nothing (an old track)
+        freshPattern();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        n = mk(0, 96, 60); // 2 steps long
+        setNoteRatchet(n, 3);
+        addNote(&pat, 0, n);
+        enableDrumSteps(&pat, 0); // switching on clears what was in the bits ...
+        CHECK(noteRatchet(getNote(&pat, 0, 0)) == 0);
+        setNote(&pat, 0, 0, n);   // ... so set it again
+        CHECK(drumStepsOn(&pat, 0));
+        events.clear();
+        runTicks(0, 96);
+        std::vector<int> at;
+        for (auto& e : events) if (e.kind == 'S') at.push_back(e.tick);
+        CHECK(at == std::vector<int>({ 0, 12, 24, 36, 48, 60, 72, 84 })); // 4 a step for 2 steps
+        // a new hit stops the roll
+        freshPattern();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        enableDrumSteps(&pat, 0);
+        n = mk(0, 192, 60); setNoteRatchet(n, 1); addNote(&pat, 0, n); // 2 a step for 4 steps
+        addNote(&pat, 0, mk(48, 48, 62));
+        events.clear();
+        runTicks(0, 192);
+        int hits = 0; for (auto& e : events) if (e.kind == 'S') hits++;
+        CHECK(hits == 3); // 0, 24, then the hit at 48 (no more of the roll)
+        // an extra sample on a step
+        freshPattern();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        enableDrumSteps(&pat, 0);
+        CHECK(altSlotFor(&pat, 0, 0) == 0);  // its own sound
+        const int k = altSlotFor(&pat, 0, 7);
+        CHECK(k == 1 && altSample(&pat, 0, 1) == 7);
+        CHECK(altSlotFor(&pat, 0, 7) == 1);  // the same one again
+        CHECK(altSlotFor(&pat, 0, 8) == 2 && altSlotFor(&pat, 0, 9) == 3);
+        n = mk(0, 48, 60); setNoteSample(n, 2); addNote(&pat, 0, n);
+        n = mk(96, 48, 60); setNoteSample(n, 3); addNote(&pat, 0, n);
+        n = mk(144, 48, 60); setNoteSample(n, 1); addNote(&pat, 0, n);
+        CHECK(altSlotFor(&pat, 0, 10) == -1); // all 3 in use by notes
+        removeNote(&pat, 0, 2);                // sample 7 is not used any more
+        CHECK(altSlotFor(&pat, 0, 10) == 1 && altSample(&pat, 0, 1) == 10);
+        events.clear(); sInstr.clear();
+        runTicks(0, 192);
+        CHECK(sInstr == std::vector<int>({ 8, 9 }));
+        // an empty sample slot falls back to the track's sound
+        mtProject.instrument[9].isActive = 0;
+        events.clear(); sInstr.clear();
+        stopAll(); runTicks(0, 192);
+        CHECK(sInstr == std::vector<int>({ 8, 0 }));
+        // to melodic: the drum bits are cleared (no accidental slides / envelopes)
+        setTrackType(&pat, 0, TrackType::Melodic);
+        CHECK(!drumStepsOn(&pat, 0) && noteSample(getNote(&pat, 0, 0)) == 0 && noteRatchet(getNote(&pat, 0, 0)) == 0);
+        stopAll();
+    }
 
     // T4: arp up, 3 held notes over 4 steps at 1/16
     freshPattern();
@@ -795,6 +859,39 @@ int main()
             for (int i = 0; i < 8; i++) instrumentPlayer[i].index = i;
             events.clear();
         }
+        // humanize, the release: nothing starts once the button is let go, at any
+        // moment of the chord (synth track 5 here, then a sample track)
+        for (int kind = 0; kind < 2; kind++)
+        {
+            static Sequencer::strPattern saved2;
+            memcpy(&saved2, &pat, sizeof(saved2));
+            if (kind == 1) { setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 4); }
+            TrackSettings hs = getSettings(&pat, 5);
+            hs.feel = ChordFeel{}; hs.feel.mode = kFeelHuman; hs.feel.humTime = 5; hs.feel.humVel = 5;
+            setSettings(&pat, 5, hs);
+            const uint8_t ch5[5] = { 48, 55, 60, 64, 67 };
+            int lateStarts = 0;
+            for (int i = 0; i < 200; i++)
+            {
+                const uint32_t t0 = 60000 + i * 500;
+                chordPoll(t0);
+                chordPress(5, 3, ch5, 5, 100);
+                const uint32_t hold = (uint32_t)(i * 7 % 120); // let go at 0 .. 119 ms
+                for (uint32_t t = t0; t <= t0 + hold; t += 3) chordPoll(t);
+                chordRelease(5, 3);
+                events.clear();
+                for (uint32_t t = t0 + hold; t <= t0 + 400; t += 3) chordPoll(t);
+                for (auto& e : events) if (e.kind == 'S' || e.kind == 'M') lateStarts++;
+            }
+            int sounding = 0; for (bool b : voiceSounding) sounding += b;
+            printf("  humanize release (%s): %d notes started after the release, %d voices left on\n",
+                   kind ? "sample" : "synth", lateStarts, sounding);
+            CHECK(lateStarts == 0);
+            if (kind == 0) CHECK(stuckSynth() == 0);
+            memcpy(&pat, &saved2, sizeof(pat));
+            events.clear();
+        }
+        setSettings(&pat, 5, s);
         // arp, free running at 120 bpm: 1/16 = 125 ms, gate 50 %
         s.feel = ChordFeel{}; s.feel.mode = kFeelArp; s.feel.arpMode = kArpUp; s.feel.strum = 10;
         s.arpMode = kArpOff; s.arpRate = 3; s.arpOctaves = 2; s.arpGate = 50;

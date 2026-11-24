@@ -6,6 +6,7 @@
 #include "mtStructs.h"
 
 #include <new>
+#include <stddef.h>
 #include <string.h>
 
 #if __has_include("cr_section_macros.h")
@@ -40,6 +41,7 @@ constexpr uint8_t kMagic1 = 'M';
 constexpr uint8_t kVersion = 1;
 
 constexpr uint8_t kHeaderFlagMelodic = 0x01;
+constexpr uint8_t kHeaderFlagDrumSteps = 0x02; // ratchet / sample per step in use (drum tracks)
 constexpr uint8_t kArpFlagApe = 0x01;
 
 constexpr int kSlotBytes = 8;
@@ -232,6 +234,7 @@ bool isBeatSliceSound(uint8_t instrument)
 // read when the header's spare byte carries this marker.
 constexpr uint8_t kSliceMapMagic = 0xA5;
 constexpr uint8_t kNoteMapMagic = 0xA6; // the slot holds the top buttons' notes instead
+constexpr uint8_t kAltMapMagic = 0xA7;  // a drum track's extra samples: bytes 0-2 = instrument + 1
 
 ChordFeel decodeFeel(uint8_t a, uint8_t b)
 {
@@ -394,6 +397,13 @@ struct TrackPlayState
     uint8_t skipPitch[kMaxChordNotes];
     uint32_t runTicks; // micro steps since playback started
     uint8_t serialCounter;
+    // a drum step's ratchet: the hits still to come
+    int16_t rollLeft;
+    int16_t rollIn;       // micro steps to the next hit
+    int16_t rollInterval;
+    uint8_t rollPitch;
+    uint8_t rollVel;
+    uint8_t rollInstrument;
 };
 
 TrackPlayState playState[kTracks];
@@ -443,6 +453,7 @@ void ensureInit()
         playState[t].serialCounter = 0;
         playState[t].skipTick = -1;
         playState[t].skipCount = 0;
+        playState[t].rollLeft = 0;
         audition[t].on = false;
         voiceUse[t].on = false;
         voiceUse[t].track = -1;
@@ -867,7 +878,17 @@ void setTrackType(Sequencer::strPattern* p, int track, TrackType type)
     AudioLock lock;
     Header h = headerOrDefault(p, track);
     if (type == TrackType::Melodic)
+    {
         h.flags |= kHeaderFlagMelodic;
+        if (h.flags & kHeaderFlagDrumSteps)
+        {
+            // ratchets and step samples are no slides, accents or envelopes
+            uint8_t* base = rawBytes(p, track) + kSlotNotes * kSlotBytes;
+            for (int i = 0; i < h.count; i++)
+                base[i * sizeof(Note) + offsetof(Note, flags)] &= 0x03;
+            h.flags &= (uint8_t)~kHeaderFlagDrumSteps;
+        }
+    }
     else
         h.flags &= (uint8_t)~kHeaderFlagMelodic;
     writeHeaderLocked(p, track, h);
@@ -877,6 +898,74 @@ void setTrackType(Sequencer::strPattern* p, int track, TrackType type)
 bool isMelodic(const Sequencer::strPattern* p, int track)
 {
     return getTrackType(p, track) == TrackType::Melodic;
+}
+
+bool drumStepsOn(const Sequencer::strPattern* p, int track)
+{
+    Header h;
+    return validTrack(track) && p != nullptr && readHeader(p, track, h) && (h.flags & kHeaderFlagDrumSteps) &&
+           !(h.flags & kHeaderFlagMelodic);
+}
+
+void enableDrumSteps(Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr || drumStepsOn(p, track))
+        return;
+    AudioLock lock;
+    Header h = headerOrDefault(p, track);
+    writeHeaderLocked(p, track, h); // the first header write clears the track: before the notes
+    // whatever melodic bits the notes still carry would read as ratchets / samples
+    uint8_t* base = rawBytes(p, track) + kSlotNotes * kSlotBytes;
+    for (int i = 0; i < h.count; i++)
+        base[i * sizeof(Note) + offsetof(Note, flags)] &= 0x03;
+    h.flags |= kHeaderFlagDrumSteps;
+    writeHeaderLocked(p, track, h);
+}
+
+int altSample(const Sequencer::strPattern* p, int track, int k)
+{
+    Header h;
+    if (k < 1 || k > kAltSamples || !validTrack(track) || p == nullptr || !readHeader(p, track, h) ||
+        h.reserved != kAltMapMagic)
+        return -1;
+    const uint8_t v = rawBytes(p, track)[kSlotSliceMap * kSlotBytes + k - 1];
+    return v == 0 ? -1 : v - 1;
+}
+
+int altSlotFor(Sequencer::strPattern* p, int track, uint8_t instrument)
+{
+    if (!validTrack(track) || p == nullptr)
+        return -1;
+    if (instrument == getSound(p, track))
+        return 0;
+    for (int k = 1; k <= kAltSamples; k++)
+        if (altSample(p, track, k) == instrument)
+            return k;
+    // a free slot, or one that no note of the track uses any more
+    bool used[kAltSamples + 1] = { false };
+    for (int i = 0; i < noteCount(p, track); i++)
+        used[noteSample(getNote(p, track, i))] = true;
+    int slot = -1;
+    for (int k = 1; k <= kAltSamples && slot < 0; k++)
+        if (altSample(p, track, k) < 0)
+            slot = k;
+    for (int k = 1; k <= kAltSamples && slot < 0; k++)
+        if (!used[k])
+            slot = k;
+    if (slot < 0)
+        return -1;
+    AudioLock lock;
+    Header h = headerOrDefault(p, track);
+    writeHeaderLocked(p, track, h);
+    uint8_t* m = rawBytes(p, track) + kSlotSliceMap * kSlotBytes;
+    if (h.reserved != kAltMapMagic)
+    {
+        memset(m, 0, kSlotBytes); // the slot held a note or slice map before: start empty
+        h.reserved = kAltMapMagic;
+        writeHeaderLocked(p, track, h);
+    }
+    m[slot - 1] = (uint8_t)(instrument + 1);
+    return slot;
 }
 
 bool isSliceTrack(const Sequencer::strPattern* p, int track)
@@ -1739,7 +1828,10 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     bool ratchetNow = arpCountdown(st.arp, ratchet);
 
     if (muted || !has)
+    {
+        st.rollLeft = 0;
         return;
+    }
 
     const uint8_t* raw = rawBytes(p, track);
     TrackSettings settings = decodeSettings(raw + kSlotSettings * kSlotBytes, h);
@@ -1752,6 +1844,11 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     // 2. second hit of a Go Ape double
     if (ratchetNow && arp)
         startNote(track, st, instrument, ratchet.pitch, ratchet.velocity, ratchet.gate, false);
+
+    // 2b. a drum step's ratchet: is its next hit due? (played after the new
+    // notes: a hit starting now ends the roll instead)
+    const bool drumSteps = drum && (h.flags & kHeaderFlagDrumSteps) && !(h.flags & kHeaderFlagMelodic);
+    const bool rollDue = st.rollLeft > 0 && --st.rollIn <= 0;
 
     // 3. notes that begin on this micro step
     const uint8_t* base = raw + kSlotNotes * kSlotBytes;
@@ -1794,9 +1891,51 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
             // Hits of up to one step ring out until then; longer ones are gated.
             bool oneShot = drum && n.length <= kTicksPerStep;
             if (drum)
+            {
                 chokeTrack(track, st);
-            startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
+                st.rollLeft = 0; // a new hit ends a ratchet
+            }
+            if (drumSteps)
+            {
+                // the step's own sample (one of the track's extras), and its ratchet:
+                // hits evenly spread over the note's length (whole steps)
+                uint8_t ins = instrument;
+                const int k = noteSample(n);
+                if (k > 0)
+                {
+                    const uint8_t v = raw[kSlotSliceMap * kSlotBytes + k - 1];
+                    if (h.reserved == kAltMapMagic && v != 0 && isSampleInstrument(v - 1) &&
+                        mtProject.instrument[v - 1].isActive == 1)
+                        ins = (uint8_t)(v - 1);
+                }
+                const int hits = kRatchetHits[noteRatchet(n)];
+                if (hits > 1)
+                {
+                    const int interval = kTicksPerStep / hits;
+                    int span = (n.length + kTicksPerStep / 2) / kTicksPerStep;
+                    span = span < 1 ? 1 : (span > 8 ? 8 : span);
+                    startNote(track, st, ins, n.pitch, velocity, interval, true);
+                    st.rollLeft = (int16_t)(span * hits - 1);
+                    st.rollIn = (int16_t)interval;
+                    st.rollInterval = (int16_t)interval;
+                    st.rollPitch = n.pitch;
+                    st.rollVel = velocity;
+                    st.rollInstrument = ins;
+                }
+                else
+                    startNote(track, st, ins, n.pitch, velocity, n.length, oneShot);
+            }
+            else
+                startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
         }
+    }
+
+    if (rollDue && st.rollLeft > 0)
+    {
+        chokeTrack(track, st);
+        startNote(track, st, st.rollInstrument, st.rollPitch, st.rollVel, st.rollInterval, true);
+        st.rollLeft--;
+        st.rollIn = st.rollInterval;
     }
 
     if (st.skipTick == tick)
@@ -1823,6 +1962,7 @@ void stopTrack(int track)
             releaseActive(track, a);
     st.arp.heldCount = 0;
     st.arp.ratchetIn = 0;
+    st.rollLeft = 0;
 }
 
 void stopAll()
@@ -1901,13 +2041,23 @@ int auditionSounding(int track, uint8_t* out, int max)
 
 void auditionChord(int track, const uint8_t* pitches, int count, uint8_t velocity)
 {
+    auditionChordWith(track, -1, pitches, count, velocity);
+}
+
+void auditionSample(int track, uint8_t instrument, uint8_t pitch, uint8_t velocity)
+{
+    auditionChordWith(track, instrument, &pitch, 1, velocity);
+}
+
+void auditionChordWith(int track, int forceInstrument, const uint8_t* pitches, int count, uint8_t velocity)
+{
     ensureInit();
     if (!validTrack(track) || count <= 0 || pitches == nullptr)
         return;
     auditionOff(track);
 
     const Sequencer::strPattern* p = current();
-    uint8_t instrument = getSound(p, track);
+    uint8_t instrument = forceInstrument >= 0 ? (uint8_t)forceInstrument : getSound(p, track);
     bool sample = isSampleInstrument(instrument);
     if (sample && mtProject.instrument[instrument].isActive != 1)
         return; // empty sample slot: nothing to play

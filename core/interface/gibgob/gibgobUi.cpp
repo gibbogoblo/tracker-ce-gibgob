@@ -928,7 +928,7 @@ bool drawHelp(const HelpView& help, int fontRegular, int fontBold)
     return true;
 }
 
-void drawShiftBorder(int top)
+void drawShiftBorder(int top, bool wash)
 {
     // Shift: a subtle blue-purple added over the screen (additive: nothing is
     // covered, everything lifts towards blue), then a yellow / black striped
@@ -943,13 +943,16 @@ void drawShiftBorder(int top)
 
     draw::detail::endRectsNow();
     API_COLOR_A(255);
-    API_BLEND_FUNC(ONE, ONE);
-    API_COLOR(kWash);
-    API_BEGIN(RECTS);
-    API_VERTEX2F(0, (int16_t)y1);
-    API_VERTEX2F(kScreenW - 1, (int16_t)y2);
-    API_END();
-    API_BLEND_FUNC(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+    if (wash)
+    {
+        API_BLEND_FUNC(ONE, ONE);
+        API_COLOR(kWash);
+        API_BEGIN(RECTS);
+        API_VERTEX2F(0, (int16_t)y1);
+        API_VERTEX2F(kScreenW - 1, (int16_t)y2);
+        API_END();
+        API_BLEND_FUNC(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+    }
 
     // black under the stripes
     API_COLOR(0x000000);

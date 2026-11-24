@@ -84,13 +84,18 @@ void DrumOverviewControl::update()
         snprintf(boxes[k].value, sizeof(boxes[k].value), "%s", v.cloudValue[k]);
         boxes[k].color = kBoxColor[k];
     }
-    char title[48];
-    if (v.count > 0 && !v.message[0])
+    char title[80];
+    const bool onName = v.count > 0 && !v.message[0] && v.cursor < 0;
+    if (onName)
+        snprintf(title, sizeof(title), "%.10s   Length %s   +/-: length   Middle: settings", v.tracks[v.sel].name,
+                 v.lengthText);
+    else if (v.count > 0 && !v.message[0])
         snprintf(title, sizeof(title), "%.10s  %s  %s", v.tracks[v.sel].name, v.pageText, v.lengthText);
     else
         snprintf(title, sizeof(title), "Drums");
-    drawInfoStrip(12, title, v.fillOn ? "FILL" : nullptr, color::kBox, v.count > 0 ? boxes : nullptr, v.cloudLit,
-                  fRegular, fBold);
+    // on the name: the track's length, no step values
+    drawInfoStrip(12, title, v.fillOn ? "FILL" : nullptr, color::kBox, (v.count > 0 && !onName) ? boxes : nullptr,
+                  v.cloudLit, fRegular, fBold);
 
     if (v.count <= 0 || v.message[0])
     {

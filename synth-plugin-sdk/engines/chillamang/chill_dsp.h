@@ -217,7 +217,7 @@ class Voice
         releasing = true;
         relCoef = decayCoef(clampf(p.release, 0.01f, 3.0f) * 0.35f);
         // the damper meets the tine: a soft low thud
-        thumpEnv = 0.05f * (0.3f + 0.7f * vel) * amp;
+        thumpEnv = 0.0075f * (0.3f + 0.7f * vel) * amp; // barely there: a chord let go must not knock
         thumpCoef = decayCoef(0.02f);
     }
 

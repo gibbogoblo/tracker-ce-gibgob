@@ -280,15 +280,29 @@ void cDrumOverview::refresh()
     const TrackSettings settings = getSettings(p, t);
     snprintf(v.labelTop[0], sizeof(v.labelTop[0]), "%s", shift ? "ratchet" : "prob");
     snprintf(v.labelTop[1], sizeof(v.labelTop[1]), "%s", shift ? "sample" : "vel");
+    const bool steps2 = drumStepsOn(p, t);
     snprintf(v.labelBot[0], sizeof(v.labelBot[0]), "%s", shift ? "fx1" : "nudge");
     snprintf(v.labelBot[1], sizeof(v.labelBot[1]), "%s", shift ? "fx2" : "pitch");
     for (int s = 0; s < kSteps; s++)
     {
         v.lockTop[s][0][0] = v.lockTop[s][1][0] = v.lockBot[s][0][0] = v.lockBot[s][1][0] = 0;
         const int step = first + s;
-        if (shift || step >= steps || stepNotes(t, step, idx, 1) == 0)
+        if (step >= steps || stepNotes(t, step, idx, 1) == 0)
             continue;
         const Note n = getNote(p, t, idx[0]);
+        if (shift)
+        {
+            // Shift: the ratchet ("x4", "x4/2" = for 2 steps) and the step's own sample ("S2")
+            if (!steps2)
+                continue;
+            const int hits = kRatchetHits[noteRatchet(n)];
+            const int span = clampInt((n.length + kTicksPerStep / 2) / kTicksPerStep, 1, 8);
+            if (hits > 1)
+                snprintf(v.lockTop[s][0], 8, span > 1 ? "x%d/%d" : "x%d", hits, span);
+            if (noteSample(n) > 0 && altSample(p, t, noteSample(n)) >= 0)
+                snprintf(v.lockTop[s][1], 8, "S%d", noteSample(n));
+            continue;
+        }
         if (n.chance() < 100)
             snprintf(v.lockTop[s][0], 8, "%d%%", n.chance());
         if (n.velocity != 100)
@@ -306,6 +320,22 @@ void cDrumOverview::refresh()
         snprintf(v.cloudLabel[k], sizeof(v.cloudLabel[k]), "%s", shift ? kShiftNames[k] : kNames[k]);
         snprintf(v.cloudValue[k], sizeof(v.cloudValue[k]), "-");
     }
+    if (shift && stepNotes(t, cursor, idx, 1) > 0)
+    {
+        // the cursor step's ratchet and sample
+        const Note n = getNote(p, t, idx[0]);
+        const int hits = steps2 ? kRatchetHits[noteRatchet(n)] : 1;
+        const int span = clampInt((n.length + kTicksPerStep / 2) / kTicksPerStep, 1, 8);
+        if (hits > 1)
+            snprintf(v.cloudValue[0], sizeof(v.cloudValue[0]), "x%d %dst", hits, span);
+        else
+            snprintf(v.cloudValue[0], sizeof(v.cloudValue[0]), "off");
+        const int k = steps2 ? noteSample(n) : 0;
+        const int ins = k > 0 && altSample(p, t, k) >= 0 ? altSample(p, t, k) : getSound(p, t);
+        char nm[20];
+        gibgobSoundName((uint8_t)ins, nm, sizeof(nm));
+        snprintf(v.cloudValue[1], sizeof(v.cloudValue[1]), "%.9s", nm);
+    }
     if (!shift && stepNotes(t, cursor, idx, 1) > 0)
     {
         const Note n = getNote(p, t, idx[0]);
@@ -318,11 +348,11 @@ void cDrumOverview::refresh()
         snprintf(v.cloudValue[2], sizeof(v.cloudValue[2]), "%+d", stepOffset(n.start, cursor, steps * kTicksPerStep));
         snprintf(v.cloudValue[3], sizeof(v.cloudValue[3]), "%s", mtNotes[clampInt(n.pitch, 0, 127)]);
     }
-    v.cloudLit = param == kParamProb       ? 0
-                 : param == kParamVelocity ? 1
-                 : param == kParamNudge    ? 2
-                 : param == kParamPitch    ? 3
-                                           : -1;
+    v.cloudLit = (param == kParamProb || param == kParamRatchet)    ? 0
+                 : (param == kParamVelocity || param == kParamSample) ? 1
+                 : param == kParamNudge                               ? 2
+                 : param == kParamPitch                               ? 3
+                                                                      : -1;
 
     // Shift: the bottom shows the CHIMP OUT effects
     for (int i = 0; i < 8; i++)
@@ -508,7 +538,7 @@ void cDrumOverview::changeParam(int dir, bool big)
         return;
     if (param == kParamShift)
     {
-        mtPopups.show(0, "Ratchet, sample and FX per step: next version", 1);
+        mtPopups.show(0, "Effects per step: next version", 1);
         return;
     }
     Sequencer::strPattern* p = current();
@@ -517,6 +547,11 @@ void cDrumOverview::changeParam(int dir, bool big)
     if (n == 0)
     {
         mtPopups.show(0, "No hit on this step (top row adds one)", 1);
+        return;
+    }
+    if (param == kParamRatchet || param == kParamSample)
+    {
+        changeDrumStep(t, idx, n, dir, big);
         return;
     }
     const int trackTicks = trackSteps(p, t) * kTicksPerStep;
@@ -551,8 +586,78 @@ void cDrumOverview::changeParam(int dir, bool big)
     refresh();
 }
 
+// Shift + Note: the ratchet (small +/- its speed, big +/- how many steps it
+// lasts); Shift + Instr: the step's sample (the track's own or up to 3 more)
+void cDrumOverview::changeDrumStep(int t, const int* idx, int n, int dir, bool big)
+{
+    Sequencer::strPattern* p = current();
+    const int trackTicks = trackSteps(p, t) * kTicksPerStep;
+    Note first = getNote(p, t, idx[0]);
+    if (param == kParamSample)
+    {
+        // the next loaded sample, from the one the step plays now
+        const int k = noteSample(first);
+        int ins = k > 0 && altSample(p, t, k) >= 0 ? altSample(p, t, k) : getSound(p, t);
+        int found = -1;
+        for (int tries = 1; tries <= 48 && found < 0; tries++)
+        {
+            const int c = ((ins + dir * tries) % 48 + 48) % 48;
+            if (isSampleInstrument(c) && mtProject.instrument[c].isActive == 1)
+                found = c;
+        }
+        if (found < 0)
+            return;
+        beginEdit(kEditParam);
+        enableDrumSteps(p, t);
+        const int slot = altSlotFor(p, t, (uint8_t)found);
+        if (slot < 0)
+        {
+            mtPopups.show(0, "3 extra samples per track: all in use", 1);
+            refresh();
+            return;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            Note note = getNote(p, t, idx[i]);
+            setNoteSample(note, slot);
+            setNote(p, t, idx[i], note);
+        }
+        if (!sequencer.isPlay())
+        {
+            auditionSample(t, (uint8_t)found, first.pitch, first.velocity);
+            auditionOffAt = (uint32_t)s_clock + 200;
+        }
+    }
+    else
+    {
+        beginEdit(kEditParam);
+        enableDrumSteps(p, t);
+        for (int i = 0; i < n; i++)
+        {
+            Note note = getNote(p, t, idx[i]);
+            int r = noteRatchet(note);
+            int span = (note.length + kTicksPerStep / 2) / kTicksPerStep;
+            span = clampInt(span, 1, 8);
+            if (big)
+                span = clampInt(span + dir, 1, 8); // its length in steps
+            else
+                r = clampInt(r + dir, 0, kRatchetCount - 1); // its speed
+            if (r == 0)
+                span = 1; // no ratchet: a plain hit
+            // not past the end of the track
+            const int startStep = cursor;
+            span = clampInt(span, 1, trackTicks / kTicksPerStep - startStep);
+            setNoteRatchet(note, r);
+            note.length = (uint16_t)(span * kTicksPerStep);
+            setNote(p, t, idx[i], note);
+        }
+    }
+    markChanged();
+    refresh();
+}
+
 // big +/-: the selected track's length 8 / 16 / 32 / 64 / 128
-void cDrumOverview::changeLength(int dir)
+void cDrumOverview::changeLength(int dir, bool fine)
 {
     const int t = track();
     if (t < 0)
@@ -560,7 +665,9 @@ void cDrumOverview::changeLength(int dir)
     Sequencer::strPattern* p = current();
     const int steps = trackSteps(p, t);
     int target = steps;
-    if (dir > 0)
+    if (fine)
+        target = clampInt(steps + dir, 1, kLengths[4]); // on the name: small +/- one step
+    else if (dir > 0)
     {
         for (int L : kLengths)
             if (L > steps)
@@ -895,7 +1002,9 @@ static void functParamButton(uint8_t button, uint8_t state)
     if (state != buttonPress)
         return;
     if (shiftActive())
-        DO->param = cDrumOverview::kParamShift;
+        DO->param = button == interfaceButtonNote    ? cDrumOverview::kParamRatchet
+                    : button == interfaceButtonInstr ? cDrumOverview::kParamSample
+                                                     : cDrumOverview::kParamShift;
     else if (button == interfaceButtonNote)
         DO->param = cDrumOverview::kParamProb;
     else if (button == interfaceButtonInstr)
@@ -932,8 +1041,10 @@ static void functEncoder(int16_t value)
         DO->changeParam(dir, big);
         return;
     }
-    if (big)
-        DO->changeLength(dir); // big +/-: the track's length
+    if (DO->onName)
+        DO->changeLength(dir, !big); // on the name: the length (small +/-: a step, big: 8/16/32/64/128)
+    else if (big)
+        DO->changeLength(dir, false); // big +/-: the track's length
     else
         DO->moveCursor(dir * DrumOverviewView::kSteps); // small +/-: the next / previous 8 steps
 }
