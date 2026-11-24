@@ -176,11 +176,26 @@ int main(int argc, char** argv)
         api->voice_on_param_change(voice, i, g_patch.has[i], g_patch.values[i]);
 
     printf("biggest memory taken before the first note: %zu bytes\n", g_biggest);
-    if (g_biggest < (size_t)morph::Fx::kMemoryBytes)
+    // the reverb is on from the start, the delay is not: only the reverb's block
+    if (g_biggest != (size_t)morph::Fx::kReverbBytes)
     {
-        printf("FAIL: the effects memory was not taken when the patch loaded\n");
+        printf("FAIL: the reverb memory (%d) was not taken alone when the patch loaded (biggest %zu)\n",
+               morph::Fx::kReverbBytes, g_biggest);
         fails++;
     }
+    // the delay switched on (a parameter change, outside the audio): its block now
+    for (int i = 0; i < g_meta.paramCount; i++)
+        if (g_meta.names[i] == "Delay")
+        {
+            g_biggest = 0;
+            g_patch.values[i] = 1.0f; // Digital
+            api->voice_on_param_change(voice, i, true, 1.0f);
+            if (g_biggest != (size_t)morph::Fx::kDelayBytes)
+            {
+                printf("FAIL: switching the delay on did not take its memory (biggest %zu)\n", g_biggest);
+                fails++;
+            }
+        }
     PsynVoiceContext ctx{ 120.0f, 2.0f };
     PsynMidiEvent on{};
     on.type = PSYN_MIDI_NOTE_ON;

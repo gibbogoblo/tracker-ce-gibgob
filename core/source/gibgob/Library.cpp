@@ -406,22 +406,45 @@ void Index::endScan()
     full = false;
 }
 
+bool Index::onShelf(const Entry& x, int shelf, int category) const
+{
+    bool ok;
+    switch (shelf)
+    {
+        case kShelfAll: ok = true; break;
+        case kShelfFavourites: ok = (x.flags & kFlagFavourite) != 0; break;
+        case kShelfRecent: ok = x.recent != 0; break;
+        default: ok = x.genre == (uint8_t)shelf; break; // Hiphop..Mine match their genre number
+    }
+    if (ok && category != kCatNone)
+        ok = x.category == (uint8_t)category;
+    return ok;
+}
+
+int Index::nextUnmeasuredIn(int shelf, int category) const
+{
+    for (int i = 0; i < n; ++i)
+        if (e[i].tenths == kLengthUnread && onShelf(e[i], shelf, category))
+            return i;
+    return -1;
+}
+
+int Index::unmeasuredIn(int shelf, int category) const
+{
+    int c = 0;
+    for (int i = 0; i < n; ++i)
+        if (e[i].tenths == kLengthUnread && onShelf(e[i], shelf, category))
+            ++c;
+    return c;
+}
+
 int Index::filter(int shelf, int category, uint16_t* out, int max, int kindFilter) const
 {
     int c = 0;
     for (int i = 0; i < n && c < max; ++i)
     {
         const Entry& x = e[i];
-        bool ok;
-        switch (shelf)
-        {
-            case kShelfAll: ok = true; break;
-            case kShelfFavourites: ok = (x.flags & kFlagFavourite) != 0; break;
-            case kShelfRecent: ok = x.recent != 0; break;
-            default: ok = x.genre == (uint8_t)shelf; break; // Hiphop..Mine match their genre number
-        }
-        if (ok && category != kCatNone)
-            ok = x.category == (uint8_t)category;
+        bool ok = onShelf(x, shelf, category);
         if (ok && kindFilter == kKindOnlyShots)
             ok = x.kind == kKindShot;
         else if (ok && kindFilter == kKindOnlyLoops)

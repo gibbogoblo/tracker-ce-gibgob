@@ -189,16 +189,19 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
         dsp.init(s_seed++);
     }
 
-    // the effects' memory (402 KB): taken here, outside the audio, when the
+    // the effects' memory (reverb 150 KB, delay 256 KB): taken here, outside the audio, when the
     // patch loads or an effect is switched on, never in the middle of the sound
     void effectsChanged()
     {
-        const bool wanted = params.delayType != morph::kDelayOff || params.reverbType != morph::kReverbOff;
-        if (wanted && voiceIndex == 0 && !fx.ready() && !fxAllocFailed)
+        if (voiceIndex == 0 && fxMissing())
             takeFxMemory();
     }
 
-    ~GorillaGrainVoice() { delete[] fxMemory; }
+    ~GorillaGrainVoice()
+    {
+        delete[] reverbMemory;
+        delete[] delayMemory;
+    }
 
     bool isActive() final { return gate || dsp.active(); }
     bool hasTickIdle() const final { return true; }
@@ -305,7 +308,7 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
                 fx.process(fxParams, ctx.tempo, dsp.fxMod, nullptr, nullptr, 0); // clears the tails
             return;
         }
-        if (!fx.ready() && !fxAllocFailed)
+        if (fxMissing())
             takeFxMemory(); // only if another voice runs the effects: the last resort
 #ifdef GORILLA_DIAG
         {
@@ -434,13 +437,33 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     grain::Params params;
 
   private:
+    // each effect takes its own memory, only once it is switched on (the
+    // synths share one pool: a reverb alone needs less than half)
     void takeFxMemory()
     {
-        fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
-        if (fxMemory == nullptr)
-            fxAllocFailed = true;
-        else
-            fx.attach(fxMemory); // all clear
+        if (params.reverbType != morph::kReverbOff && !fx.reverbReady() && !reverbAllocFailed)
+        {
+            reverbMemory = new (std::nothrow) uint8_t[morph::Fx::kReverbBytes];
+            if (reverbMemory == nullptr)
+                reverbAllocFailed = true;
+            else
+                fx.attachReverb(reverbMemory); // all clear
+        }
+        if (params.delayType != morph::kDelayOff && !fx.delayReady() && !delayAllocFailed)
+        {
+            delayMemory = new (std::nothrow) uint8_t[morph::Fx::kDelayBytes];
+            if (delayMemory == nullptr)
+                delayAllocFailed = true;
+            else
+                fx.attachDelay(delayMemory);
+        }
+        fxAllocFailed = !fx.ready(); // neither effect has memory: dry
+    }
+    // a switched-on effect still without memory (and not failed yet)
+    bool fxMissing() const
+    {
+        return (params.reverbType != morph::kReverbOff && !fx.reverbReady() && !reverbAllocFailed) ||
+               (params.delayType != morph::kDelayOff && !fx.delayReady() && !delayAllocFailed);
     }
     int voiceIndex = 0;
 
@@ -465,7 +488,10 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
     grain::Source src;
     morph::Fx fx;
     morph::Params fxParams;
-    uint8_t* fxMemory = nullptr;
+    uint8_t* reverbMemory = nullptr;
+    uint8_t* delayMemory = nullptr;
+    bool reverbAllocFailed = false;
+    bool delayAllocFailed = false;
     bool fxAllocFailed = false;
     bool gate = false;
     uint32_t blip = 0;

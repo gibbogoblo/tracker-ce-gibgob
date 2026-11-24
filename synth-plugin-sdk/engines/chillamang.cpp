@@ -153,10 +153,11 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
     ~ChillamangVoice()
     {
         delete[] modMemory;
-        delete[] fxMemory;
+        delete[] reverbMemory;
+        delete[] delayMemory;
     }
 
-    // the effects' memory (chorus 16 KB, delay / reverb 402 KB): taken here,
+    // the effects' memory (chorus 16 KB, reverb 150 KB, delay 256 KB): taken here,
     // outside the audio, when the patch loads or an effect is switched on
     void effectsChanged()
     {
@@ -164,7 +165,7 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
             return;
         if (params.wantsModFx() && !mod.ready() && !modAllocFailed)
             takeModMemory();
-        if (params.wantsSpaceFx() && !fx.ready() && !fxAllocFailed)
+        if (params.wantsSpaceFx() && fxMissing())
             takeFxMemory();
     }
 
@@ -221,7 +222,7 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
                 fx.process(fxParams, ctx.tempo, fxMod, nullptr, nullptr, 0); // clears the tails
             return;
         }
-        if (!fx.ready() && !fxAllocFailed)
+        if (fxMissing())
             takeFxMemory();
         if (fxAllocFailed)
             return; // no memory for the effects: dry
@@ -252,13 +253,33 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
         else
             mod.attach(modMemory);
     }
+    // each effect takes its own memory, only once it is switched on (the
+    // synths share one pool: a reverb alone needs less than half)
     void takeFxMemory()
     {
-        fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
-        if (fxMemory == nullptr)
-            fxAllocFailed = true;
-        else
-            fx.attach(fxMemory); // all clear
+        if (params.reverbType != morph::kReverbOff && !fx.reverbReady() && !reverbAllocFailed)
+        {
+            reverbMemory = new (std::nothrow) uint8_t[morph::Fx::kReverbBytes];
+            if (reverbMemory == nullptr)
+                reverbAllocFailed = true;
+            else
+                fx.attachReverb(reverbMemory); // all clear
+        }
+        if (params.delayType != morph::kDelayOff && !fx.delayReady() && !delayAllocFailed)
+        {
+            delayMemory = new (std::nothrow) uint8_t[morph::Fx::kDelayBytes];
+            if (delayMemory == nullptr)
+                delayAllocFailed = true;
+            else
+                fx.attachDelay(delayMemory);
+        }
+        fxAllocFailed = !fx.ready(); // neither effect has memory: dry
+    }
+    // a switched-on effect still without memory (and not failed yet)
+    bool fxMissing() const
+    {
+        return (params.reverbType != morph::kReverbOff && !fx.reverbReady() && !reverbAllocFailed) ||
+               (params.delayType != morph::kDelayOff && !fx.delayReady() && !delayAllocFailed);
     }
 
     int voiceIndex = 0;
@@ -268,7 +289,10 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
     morph::Params fxParams;
     float fxMod[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     uint8_t* modMemory = nullptr;
-    uint8_t* fxMemory = nullptr;
+    uint8_t* reverbMemory = nullptr;
+    uint8_t* delayMemory = nullptr;
+    bool reverbAllocFailed = false;
+    bool delayAllocFailed = false;
     bool modAllocFailed = false;
     bool fxAllocFailed = false;
     bool gate = false;

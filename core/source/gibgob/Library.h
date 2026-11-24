@@ -128,6 +128,11 @@ class Index
     void setLength(int i, uint32_t tenths);
     // the next entry from `from` on whose length is not read yet (-1: none)
     int nextUnmeasured(int from) const;
+    // the same, only among the entries on this shelf / in this category (what
+    // is being looked at goes first)
+    int nextUnmeasuredIn(int shelf, int category) const;
+    // how many of them are still to be read
+    int unmeasuredIn(int shelf, int category) const;
     void markUsed(int i);
 
     // a scan starts: nothing seen yet; it ends: the files not seen are gone
@@ -154,6 +159,7 @@ class Index
     static uint32_t hashOf(const char* s);
 
   private:
+    bool onShelf(const Entry& x, int shelf, int category) const;
     int addRaw(const char* path, uint32_t h);
     void guess(Entry& x) const;
 

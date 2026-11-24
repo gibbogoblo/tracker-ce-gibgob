@@ -318,6 +318,12 @@ uint32_t wavTenths(const char* path)
         return lib::kLengthBad;
     uint8_t h[24];
     uint32_t result = lib::kLengthBad;
+    const uint32_t fileSize = (uint32_t)fs->getFileSize(fh);
+    auto tenthsOf = [](uint64_t bytes, uint32_t rate)
+    {
+        const uint64_t t = bytes * 10u / rate;
+        return t >= lib::kLengthBad ? (uint32_t)lib::kLengthBad - 1 : (uint32_t)t;
+    };
     if (fs->readFile(h, 12, fh) == 12 && memcmp(h, "RIFF", 4) == 0 && memcmp(h + 8, "WAVE", 4) == 0)
     {
         uint32_t pos = 12, byteRate = 0;
@@ -336,8 +342,11 @@ uint32_t wavTenths(const char* path)
             {
                 if (byteRate > 0)
                 {
-                    const uint64_t t = (uint64_t)size * 10u / byteRate;
-                    result = t >= lib::kLengthBad ? lib::kLengthBad - 1 : (uint32_t)t;
+                    // a size of 0 or past the end (a recording cut short): what the file holds
+                    uint32_t bytes = size;
+                    if (fileSize > pos + 8 && (bytes == 0 || bytes > fileSize - pos - 8))
+                        bytes = fileSize - pos - 8;
+                    result = tenthsOf(bytes, byteRate);
                 }
                 break;
             }
@@ -345,26 +354,38 @@ uint32_t wavTenths(const char* path)
                 break;
             pos += 8 + size + (size & 1u);
         }
+        // no data chunk found: the rest of the file at the format's rate
+        if (result == lib::kLengthBad && byteRate > 0 && fileSize > pos)
+            result = tenthsOf(fileSize - 44u, byteRate);
     }
+    // not a WAV header we understand: guess 16-bit stereo 44.1 kHz from the size
+    if (result == lib::kLengthBad && fileSize > 44u)
+        result = tenthsOf(fileSize - 44u, 176400u);
     fs->closeFile(fh);
     return result;
 }
 
-// a few lengths at a time in the background (fewer while a preview streams from the card)
+// lengths in the background, what is on screen first: a few milliseconds'
+// worth each time (one file at a time while a preview streams from the card)
 void measureStep()
 {
     if ((uint32_t)s_clock < S->nextMeasureAt)
         return;
     const bool busy = S->previewing;
-    S->nextMeasureAt = (uint32_t)s_clock + (busy ? 120u : 8u);
-    for (int k = 0; k < (busy ? 1 : 3); k++)
+    S->nextMeasureAt = (uint32_t)s_clock + (busy ? 60u : 2u);
+    const uint32_t until = (uint32_t)s_clock + 6u;
+    for (int k = 0; k < (busy ? 1 : 24); k++)
     {
-        const int i = S->idx.nextUnmeasured(S->measureAt);
+        int i = S->idx.nextUnmeasuredIn(S->shelf, S->category);
+        if (i < 0)
+            i = S->idx.nextUnmeasured(S->measureAt);
         if (i < 0)
             return;
         S->idx.setLength(i, wavTenths(S->idx.path(i)));
         S->measureAt = i + 1;
         S->measuredSinceShow++;
+        if ((int32_t)((uint32_t)s_clock - until) >= 0)
+            break;
     }
 }
 
@@ -505,7 +526,7 @@ void cGibGobLibrary::update()
             refresh();
     }
     measureStep();
-    if (S->measuredSinceShow >= 24 || (S->measuredSinceShow > 0 && S->idx.nextUnmeasured(0) < 0))
+    if (S->measuredSinceShow >= 24 || (S->measuredSinceShow > 0 && S->idx.nextUnmeasuredIn(S->shelf, S->category) < 0))
     {
         // new lengths: the Type column, and the list if it is filtered by type
         S->measuredSinceShow = 0;
@@ -591,7 +612,11 @@ void cGibGobLibrary::refresh()
         v.rows = 1;
         v.cursorRow = 0;
         v.cursorCol = 0;
-        snprintf(v.cell[0][0], 20, "%s", S->scanning ? "Looking..." : "Nothing here yet");
+        const int unread = S->kindFilter != lib::kKindAll ? S->idx.unmeasuredIn(S->shelf, S->category) : 0;
+        if (unread > 0)
+            snprintf(v.cell[0][0], 20, "Reading %d...", unread); // the lengths, to sort loops / shots
+        else
+            snprintf(v.cell[0][0], 20, "%s", S->scanning ? "Looking..." : "Nothing here yet");
         for (int c = 1; c < 4; c++)
             v.cell[0][c][0] = 0;
     }

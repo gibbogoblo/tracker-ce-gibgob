@@ -199,7 +199,8 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
 
     ~MorphangutanVoice()
     {
-        delete[] fxMemory;
+        delete[] reverbMemory;
+        delete[] delayMemory;
     }
 
 #if defined(MORPH_DIAG)
@@ -375,19 +376,27 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
             }
             return;
         }
-        if (!fx.ready() && !fxAllocFailed)
+        // each effect takes its own memory, only once it is switched on (the
+        // synths share one pool: a reverb alone needs less than half)
+        if (params.reverbType != morph::kReverbOff && !fx.reverbReady() && !reverbAllocFailed)
         {
-            fxMemory = new (std::nothrow) uint8_t[morph::Fx::kMemoryBytes];
-            if (fxMemory == nullptr)
-            {
-                fxAllocFailed = true;
-            }
+            reverbMemory = new (std::nothrow) uint8_t[morph::Fx::kReverbBytes];
+            if (reverbMemory == nullptr)
+                reverbAllocFailed = true;
             else
-            {
-                fx.attach(fxMemory);
-            }
+                fx.attachReverb(reverbMemory);
         }
-        if (fxAllocFailed)
+        if (params.delayType != morph::kDelayOff && !fx.delayReady() && !delayAllocFailed)
+        {
+            delayMemory = new (std::nothrow) uint8_t[morph::Fx::kDelayBytes];
+            if (delayMemory == nullptr)
+                delayAllocFailed = true;
+            else
+                fx.attachDelay(delayMemory);
+        }
+        const bool fxAllocFailed = (params.reverbType != morph::kReverbOff && !fx.reverbReady()) ||
+                                   (params.delayType != morph::kDelayOff && !fx.delayReady());
+        if (fxAllocFailed && !fx.ready())
         {
             // the effects could not get their memory: a short high blip every
             // second while playing, so it is obvious (instead of silent effects)
@@ -435,8 +444,10 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
   private:
     morph::Voice dsp;
     morph::Fx fx;
-    uint8_t* fxMemory = nullptr;
-    bool fxAllocFailed = false;
+    uint8_t* reverbMemory = nullptr;
+    uint8_t* delayMemory = nullptr;
+    bool reverbAllocFailed = false;
+    bool delayAllocFailed = false;
     uint32_t fxBlip = 0;
     float fxBlipPhase = 0.0f;
     std::array<float, kAudioBufferSize> lastGraphSamples{};

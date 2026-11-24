@@ -172,6 +172,9 @@ int main()
         const int b = k.add("/Samples/a/vocal phrase.wav");
         const int c = k.add("/Samples/Loops/beat.wav");
         CHECK(k.nextUnmeasured(0) == a);
+        CHECK(k.unmeasuredIn(kShelfAll, kCatNone) == 3);
+        CHECK(k.nextUnmeasuredIn(kShelfAll, kCatVocals) == b); // what is looked at first
+        CHECK(k.unmeasuredIn(kShelfAll, kCatVocals) == 1);
         k.setLength(a, 4);
         k.setLength(b, 65);
         CHECK(k.nextUnmeasured(0) == c);

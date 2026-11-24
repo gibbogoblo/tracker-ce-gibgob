@@ -1036,17 +1036,33 @@ constexpr int reverbFloats()
 class Fx
 {
   public:
-    static constexpr int kMemoryBytes = fxsize::reverbFloats() * 4 + fxsize::kDelaySize * 2 * 2;
+    // the reverb and the delay each have their own block, so a synth only takes
+    // the memory of the effects it uses (the plugins share one pool)
+    static constexpr int kReverbBytes = fxsize::reverbFloats() * 4;
+    static constexpr int kDelayBytes = fxsize::kDelaySize * 2 * 2;
+    static constexpr int kMemoryBytes = kReverbBytes + kDelayBytes; // both in one block (attach)
 
+    // one block for both effects
     void attach(void* mem)
     {
-        memory = (uint8_t*)mem;
-        if (!memory)
-        {
+        if (!mem)
             return;
-        }
-        memset(memory, 0, kMemoryBytes);
-        float* f = (float*)memory;
+        attachReverb(mem);
+        attachDelay((uint8_t*)mem + kReverbBytes);
+    }
+
+    void attachReverb(void* mem)
+    {
+        if (!mem)
+            return;
+        reverbMem = (uint8_t*)mem;
+        memset(reverbMem, 0, kReverbBytes);
+        reverbWasOn = false;
+        bandwidth = 0.0f;
+        shimmerLp = 0.0f;
+        for (int c = 0; c < 2; ++c)
+            damp[c] = 0.0f;
+        float* f = (float*)reverbMem;
         for (int i = 0; i < 4; ++i)
         {
             preDiff[i].init(f, kPreDiff[i] + 1);
@@ -1064,12 +1080,22 @@ class Fx
             f += kTankDel2[c] + 1;
         }
         shimmerBuf = f;
-        f += kShimmerSize;
-        delayBuf[0] = (int16_t*)f;
-        delayBuf[1] = delayBuf[0] + kDelaySize;
     }
 
-    bool ready() const { return memory != nullptr; }
+    void attachDelay(void* mem)
+    {
+        if (!mem)
+            return;
+        delayBuf[0] = (int16_t*)mem;
+        delayBuf[1] = delayBuf[0] + kDelaySize;
+        memset(mem, 0, kDelayBytes);
+        delayWasOn = false;
+        dlyLp[0] = dlyLp[1] = 0.0f;
+    }
+
+    bool reverbReady() const { return reverbMem != nullptr; }
+    bool delayReady() const { return delayBuf[0] != nullptr; }
+    bool ready() const { return reverbReady() || delayReady(); }
 
     // reverb output only (no dry signal), for effects that mix it themselves
     bool wetOnly = false;
@@ -1079,7 +1105,7 @@ class Fx
     // modulation: delay mix, delay feedback, reverb mix, reverb decay (from voice 0)
     void process(const Params& p, float tempo, const float* fxMod, float* l, float* r, int n)
     {
-        if (!memory)
+        if (!ready())
         {
             return;
         }
@@ -1119,7 +1145,8 @@ class Fx
   private:
     void processEffects(const Params& p, float tempo, const float* fxMod, float* l, float* r, int n)
     {
-        if (p.delayType != kDelayOff)
+        // each effect only with its memory (no memory: it is left out)
+        if (p.delayType != kDelayOff && delayReady())
         {
             processDelay(p, tempo, fxMod, l, r, n);
         }
@@ -1127,7 +1154,7 @@ class Fx
         {
             clearDelay();
         }
-        if (p.reverbType != kReverbOff)
+        if (p.reverbType != kReverbOff && reverbReady())
         {
             processReverb(p, fxMod, l, r, n);
         }
@@ -1209,7 +1236,8 @@ class Fx
 
     void clearDelay()
     {
-        memset(delayBuf[0], 0, sizeof(int16_t) * kDelaySize * 2);
+        if (delayBuf[0] != nullptr)
+            memset(delayBuf[0], 0, sizeof(int16_t) * kDelaySize * 2);
         delayWasOn = false;
         dlyLp[0] = dlyLp[1] = 0.0f;
     }
@@ -1228,7 +1256,8 @@ class Fx
             del2[c].clear();
             damp[c] = 0.0f;
         }
-        memset(shimmerBuf, 0, sizeof(float) * kShimmerSize);
+        if (shimmerBuf != nullptr)
+            memset(shimmerBuf, 0, sizeof(float) * kShimmerSize);
         reverbWasOn = false;
         bandwidth = 0.0f;
         shimmerLp = 0.0f;
@@ -1458,7 +1487,7 @@ class Fx
         }
     }
 
-    uint8_t* memory = nullptr;
+    uint8_t* reverbMem = nullptr;
 
     Line preDiff[4];
     Line ap1[2], del1[2], ap2[2], del2[2];
