@@ -2,9 +2,9 @@
 
 #include "FT812.h"
 #include "display.h"
+#include "gibgob/gibgobMenuArt.h"
 
 #include <ctype.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,118 +13,70 @@ namespace gibgob
 
 namespace
 {
-// ---- the look (docs/design-ideas/menu/mockup.jpg) ----
-constexpr uint32_t kSky = 0x76CBE8;
-constexpr uint32_t kCloud = 0xFFFFFF;
-constexpr uint32_t kFrond = 0xC6DCB4;    // pale palm leaves
-constexpr uint32_t kFrondBand = 0x9EF5A6; // ... where the band lights them
-constexpr uint32_t kTrunk = 0xB0686A;
-constexpr uint32_t kBand = 0x6EFFFF;     // the item you stand on
-constexpr uint32_t kItem = 0xE8455A;     // the items above and below
-constexpr uint32_t kItemSel = 0xF2A55A;  // the item you stand on
-constexpr uint32_t kShadow = 0x7B3FD6;   // purple drop shadow under the letters
-constexpr uint32_t kBubble = 0xFFFFFF;
-constexpr uint32_t kBubbleText = 0x3E9DD2;
-constexpr uint32_t kInk = 0x14101A;      // the monkey's outlines
-constexpr uint32_t kFur = 0xE0245E;
-constexpr uint32_t kFace = 0xFAD9E8;
-constexpr uint32_t kPhones = 0x9B5CF0;
-constexpr uint32_t kPhonesDark = 0x6A3BC2;
+// ---- the look: the GibGob artwork (docs/design-ideas/menu/background.jpg) ----
+constexpr uint32_t kBand = 0x6EFFFF;    // the item you stand on
+constexpr uint32_t kItem = 0xE8455A;    // the items above and below
+constexpr uint32_t kItemSel = 0xF2A55A; // the item you stand on
+constexpr uint32_t kOutline = 0x3A1670; // the letters' dark purple outline
+constexpr uint32_t kBubbleText = 0x2F8FC6;
 constexpr uint32_t kDotOff = 0x2E8FB0;
 
-constexpr int kBudget = 1440; // a full-screen popup over the screen's own controls (hidden)
+constexpr int kBudget = 1440; // the menu is drawn alone (display.exclusiveControl)
 
 constexpr int kBandY1 = 156, kBandY2 = 238;
-constexpr int kItemY[3] = { 112, 197, 284 }; // above, the one you stand on, below
+constexpr int kItemY[3] = { 112, 197, 278 }; // above, the one you stand on, below
 
-void circle(int cx, int cy, int r)
+// where the artwork lives in the display chip's memory: after the icons
+// (116128), before the pictures screens load (350000)
+constexpr uint32_t kTopAddress = 120000;
+constexpr uint32_t kTopPaletteAddress = kTopAddress + sizeof(menuart::kTopPixels);
+constexpr uint32_t kBotAddress = kTopPaletteAddress + sizeof(menuart::kTopPalette);
+constexpr uint32_t kBotPaletteAddress = kBotAddress + sizeof(menuart::kBotPixels);
+constexpr uint32_t kArtEnd = kBotPaletteAddress + sizeof(menuart::kBotPalette);
+static_assert(kArtEnd <= 350000, "the menu art runs into the pictures' memory");
+static_assert(kTopPaletteAddress % 4 == 0 && kBotAddress % 4 == 0 && kBotPaletteAddress % 4 == 0, "aligned");
+
+bool s_artSent = false;
+uint32_t s_artScratches = 0;
+
+// a paletted bitmap at (x, y): `w` x `h` on the screen, from the source
+// `stride` bytes a row, scaled by `scale` (1 or 2)
+void paletted(uint32_t source, uint32_t palette, int stride, int srcH, int x, int y, int w, int h, int scale)
 {
-    draw::roundRect(cx - r, cy - r, cx + r, cy + r, r);
+    API_PALETTE_SOURCE(palette);
+    API_BITMAP_SOURCE(source);
+    API_BITMAP_LAYOUT(PALETTED565, (uint16_t)stride, (uint16_t)srcH);
+    API_BITMAP_TRANSFORM_A(256 / scale);
+    API_BITMAP_TRANSFORM_E(256 / scale);
+    API_BITMAP_SIZE(NEAREST, BORDER, BORDER, (uint16_t)w, (uint16_t)h);
+    API_BEGIN(BITMAPS);
+    API_VERTEX2F((int16_t)x, (int16_t)y);
+    API_END();
 }
 
-int16_t clampX(float x)
+// the artwork, as two halves each (a bitmap is drawn at most 511 wide)
+void artwork()
 {
-    return (int16_t)(x < 0.0f ? 0.0f : (x > 799.0f ? 799.0f : x));
-}
-int16_t clampY(float y)
-{
-    return (int16_t)(y < 0.0f ? 0.0f : (y > 479.0f ? 479.0f : y));
-}
-
-// a palm crown: fronds fanning out from (cx, cy), drooping at the tips; each
-// a thick spine, then its leaflets as one zig-zag line hanging below it
-void palm(int cx, int cy, int size, int seed)
-{
-    static const int16_t kAngles[8] = { -165, -135, -105, -78, -52, -24, 2, 28 }; // degrees, from the right
-    constexpr int kSpine = 5, kLeaf = 15;
-    for (int pass = 0; pass < 2; pass++)
+    draw::detail::endRectsNow();
+    API_COLOR_A(255);
+    API_COLOR(0xFFFFFF); // no tint
+    API_BITMAP_HANDLE(0); // the fonts use 1 and up (as the Shift frame)
+    for (int half = 0; half < 2; half++)
     {
-        draw::lineWidth(pass == 0 ? 16 * 7 : 16 * 3);
-        for (int f = 0; f < 8; f++)
-        {
-            const float a = (float)(kAngles[f] + ((seed * 7 + f * 13) % 11) - 5) * 3.14159265f / 180.0f;
-            const float len = (float)size * (0.82f + 0.18f * (float)(((seed + f) * 5) % 4) / 3.0f);
-            const float ca = cosf(a), sa = sinf(a);
-            auto at = [&](float t, float& x, float& y)
-            {
-                x = (float)cx + ca * len * t;
-                y = (float)cy + sa * len * t + t * t * len * 0.38f; // the tips hang down
-            };
-            if (pass == 0)
-            {
-                int16_t pts[2 * kSpine];
-                for (int k = 0; k < kSpine; k++)
-                {
-                    float x, y;
-                    at((float)k / (kSpine - 1), x, y);
-                    pts[2 * k] = clampX(x);
-                    pts[2 * k + 1] = clampY(y);
-                }
-                draw::lineStrip(pts, kSpine);
-            }
-            else
-            {
-                // leaflets: from the spine down and outwards, shorter towards the tip
-                int16_t pts[2 * kLeaf];
-                for (int k = 0; k < kLeaf; k++)
-                {
-                    const float t = 0.12f + 0.88f * (float)(k / 2 * 2) / (float)(kLeaf - 1);
-                    float x, y;
-                    at(t, x, y);
-                    if (k & 1)
-                    {
-                        const float leaf = len * 0.26f * (1.0f - 0.6f * t);
-                        x += ca * leaf * 0.55f;
-                        y += leaf;
-                    }
-                    pts[2 * k] = clampX(x);
-                    pts[2 * k + 1] = clampY(y);
-                }
-                draw::lineStrip(pts, kLeaf);
-            }
-        }
+        // the top: half size, drawn 2x
+        paletted(kTopAddress + (uint32_t)(half * menuart::kTopW / 2), kTopPaletteAddress, menuart::kTopW,
+                 menuart::kTopH, half * 400, 0, 400, menuart::kSplitY, 2);
+        // the bottom strip (bubble, monkey): full size
+        paletted(kBotAddress + (uint32_t)(half * menuart::kBotW / 2), kBotPaletteAddress, menuart::kBotW,
+                 menuart::kBotH, half * 400, menuart::kSplitY, 400, menuart::kBotH, 1);
     }
-    draw::lineWidth(16);
+    API_BITMAP_TRANSFORM_A(256); // back to 1:1 for whatever draws next
+    API_BITMAP_TRANSFORM_E(256);
+    draw::detail::forgetState(2 * 2 * 9 + 6);
 }
 
-void trunk(const int16_t* xy, int n)
-{
-    draw::color(kTrunk);
-    draw::lineWidth(16 * 18);
-    draw::lineStrip(xy, n);
-}
-
-void cloud(int cx, int base, int w, int h)
-{
-    const int16_t bumps[9] = { (int16_t)(cx - w / 4), (int16_t)(base - h * 4 / 10), (int16_t)(h * 4 / 10),
-                               (int16_t)(cx + w / 10), (int16_t)(base - h * 6 / 10), (int16_t)(h * 6 / 10),
-                               (int16_t)(cx + w * 3 / 8), (int16_t)(base - h * 3 / 10), (int16_t)(h * 3 / 10) };
-    draw::color(kCloud);
-    draw::dots(bumps, 3);
-    draw::roundRect(cx - w / 2, base - h * 3 / 10, cx + w / 2, base, h * 3 / 20);
-}
-
-// the item's name in capitals with a purple drop shadow
+// the item's name in capitals: thick (the chip's fonts have one weight, so the
+// letters are drawn a few times a pixel apart) inside a dark outline
 void item(int y, int font, uint32_t col, const char* name)
 {
     char up[32];
@@ -132,99 +84,46 @@ void item(int y, int font, uint32_t col, const char* name)
     for (; name[k] && k < (int)sizeof(up) - 1; k++)
         up[k] = (char)toupper((unsigned char)name[k]);
     up[k] = 0;
-    draw::color(kShadow);
-    draw::text(400 + 3, y + 4, font, OPT_CENTER, up);
+    static const int8_t kAround[8][2] = { { -2, -2 }, { 0, -3 }, { 3, -2 }, { -3, 0 },
+                                          { 4, 0 },   { -2, 3 }, { 1, 4 },  { 3, 3 } };
+    static const int8_t kBold[4][2] = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } };
+    draw::color(kOutline);
+    for (const auto& o : kAround)
+        draw::text(400 + o[0], y + o[1], font, OPT_CENTER, up);
     draw::color(col);
-    draw::text(400, y, font, OPT_CENTER, up);
+    for (const auto& b : kBold)
+        draw::text(400 + b[0], y + b[1], font, OPT_CENTER, up);
 }
 
-// the monkey in the bottom right corner: a red head in profile, a pink face,
-// eyes closed, mouth open (talking), purple headphones
-void monkey()
+// the monkey's words in the speech bubble of the artwork
+// (the chip's font 29, drawn twice a pixel apart so it reads bold)
+void words(const char* text)
 {
-    // the headphones' band over the head
-    int16_t band[2 * 7];
-    for (int k = 0; k < 7; k++)
-    {
-        const float ang = (-118.0f + 15.0f * (float)k) * 3.14159265f / 180.0f; // over the top, to the ear
-        band[2 * k] = clampX(712.0f + 140.0f * cosf(ang));
-        band[2 * k + 1] = clampY(448.0f + 140.0f * sinf(ang));
-    }
-    draw::color(kInk);
-    draw::lineWidth(16 * 20);
-    draw::lineStrip(band, 7);
-    draw::color(kPhones);
-    draw::lineWidth(16 * 13);
-    draw::lineStrip(band, 7);
-
-    // the head
-    draw::color(kInk);
-    circle(712, 448, 132);
-    draw::color(kFur);
-    circle(712, 448, 126);
-
-    // the face: brow and muzzle, outlined
-    draw::color(kInk);
-    circle(632, 392, 50);
-    draw::roundRect(512, 384, 660, 476, 44);
-    draw::color(kFace);
-    circle(632, 392, 44);
-    draw::roundRect(518, 390, 654, 470, 38);
-    circle(600, 420, 40); // joins the brow and the muzzle
-
-    // eye closed (a soft curve), the brow line, nostrils, the open mouth
-    draw::color(kInk);
-    draw::lineWidth(16 * 4);
-    const int16_t eye[8] = { 608, 384, 620, 393, 634, 393, 646, 384 };
-    draw::lineStrip(eye, 4);
-    const int16_t brow[6] = { 596, 362, 614, 352, 636, 350 };
-    draw::lineStrip(brow, 3);
-    const int16_t nose1[4] = { 534, 402, 542, 412 };
-    const int16_t nose2[4] = { 552, 398, 558, 408 };
-    draw::lineStrip(nose1, 2);
-    draw::lineStrip(nose2, 2);
-    const int16_t mouth[8] = { 522, 438, 546, 446, 572, 444, 590, 436 };
-    draw::lineWidth(16 * 6);
-    draw::lineStrip(mouth, 4);
-    // fur marks on the head
-    draw::lineWidth(16 * 4);
-    const int16_t mark1[6] = { 708, 350, 716, 340, 728, 344 };
-    const int16_t mark2[4] = { 742, 388, 746, 402 };
-    draw::lineStrip(mark1, 3);
-    draw::lineStrip(mark2, 2);
-
-    // the ear cup
-    draw::color(kInk);
-    draw::roundRect(752, 372, 812, 486, 30);
-    draw::color(kPhones);
-    draw::roundRect(758, 378, 812, 480, 26);
-    draw::color(kPhonesDark);
-    draw::roundRect(770, 396, 812, 466, 18);
-    draw::lineWidth(16);
-}
-
-// the speech bubble with its tail towards the monkey's mouth
-void bubble(const char* text, int fBold)
-{
-    draw::color(kBubble);
-    draw::roundRect(14, 318, 476, 456, 66);
-    // the tail: a narrowing wedge (lines of falling width)
-    for (int k = 0; k < 4; k++)
-    {
-        const int16_t tail[4] = { (int16_t)(440 - k * 6), (int16_t)(404 + k * 3), (int16_t)(518 - k * 2), 432 };
-        draw::lineWidth(16 * (10 - k * 2));
-        draw::lineStrip(tail, 2);
-    }
-    draw::lineWidth(16);
     char lines[3][48];
     const int n = gameMenuWrap(text, 30, lines, 3);
     draw::color(kBubbleText);
     const int lineH = 30;
-    const int y0 = 387 - (n - 1) * lineH / 2;
+    const int y0 = 388 - (n - 1) * lineH / 2;
     for (int i = 0; i < n; i++)
-        draw::text(245, y0 + i * lineH, fBold, OPT_CENTER, lines[i]);
+    {
+        draw::text(244, y0 + i * lineH, 29, OPT_CENTER, lines[i]);
+        draw::text(245, y0 + i * lineH, 29, OPT_CENTER, lines[i]);
+    }
 }
 } // namespace
+
+// the artwork into the display chip: once, and again after a screenshot
+void ensureMenuArt()
+{
+    if (s_artSent && s_artScratches == display.ramGScratches)
+        return;
+    display.writeRamG(menuart::kTopPixels, sizeof(menuart::kTopPixels), kTopAddress);
+    display.writeRamG(menuart::kTopPalette, sizeof(menuart::kTopPalette), kTopPaletteAddress);
+    display.writeRamG(menuart::kBotPixels, sizeof(menuart::kBotPixels), kBotAddress);
+    display.writeRamG(menuart::kBotPalette, sizeof(menuart::kBotPalette), kBotPaletteAddress);
+    s_artSent = true;
+    s_artScratches = display.ramGScratches;
+}
 
 int gameMenuItemAt(const GameMenuView& v, int offset)
 {
@@ -286,35 +185,15 @@ void GameMenuControl::update()
     if (view == nullptr)
         return;
     const GameMenuView& v = *view;
-    const int fBold = fonts[3].handle;
-
     draw::begin(kBudget);
 
-    // ---- the beach: sky, clouds, palms (behind the band and the items) ----
-    draw::color(kSky);
-    draw::rect(0, 0, kScreenW - 1, 479);
-    cloud(292, 50, 78, 40);
-    cloud(570, 72, 210, 76);
+    // ---- the beach, the speech bubble and the monkey: the artwork ----
+    artwork();
 
-    const int16_t trunkL[6] = { 44, 480, 30, 360, 58, 238 };
-    const int16_t trunkR[6] = { 790, 480, 774, 360, 752, 244 };
-    trunk(trunkL, 3);
-    trunk(trunkR, 3);
-    draw::color(kFrond);
-    palm(110, 86, 150, 1);
-    palm(150, 232, 120, 2);
-    palm(690, 80, 160, 3);
-    palm(660, 232, 120, 4);
-    draw::lineWidth(16);
-
-    // ---- the band you stand on, lighting the leaves it crosses ----
-    draw::alpha(215);
+    // ---- the band you stand on ----
+    draw::alpha(200);
     draw::color(kBand);
     draw::rect(0, kBandY1, kScreenW - 1, kBandY2);
-    draw::alpha(70);
-    draw::color(kFrondBand);
-    draw::rect(0, kBandY1, 250, kBandY2);
-    draw::rect(560, kBandY1, kScreenW - 1, kBandY2);
     draw::alpha(255);
 
     // ---- three items: above, the one you stand on, below ----
@@ -352,8 +231,7 @@ void GameMenuControl::update()
         }
 
         // ---- the monkey tells you what it is ----
-        monkey();
-        bubble(v.descriptions[here] ? v.descriptions[here] : "", fBold);
+        words(v.descriptions[here] ? v.descriptions[here] : "");
     }
     draw::end();
 }

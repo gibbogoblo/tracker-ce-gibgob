@@ -10,6 +10,7 @@
 #define BITMAPS 1
 #define FTPOINTS 2
 #define RGB565 7
+#define PALETTED565 14
 #define SRC_ALPHA 2
 #define ONE_MINUS_SRC_ALPHA 4
 #define ZERO 0
@@ -32,6 +33,9 @@ void API_POINT_SIZE(uint16_t size);
 void API_CMD_SETBITMAP(uint32_t source, uint16_t fmt, uint16_t w, uint16_t h);
 void API_BLEND_FUNC(int a, int b);
 void API_BITMAP_HANDLE(uint8_t h);
+void API_PALETTE_SOURCE(uint32_t addr);
+void API_BITMAP_TRANSFORM_A(uint32_t a);
+void API_BITMAP_TRANSFORM_E(uint32_t e);
 void API_BITMAP_SOURCE(uint32_t addr);
 void API_BITMAP_LAYOUT(uint8_t format, uint16_t stride, uint16_t height);
 void API_BITMAP_SIZE(uint8_t filter, uint8_t wx, uint8_t wy, uint16_t w, uint16_t h);

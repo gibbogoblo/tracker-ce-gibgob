@@ -176,6 +176,7 @@ void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
 
     sourceModule->hideControlsUnderMiniMenu();
 
+    gibgob::ensureMenuArt(); // the beach and the monkey into the display chip (once)
     display.setControlValue(boxMenu, selectedBox);
     display.setControlShow(boxMenu);
     display.exclusiveControl = boxMenu; // the full-screen menu alone (see display.h)

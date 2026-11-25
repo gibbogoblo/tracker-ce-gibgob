@@ -28,6 +28,10 @@ int gameMenuItemAt(const GameMenuView& v, int offset);
 // the description in lines of at most `width` letters (returns how many, <= maxLines)
 int gameMenuWrap(const char* text, int width, char lines[][48], int maxLines);
 
+// the menu's artwork into the display chip (call before showing the menu;
+// it is sent once, and again after a screenshot borrowed that memory)
+void ensureMenuArt();
+
 class GameMenuControl : public cDisplayControl
 {
   public:

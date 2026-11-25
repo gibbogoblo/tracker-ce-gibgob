@@ -126,6 +126,12 @@ class cDisplay
     // the screen under it keeps its controls, they are just not drawn, so the
     // frame never runs out of room for the menu); -1: every control
     hControl exclusiveControl = -1;
+    // GibGob OS: writes `size` bytes into the display chip's memory (in pieces:
+    // the driver counts in 16 bits); for pictures kept between screens
+    void writeRamG(const uint8_t* data, uint32_t size, uint32_t address);
+    // counts screenshots: they borrow the chip's memory from 150000 on, so
+    // what was kept there has to be written again
+    uint32_t ramGScratches = 0;
     void readImgFromMemory(uint8_t* data, uint32_t size);
     uint8_t isImgLoaded() { return img.status == 3; }
     uint8_t getImgLoadState() { return img.status; }

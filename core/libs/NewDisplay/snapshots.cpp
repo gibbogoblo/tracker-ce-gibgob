@@ -59,6 +59,7 @@ extern uint8_t lcdPclk;
 extern uint8_t lcdRotate;
 void cDisplay::doScreenShot()
 {
+    ramGScratches++; // the snapshot borrows the chip's memory from 150000 on
     FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
 
     if (!fileSystem->exists("Snapshots"))

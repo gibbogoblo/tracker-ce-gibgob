@@ -62,6 +62,10 @@ static const char* bitmapFile(uint32_t a)
         case 450000: return "singer_sing.jpg";
         case 550000: return "duo.jpg";
         case 650000: return "duo_sing.jpg";
+        case 120000: return "menu_top_l.png"; // the menu artwork, in halves
+        case 120200: return "menu_top_r.png";
+        case 178512: return "menu_bot_l.png";
+        case 178912: return "menu_bot_r.png";
         default: return "logo.jpg";
     }
 }
@@ -127,6 +131,11 @@ void API_CMD_SETBITMAP(uint32_t a, uint16_t, uint16_t w, uint16_t h) { words += 
 static bool g_additive = false;
 void API_BLEND_FUNC(int a, int b) { words++; g_additive = (a == ONE && b == ONE); }
 void API_BITMAP_HANDLE(uint8_t) { words++; }
+cDisplay display;
+static int g_scale = 1;
+void API_PALETTE_SOURCE(uint32_t) { words++; }
+void API_BITMAP_TRANSFORM_A(uint32_t a) { words++; g_scale = a == 128 ? 2 : 1; }
+void API_BITMAP_TRANSFORM_E(uint32_t) { words++; }
 void API_BITMAP_SOURCE(uint32_t a) { words++; g_bmpAddr = a; }
 void API_BITMAP_LAYOUT(uint8_t, uint16_t, uint16_t) { words++; }
 void API_BITMAP_SIZE(uint8_t, uint8_t, uint8_t, uint16_t w, uint16_t h) { words++; g_bmpW = w; g_bmpH = h; }
@@ -169,8 +178,11 @@ void API_CMD_TEXT(int16_t x, int16_t y, int16_t font, uint16_t options, const ch
         const int fy = (options & OPT_CENTERY) ? y + 5 : y + 12;
         static const int kSize[5] = { 14, 17, 14, 17, 12 };
         const int fi = (font >= 26 && font <= 30) ? font - 26 : 1;
+        // the chip's big ROM fonts (30, 31): about 28 and 40 pixels
+        const int size = font == 31 ? 40 : (font == 30 ? 28 : kSize[fi]);
+        const bool bold = fi == 2 || fi == 3 || font == 30 || font == 31;
         fprintf(g_svg, "<text x='%d' y='%d' fill='#%06X' fill-opacity='%.2f' font-family='Liberation Sans, Arial' font-size='%d' font-weight='%s' text-anchor='%s'>%s</text>\n",
-                x, (options & OPT_CENTERY) ? y + kSize[fi] * 3 / 8 : y + kSize[fi], lastColor & 0xFFFFFF, g_alpha / 255.0, kSize[fi], (fi == 2 || fi == 3) ? "bold" : "normal", anchor, s);
+                x, (options & OPT_CENTERY) ? y + size * 3 / 8 : y + size, lastColor & 0xFFFFFF, g_alpha / 255.0, size, bold ? "bold" : "normal", anchor, s);
         (void)fy;
     }
     int len = (int)strlen(s);
@@ -300,6 +312,13 @@ int main()
             if (n > 2 || strstr(lines[n - 1], "...")) { printf("  menu: the monkey's words for %s need %d lines\n", kNames[i], n); fails++; }
             (void)letters;
         }
+        // the artwork goes into the display chip once, and again after a screenshot
+        display.ramGWrites = 0; display.ramGBytes = 0;
+        ensureMenuArt(); ensureMenuArt();
+        if (display.ramGWrites != 4 || display.ramGBytes != 58000 + 512 + 152000 + 512) { printf("  menu: art sent %d times, %u bytes\n", display.ramGWrites, display.ramGBytes); fails++; }
+        display.ramGScratches++;
+        ensureMenuArt();
+        if (display.ramGWrites != 8) { printf("  menu: art not sent again after a screenshot\n"); fails++; }
         // the list goes round: above the first is the last
         mv.selected = 0;
         if (gameMenuItemAt(mv, -1) != 10 || gameMenuItemAt(mv, 1) != 1) { printf("  menu: the list does not go round\n"); fails++; }

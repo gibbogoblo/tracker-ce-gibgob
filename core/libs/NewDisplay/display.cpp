@@ -849,6 +849,16 @@ void cDisplay::buildControl(hControl handle)
     }
 }
 
+void cDisplay::writeRamG(const uint8_t* data, uint32_t size, uint32_t address)
+{
+    constexpr uint32_t kPiece = 32768; // API_LIB_WriteDataRAMG counts bytes in a uint16_t
+    for (uint32_t done = 0; done < size; done += kPiece)
+    {
+        const uint32_t n = size - done < kPiece ? size - done : kPiece;
+        displayDriver->writeDataRAMG(data + done, n, address + done);
+    }
+}
+
 uint32_t cDisplay::composeFrame()
 {
     uint32_t count = 0;
