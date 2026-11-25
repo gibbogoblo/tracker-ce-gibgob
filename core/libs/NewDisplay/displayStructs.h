@@ -161,6 +161,7 @@ typedef enum enControlId
     controlIdGibGobPerform,
     controlIdGibGobVision,
     controlIdGibGobSynth,
+    controlIdGibGobGameMenu,
 
     /*
      *

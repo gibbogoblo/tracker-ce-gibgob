@@ -47,6 +47,7 @@ class InterfaceMenuPopup
 
     void setModulePopupFunct();
     void handleFailedSwitching();
+    void updateGameMenu(); // GibGob OS: the video game style menu's view
 
     hControl boxMenu;
     strBoxMenuData boxMenuData;

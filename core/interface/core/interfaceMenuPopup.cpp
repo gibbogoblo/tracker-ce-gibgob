@@ -1,5 +1,6 @@
 #include "interfaceMenuPopup.h"
 #include "core/interface.h"
+#include "gibgob/GameMenuControl.h"
 
 InterfaceMenuPopup mtMenuPopup;
 
@@ -17,6 +18,22 @@ const char* const kModuleNamesList[kMenuModulesCount] = { "Sequencer",
                                                           "Sample Recorder" };
 
 #ifdef TRACKER_MINI
+
+// GibGob OS: what the monkey says about each (same order as kModuleNamesList)
+static const char* const kModuleDescriptions[kMenuModulesCount] = {
+    "this is where you make your beats and melodies.",
+    "this is where you set the sound of your synths.",
+    "play samples and set their start, end and loop.",
+    "the whole mix: volume, reverb, delay and the master FX.",
+    "chain your patterns into a song.",
+    "load samples into your instruments.",
+    "open, save and start projects.",
+    "the Mini's own settings.",
+    "go bananas: hold buttons for live effects.",
+    "cut, fade and shape your samples.",
+    "record from the mic, line in or USB.",
+};
+static gibgob::GameMenuView s_gameMenu;
 
 uint32_t instrumentParamOptions[2] = { 1, 2 };
 InterfaceMenuPopup::ModuleModes instrumentParamModes = { 2, instrumentParamOptions, { 2, 0 } };
@@ -55,16 +72,17 @@ void InterfaceMenuPopup::initPopupsDisplayControls()
     boxMenuData.textList = (char**)modulesMenuTexts;
     boxMenuData.modes = modulesMenuModes;
 
+    // GibGob OS: the video game style menu over the whole screen
     strControlProperties prop;
-    prop.x = (800 - kMenuWidth) / 2;
-    prop.y = (480 - kMenuHeight) / 2;
-    prop.w = kMenuWidth;
-    prop.h = kMenuHeight;
-    prop.style = controlStyleCenterX | controlStyleCenterY | controlStyleFont2;
-    prop.data = &boxMenuData;
+    prop.x = 0;
+    prop.y = 0;
+    prop.w = 800;
+    prop.h = 480;
+    prop.style = 0;
+    prop.data = &s_gameMenu;
     prop.text = nullptr;
     prop.colors = display.getTheme().miniBoxMenuColors;
-    boxMenu = display.createControl<cBoxMenu>(&prop);
+    boxMenu = display.createControl<gibgob::GameMenuControl>(&prop);
 }
 
 void InterfaceMenuPopup::refreshColors()
@@ -152,6 +170,7 @@ void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
 
     this->sourceModule = sourceModule;
     isVisible = true;
+    updateGameMenu();
 
     setModulePopupFunct();
 
@@ -159,6 +178,7 @@ void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
 
     display.setControlValue(boxMenu, selectedBox);
     display.setControlShow(boxMenu);
+    display.exclusiveControl = boxMenu; // the full-screen menu alone (see display.h)
     display.refreshControl(boxMenu);
 
     display.synchronizeRefresh();
@@ -166,6 +186,7 @@ void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
 
 void InterfaceMenuPopup::hideModulePopup(ModuleBase* modulePtr)
 {
+    display.exclusiveControl = -1;
     display.setControlHide(boxMenu);
 
     mtInterface.ip->clearButton(interfaceButtonLeft);
@@ -228,6 +249,7 @@ void InterfaceMenuPopup::setModulePopupFunct()
 void InterfaceMenuPopup::handleFailedSwitching()
 {
     // source module handles functions assignment
+    display.exclusiveControl = -1;
     display.setControlHide(boxMenu);
     display.refreshControl(boxMenu);
     display.synchronizeRefresh();
@@ -270,26 +292,34 @@ void InterfaceMenuPopup::changeModulePopupValue(int16_t value, uint8_t dir)
     }
     else
     {
-        if (selectedBox + value < 0)
-        {
-            selectedBox = 0;
-        }
-        else if (selectedBox + value > (kMenuModulesCount - 1))
-        {
-            selectedBox = kMenuModulesCount - 1;
-        }
-        else
-        {
-            selectedBox += value;
-        }
+        // +/-: one item up / down, going round
+        const int step = value > 0 ? 1 : (value < 0 ? -1 : 0);
+        selectedBox = (uint8_t)(((int)selectedBox + step + kMenuModulesCount) % kMenuModulesCount);
     }
+    updateGameMenu();
     display.setControlValue(boxMenu, selectedBox);
     display.refreshControl(boxMenu);
+}
+
+// the game menu's view: every item in box order, the selected one, its modes
+void InterfaceMenuPopup::updateGameMenu()
+{
+    s_gameMenu.count = kMenuModulesCount;
+    for (int box = 0; box < kMenuModulesCount && box < gibgob::GameMenuView::kMaxItems; box++)
+    {
+        s_gameMenu.items[box] = kModuleNamesList[menuFunctions[box]];
+        s_gameMenu.descriptions[box] = kModuleDescriptions[menuFunctions[box]];
+    }
+    s_gameMenu.selected = selectedBox < kMenuModulesCount ? selectedBox : 0;
+    const strBoxMenuData::Modes* m = modulesMenuModes[s_gameMenu.selected];
+    s_gameMenu.modeCount = m != nullptr ? m->count : 0;
+    s_gameMenu.modeCurrent = m != nullptr ? m->current : 0;
 }
 
 void InterfaceMenuPopup::setModulePopupValue(int16_t value)
 {
     selectedBox = value;
+    updateGameMenu();
 
     display.setControlValue(boxMenu, value);
     display.refreshControl(boxMenu);
@@ -374,24 +404,23 @@ void InterfaceMenuPopup::changeModuleMode()
 }
 
 //******************************************************************************************************
+// GibGob OS: one column of items, Up / Down scroll it (going round)
 static void functLeftPopup()
 {
-    mtMenuPopup.changeModulePopupValue(0, 4);
 }
 
 static void functRightPopup()
 {
-    mtMenuPopup.changeModulePopupValue(0, 2);
 }
 
 static void functUpPopup()
 {
-    mtMenuPopup.changeModulePopupValue(0, 1);
+    mtMenuPopup.changeModulePopupValue(-1);
 }
 
 static void functDownPopup()
 {
-    mtMenuPopup.changeModulePopupValue(0, 3);
+    mtMenuPopup.changeModulePopupValue(1);
 }
 
 static void functEncoderPopup(int16_t value)

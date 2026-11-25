@@ -5,6 +5,7 @@
 #include "gibgob/PerformControl.h"
 #include "gibgob/VisionControl.h"
 #include "gibgob/DrumOverviewControl.h"
+#include "gibgob/GameMenuControl.h"
 #include "gibgob/PerformFx.h"
 #include "gibgob/gibgobChordList.h"
 #include <algorithm>
@@ -262,6 +263,61 @@ int main()
     const int kLimit = 1500; // whole frame may hold about 2040; title bar and popups need the rest
     testMiddleCarryOver();
     testTopRowBounce();
+    // the Menu: a video game style list, every item standing in the middle once
+    {
+        static const char* const kNames[11] = { "Sequencer", "Instrument Parameters", "Sample Playback", "Master",
+                                                "Song", "Sample Loader", "File", "Config", "CHIMP OUT",
+                                                "Sample Editor", "Sample Recorder" };
+        static const char* const kSays[11] = { "this is where you make your beats and melodies.",
+                                               "this is where you set the sound of your synths.",
+                                               "play samples and set their start, end and loop.",
+                                               "the whole mix: volume, reverb, delay and the master FX.",
+                                               "chain your patterns into a song.",
+                                               "load samples into your instruments.",
+                                               "open, save and start projects.",
+                                               "the Mini's own settings.",
+                                               "go bananas: hold buttons for live effects.",
+                                               "cut, fade and shape your samples.",
+                                               "record from the mic, line in or USB." };
+        static GameMenuView mv;
+        mv.count = 11;
+        for (int i = 0; i < 11; i++) { mv.items[i] = kNames[i]; mv.descriptions[i] = kSays[i]; }
+        strControlProperties mp; mp.x = 0; mp.y = 0; mp.w = 800; mp.h = 480; mp.data = &mv;
+        GameMenuControl mc(&mp);
+        const int minYWas = g_minY;
+        g_minY = 0; // the menu covers the whole screen, the title bar's place too
+        for (int i = 0; i < 11; i++)
+        {
+            mv.selected = i;
+            mv.modeCount = (i == 3) ? 4 : (i == 1 ? 2 : 0);
+            mv.modeCurrent = 1;
+            char nm[48]; snprintf(nm, sizeof(nm), "menu: %s", kNames[i]);
+            render(mc, nm, kLimit, false);
+            // the description fits the bubble: at most 3 lines of 30 letters, nothing cut
+            char lines[3][48];
+            const int n = gameMenuWrap(kSays[i], 30, lines, 3);
+            int letters = 0; for (int k = 0; k < n; k++) letters += (int)strlen(lines[k]);
+            if (n > 2 || strstr(lines[n - 1], "...")) { printf("  menu: the monkey's words for %s need %d lines\n", kNames[i], n); fails++; }
+            (void)letters;
+        }
+        // the list goes round: above the first is the last
+        mv.selected = 0;
+        if (gameMenuItemAt(mv, -1) != 10 || gameMenuItemAt(mv, 1) != 1) { printf("  menu: the list does not go round\n"); fails++; }
+        if (const char* dir = getenv("MENU_SVG"))
+        {
+            for (int i : { 1, 0, 3 })
+            {
+                mv.selected = i; mv.modeCount = i == 3 ? 4 : 0; mv.modeCurrent = 1;
+                char path[256]; snprintf(path, sizeof(path), "%s/menu_%d.svg", dir, i);
+                g_svg = fopen(path, "w");
+                fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                render(mc, "menu (svg)", kLimit, false);
+                fprintf(g_svg, "</svg>\n");
+                fclose(g_svg); g_svg = nullptr;
+            }
+        }
+        g_minY = minYWas;
+    }
     for (auto& t : pat.track) { t.length = 63; }
     memset(&mtProject, 0, sizeof(mtProject));
     for (auto& i : mtProject.instrument) i.isActive = 1;

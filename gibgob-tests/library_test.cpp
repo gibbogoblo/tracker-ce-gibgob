@@ -158,9 +158,18 @@ int main()
         CHECK(Index::guessKind("/Samples/Loops and Shots/snare.wav", 3) == kKindShot);
         CHECK(Index::guessKind("/Samples/Boom Bap Kit 90 BPM/kick.wav", kLengthUnread) == kKindLoop); // until read
         CHECK(Index::guessKind("/Samples/x/drum loop.wav", 14) == kKindLoop); // a 1.4 s loop: its name
+        // cymbals are hits even when they ring for seconds
+        CHECK(Index::guessKind("/Samples/Drums/Crash 01.wav", 45) == kKindShot);
+        CHECK(Index::guessKind("/Samples/Drums/big_cymbal.wav", 52) == kKindShot);
+        CHECK(Index::guessKind("/Samples/Drums/Ride.wav", 38) == kKindShot);
+        CHECK(Index::guessKind("/Samples/Drums/override pad.wav", 45) == kKindLoop); // "ride" inside a word is no ride
+        // a "shot" this long is a phrase
+        CHECK(Index::guessKind("/Samples/Vocal Shots/hook.wav", 120) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/x/vocal shot.wav", 120) == kKindLoop);
+        CHECK(Index::guessKind("/Samples/Vocal Shots/hey.wav", 40) == kKindShot);
         CHECK(Index::guessKind("/Samples/x/drums 92bpm.wav", kLengthUnread) == kKindLoop);
         CHECK(Index::guessKind("/Samples/x/amen break.wav", 12) == kKindLoop);
-        CHECK(Index::guessKind("/Samples/One Shots/pad.wav", 80) == kKindShot);
+        CHECK(Index::guessKind("/Samples/One Shots/pad.wav", 70) == kKindShot);
         CHECK(Index::guessKind("/Samples/x/Kick Hit.wav", 60) == kKindShot);
         CHECK(Index::guessKind("/Samples/x/white noise.wav", 10) == kKindShot); // "hit" inside "white" is no hit
         CHECK(Index::guessKind("/Samples/x/pad.wav", 45) == kKindLoop);

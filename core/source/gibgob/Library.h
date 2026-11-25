@@ -89,6 +89,7 @@ enum KindFilter : uint8_t
 static constexpr uint16_t kLengthUnread = 0;      // tenths of a second, 0: not read yet
 static constexpr uint16_t kLengthBad = 0xFFFF;    // could not be read
 static constexpr uint16_t kLoopTenths = 30;       // 3 s or longer: a loop
+static constexpr uint16_t kLongTenths = 80;       // 8 s or longer: never a one-shot, whatever its name says (cymbals aside)
 
 struct Entry
 {

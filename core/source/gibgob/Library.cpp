@@ -225,12 +225,19 @@ int Index::guessKind(const char* path, uint16_t tenths)
     static const char* const kLoop[] = { "loop", "loops", "break", "breaks", "groove", "grooves", nullptr };
     static const char* const kShot[] = { "one shot", "oneshot", "one-shot", "one shots", "oneshots", "one-shots",
                                          "hit", "hits", "shot", "shots", nullptr };
+    // cymbals ring for seconds but are hits all the same
+    static const char* const kCymbal[] = { "crash", "crashes", "cymbal", "cymbals", "ride", "rides", "china",
+                                           "splash", "gong", nullptr };
+    // a "shot" or "hit" this long is a phrase, not a hit (a 12 s vocal in a "Vocal Shots" folder)
+    const bool longOne = tenths != kLengthUnread && tenths != kLengthBad && tenths >= kLongTenths;
     // the file name says it ("kick loop", "drums 92bpm", "snare one shot") ...
     const char* slash = strrchr(path, '/');
     const char* file = slash ? slash + 1 : path;
     if (anyWord(file, kLoop) || tempoInName(file) > 0)
         return kKindLoop;
-    if (anyWord(file, kShot))
+    if (anyWord(file, kCymbal))
+        return kKindShot;
+    if (anyWord(file, kShot) && !longOne)
         return kKindShot;
     // ... or the folder it is in, when that clearly says one or the other
     // ("One Shots", "Drum Loops"; not "Loops & One Shots", not a tempo: a
@@ -246,7 +253,7 @@ int Index::guessKind(const char* path, uint16_t tenths)
         memcpy(folder, start, (size_t)len);
         folder[len] = 0;
         const bool loop = anyWord(folder, kLoop), shot = anyWord(folder, kShot);
-        if (loop != shot)
+        if (loop != shot && !(shot && longOne))
             return loop ? kKindLoop : kKindShot;
     }
     // ... else its length; the outer folders only while it is not read yet

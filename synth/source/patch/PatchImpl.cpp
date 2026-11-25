@@ -89,6 +89,18 @@ PatchImpl::PatchImpl(std::shared_ptr<const InstrumentType> instrumentType,
     macroParamValues.insert(macroParamValues.begin(), paramCount, 0);
     macroParamValuesPerVoice.reserve(paramCount);
     macroParamValuesPerVoice.insert(macroParamValuesPerVoice.begin(), paramCount, { 0 });
+    // GibGob OS: a multiplied parameter (e.g. a Volume with MacroOperation::kMult)
+    // starts at x1, not x0, as updateMacroParamValues() / clearMacroModifiers()
+    // set it. With 0 a new patch (Init patch, another engine on a track) was
+    // silent until the patch was loaded again from the card (a restart).
+    for (int paramId = 0; paramId < paramCount; paramId++)
+    {
+        if (metadata.params[paramId].macroOperation == Metadata::Param::MacroOperation::kMult)
+        {
+            macroParamValues[paramId] = 1.0f;
+            std::ranges::fill(macroParamValuesPerVoice[paramId], 1.0f);
+        }
+    }
     paramMacroLookup.reserve(paramCount);
     paramMacroLookup.insert(paramMacroLookup.begin(), paramCount, 0);
 

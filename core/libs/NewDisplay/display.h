@@ -122,6 +122,10 @@ class cDisplay
     // jpg/png
     uint8_t readImgFromSd(char* path, uint32_t address, int16_t max_w, int16_t max_h);
     uint32_t imgLoadCalls = 0; // GibGob OS: counts picture loads (a screen can tell its pictures are still there)
+    // GibGob OS: while set, only this control is drawn (the full-screen Menu:
+    // the screen under it keeps its controls, they are just not drawn, so the
+    // frame never runs out of room for the menu); -1: every control
+    hControl exclusiveControl = -1;
     void readImgFromMemory(uint8_t* data, uint32_t size);
     uint8_t isImgLoaded() { return img.status == 3; }
     uint8_t getImgLoadState() { return img.status; }

@@ -865,6 +865,10 @@ uint32_t cDisplay::composeFrame()
         {
             continue;
         }
+        if (exclusiveControl >= 0 && i != exclusiveControl)
+        {
+            continue; // the Menu is up: only the menu
+        }
         if (controlBytes + control->ramSize > kFrameControlBytes)
         {
             // Left out, as before; smaller controls after it may still fit.
