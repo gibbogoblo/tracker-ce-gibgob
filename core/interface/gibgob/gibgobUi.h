@@ -28,18 +28,21 @@ bool shiftButton(uint8_t state);
 // Rec toggle; also turns the live-record metronome on and off
 void setRecArmed(bool on);
 
-// Rec button: a short press toggles live recording, a 1 s press toggles
-// quantized recording (and arms Rec), Shift+Rec is undo.
+// Rec button: a tap goes off -> REC -> Q REC (quantized) -> off; holding it
+// 1 s asks for a whistle take (takeWhistleRequest); Shift+Rec is undo.
 enum class RecAction : uint8_t
 {
     None,
-    Toggled,  // short press: Rec on/off
+    Toggled,  // a tap: the record mode changed
     Undo,     // Shift+Rec
 };
 RecAction recButton(uint8_t state);
 // call from update(): handles the long press and turns live recording off
 // when playback stops. Returns true if the screen should be redrawn.
 bool recPoll();
+// true once after Rec was held 1 s (a whistle take was asked for); call
+// right after recPoll()
+bool takeWhistleRequest();
 // "REC", "Q REC" or "" for the info strip
 const char* recModeText();
 

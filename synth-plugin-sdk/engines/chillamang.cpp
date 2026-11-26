@@ -190,7 +190,7 @@ class ChillamangVoice : public sdk::CustomSynthVoice<ChillamangVoice, ChillParam
         const int n = static_cast<int>(std::min(left.size(), right.size()));
         std::fill(left.begin(), left.begin() + n, 0.0f);
         std::fill(right.begin(), right.begin() + n, 0.0f);
-        dsp.render(params, pitchBendSemitones, left.data(), right.data(), n);
+        dsp.render(params, bendForBlock(n), left.data(), right.data(), n);
         for (int i = 0; i < n && i < static_cast<int>(lastGraphSamples.size()); ++i)
             lastGraphSamples[i] = 0.5f * (left[i] + right[i]);
     }

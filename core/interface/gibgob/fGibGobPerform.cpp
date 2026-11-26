@@ -416,7 +416,7 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
-    if (state == buttonPress && (shiftActive() || GPF->view.help.active))
+    if (state == buttonPress && !mtMenuPopup.isPopupVisible() && (shiftActive() || GPF->view.help.active))
     {
         toggleHelp(GPF->view.help, GPF->ip);
         GPF->refresh();

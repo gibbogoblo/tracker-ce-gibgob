@@ -9,6 +9,8 @@
 #include "core/songTimer.h"
 #include "fileManager.h"
 #include "gibgob/MelodicTrack.h"
+#include "gibgob/Whistle.h"
+#include "gibgob/WhistleRec.h"
 #include "gibgob/gibgobChords.h"
 #include "gibgob/gibgobHome.h"
 #include "gibgob/gibgobHelp.h"
@@ -16,12 +18,25 @@
 #include "gibgob/gibgobUi.h"
 #include "mtStructs.h"
 
+#include "cr_section_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
 cPianoRoll pianoRoll;
 static cPianoRoll* PR = &pianoRoll;
 static elapsedMillis s_clock;
+
+// a whistle take: the track's notes before it (for Delete) and the notes it
+// made; in the external RAM (the fast RAM is full)
+__NOINIT(EXTERNAL_RAM) static gibgob::Note s_whistleBackup[gibgob::kMaxNotes];
+__NOINIT(EXTERNAL_RAM) static gibgob::Note s_whistleNotes[gibgob::kMaxNotes];
+
+// the whistle take's choices (Grid, Scale) and the key names
+static const int kWhistleGrid[6] = { 0, 12, 24, 48, 96, 192 };
+static const char* const kWhistleGridNames[6] = { "Free", "1/64", "1/32", "1/16", "1/8", "1/4" };
+static const char* const kWhistleSnapNames[gibgob::whistle::kSnapCount] = { "Chrom", "Major", "Minor" };
+static const char* const kKeyNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 
 using namespace gibgob;
 
@@ -82,6 +97,8 @@ enum EditKind
     kEditRecord,
     kEditTool,
     kEditClear,
+    kEditSlide,
+    kEditWhistle,
 };
 
 static int clampInt(int v, int lo, int hi)
@@ -145,13 +162,19 @@ void cPianoRoll::start(uint32_t options)
     titleBar->show();
     titleBar->setTitle(titleText);
 
+    whistle = Whistle::None;
     setDefaultScreenFunct();
     refreshView();
     display.synchronizeRefresh();
+    if (options & kOptionWhistle)
+        startWhistle(); // Rec held on this track in the main sequencer
 }
 
 void cPianoRoll::stop()
 {
+    if (whistle == Whistle::Taking)
+        whistlerec::cancel();
+    whistle = Whistle::None; // a preview is kept
     if (menu != Menu::None)
         closeMenu(false);
     releaseAllButtons();
@@ -397,6 +420,50 @@ void cPianoRoll::refreshView()
     view.params[3].color = color::kFx2Btn;
     view.selectedParam = paramHeld ? param : -1; // lit while its button is held
 
+    if (whistle == Whistle::Taking)
+    {
+        // the take: what it hears now
+        const whistlerec::Phase ph = whistlerec::phase();
+        snprintf(view.mode, sizeof(view.mode), "WHISTLE");
+        view.modeColor = color::kRec;
+        if (ph == whistlerec::Phase::Taking)
+        {
+            const float heard = whistlerec::pitchNow();
+            if (heard > 0.0f)
+            {
+                const int n = (int)(heard + 0.5f);
+                snprintf(view.title, sizeof(view.title), "Whistle!   %s%d", kKeyNames[n % 12], n / 12 - 1);
+            }
+            else
+                snprintf(view.title, sizeof(view.title), "Whistle!   ...");
+        }
+        else
+            snprintf(view.title, sizeof(view.title), "Count-in: whistle when the track starts");
+        const int level = clampInt((int)(whistlerec::levelNow() * 400.0f), 0, 100);
+        snprintf(view.params[0].label, sizeof(view.params[0].label), "Level");
+        snprintf(view.params[0].value, sizeof(view.params[0].value), "%d%%", level);
+        for (int i = 1; i < 4; i++)
+            view.params[i].label[0] = view.params[i].value[0] = 0;
+        snprintf(view.params[3].label, sizeof(view.params[3].label), "Play");
+        snprintf(view.params[3].value, sizeof(view.params[3].value), "stop");
+        view.selectedParam = -1;
+    }
+    else if (whistle == Whistle::Preview)
+    {
+        snprintf(view.mode, sizeof(view.mode), "TAKE");
+        view.modeColor = color::kRec;
+        snprintf(view.title, sizeof(view.title), "Middle: keep  Delete: undo  Ins: slides %s",
+                 wSlides ? "on" : "off");
+        snprintf(view.params[0].label, sizeof(view.params[0].label), "Oct");
+        snprintf(view.params[0].value, sizeof(view.params[0].value), "%+d", wOctaves);
+        snprintf(view.params[1].label, sizeof(view.params[1].label), "Key");
+        snprintf(view.params[1].value, sizeof(view.params[1].value), "%s", kKeyNames[wKey]);
+        snprintf(view.params[2].label, sizeof(view.params[2].label), "Scale");
+        snprintf(view.params[2].value, sizeof(view.params[2].value), "%s", kWhistleSnapNames[wSnap]);
+        snprintf(view.params[3].label, sizeof(view.params[3].label), "Grid");
+        snprintf(view.params[3].value, sizeof(view.params[3].value), "%s", kWhistleGridNames[clampInt(wGrid, 0, 5)]);
+    }
+
     if (view.shift)
     {
         // what the coloured buttons do with Shift
@@ -460,10 +527,175 @@ void cPianoRoll::refreshView()
     display.refreshControl(grid);
 }
 
+// ---------------------------------------------------------------------------
+// whistle take: Rec held 1 s (here, or on a melodic track in the main
+// sequencer). One bar of count-in, then the track once through while the mic
+// listens; the notes found go into the track as a preview. Hold a coloured
+// button + +/-: Octave / Key / Scale / Grid. Insert: slides on / off.
+// Middle keeps the take, Delete throws it away, Rec held: again.
+
+
+void cPianoRoll::startWhistle()
+{
+    if (padsMode())
+    {
+        mtPopups.show(0, "Whistle: not on a sliced sample track", 2);
+        return;
+    }
+    if (whistle == Whistle::Taking)
+        return;
+    if (whistle == Whistle::Preview)
+        dropWhistle(); // again: the take before goes
+    if (menu != Menu::None)
+        closeMenu(false);
+    releaseAllButtons();
+    clearSelection();
+    mode = Mode::Idle;
+    setRecArmed(false);
+    char why[48];
+    if (!whistlerec::start(track, why, sizeof(why)))
+    {
+        mtPopups.show(0, why, 2);
+        refreshView();
+        return;
+    }
+    whistle = Whistle::Taking;
+    view.firstTick = 0;
+    view.cursorTick = 0;
+    refreshView();
+}
+
+void cPianoRoll::whistlePoll()
+{
+    if (whistle != Whistle::Taking)
+        return;
+    whistlerec::poll();
+    const whistlerec::Phase ph = whistlerec::phase();
+    if (ph == whistlerec::Phase::Off)
+    {
+        whistle = Whistle::None; // stopped during the count-in
+        mtPopups.show(0, "Whistle take stopped", 1);
+        refreshView();
+        return;
+    }
+    if (ph != whistlerec::Phase::Done)
+    {
+        if ((uint32_t)s_clock - wLastDraw >= 60)
+        {
+            wLastDraw = (uint32_t)s_clock;
+            refreshView(); // what it hears, as it hears it
+        }
+        return;
+    }
+
+    const whistle::Take& t = whistlerec::take();
+    if (t.count == 0)
+    {
+        whistlerec::finish();
+        whistle = Whistle::None;
+        mtPopups.show(0, "No whistle heard - try closer to the mic", 2);
+        refreshView();
+        return;
+    }
+    // the track as it was, for Delete
+    Sequencer::strPattern* p = current();
+    wBackupCount = noteCount(p, track);
+    for (int i = 0; i < wBackupCount; i++)
+        s_whistleBackup[i] = getNote(p, track, i);
+    beginEdit(kEditWhistle);
+    wOctaves = whistle::autoOctaves(t, buttonNote(p, track, 0));
+    wKey = t.key;
+    wSnap = t.minor ? whistle::kSnapMinor : whistle::kSnapMajor;
+    wGrid = 3;
+    wSlides = true;
+    whistle = Whistle::Preview;
+    whistlerec::finish();
+    applyWhistle();
+    char msg[64];
+    snprintf(msg, sizeof(msg), "%d notes in %s %s - Middle: keep", t.count, kKeyNames[wKey],
+             t.minor ? "minor" : "major");
+    mtPopups.show(0, msg, 2);
+}
+
+// the preview: the track as it was, plus the take with the settings now
+void cPianoRoll::applyWhistle()
+{
+    Sequencer::strPattern* p = current();
+    stopTrack(track);
+    clearNotes(p, track);
+    for (int i = 0; i < wBackupCount; i++)
+        addNote(p, track, s_whistleBackup[i]);
+    whistle::Placement pl{};
+    pl.hopsPerTick = whistlerec::hopsPerTick();
+    pl.anchorHop = whistlerec::anchorHop();
+    pl.patternTicks = whistlerec::trackTicks() > 0 ? whistlerec::trackTicks() : trackSteps(p, track) * kTicksPerStep;
+    pl.gridTicks = kWhistleGrid[clampInt(wGrid, 0, 5)];
+    pl.octaves = wOctaves;
+    pl.snap = wSnap;
+    pl.key = wKey;
+    pl.slides = wSlides;
+    const int room = kMaxNotes - wBackupCount;
+    const int n = whistle::toNotes(whistlerec::take(), pl, s_whistleNotes, room > 0 ? room : 0);
+    for (int i = 0; i < n; i++)
+        addNote(p, track, s_whistleNotes[i]);
+    markChanged();
+    refreshView();
+}
+
+void cPianoRoll::keepWhistle()
+{
+    if (whistle != Whistle::Preview)
+        return;
+    whistle = Whistle::None;
+    mtPopups.show(0, "Whistle take kept", 1);
+    refreshView();
+}
+
+void cPianoRoll::keepIfPreview()
+{
+    if (whistle == Whistle::Preview)
+    {
+        whistle = Whistle::None; // quietly: editing the notes keeps them
+        refreshView();
+    }
+}
+
+void cPianoRoll::dropWhistle()
+{
+    if (whistle != Whistle::Preview)
+        return;
+    Sequencer::strPattern* p = current();
+    stopTrack(track);
+    clearNotes(p, track);
+    for (int i = 0; i < wBackupCount; i++)
+        addNote(p, track, s_whistleBackup[i]);
+    markChanged();
+    whistle = Whistle::None;
+    mtPopups.show(0, "Whistle take thrown away", 1);
+    refreshView();
+}
+
+// a coloured button held + +/-: 0 octave, 1 key, 2 scale, 3 grid
+void cPianoRoll::changeWhistle(int which, int dir)
+{
+    switch (which)
+    {
+        case 0: wOctaves = clampInt(wOctaves + dir, -5, 3); break;
+        case 1: wKey = ((wKey + dir) % 12 + 12) % 12; break;
+        case 2: wSnap = (uint8_t)(((int)wSnap + dir + whistle::kSnapCount) % whistle::kSnapCount); break;
+        case 3: wGrid = clampInt(wGrid + dir, 0, 5); break;
+        default: return;
+    }
+    applyWhistle();
+}
+
 void cPianoRoll::update()
 {
     if (recPoll())
         refreshView();
+    if (takeWhistleRequest())
+        startWhistle(); // Rec held 1 s
+    whistlePoll();
 
     if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
     {
@@ -831,6 +1063,57 @@ void cPianoRoll::pressInsert()
     refreshView();
 }
 
+// Shift + Insert: the note(s) under the cursor (or selected) slide in from
+// the note before, or stop sliding. A note that slides gets the note before
+// held up to it (a sample track glides only while that note still sounds).
+void cPianoRoll::toggleSlide()
+{
+    Sequencer::strPattern* p = current();
+    int targets[kMaxNotes];
+    const int n = collectTargets(targets, kMaxNotes);
+    if (n == 0)
+    {
+        mtPopups.show(0, "Slide: stand on a note", 1);
+        return;
+    }
+    bool allOn = true;
+    for (int i = 0; i < n; i++)
+        allOn = allOn && (getNote(p, track, targets[i]).flags & kNoteFlagSlide);
+    beginEdit(kEditSlide);
+    const int count = noteCount(p, track);
+    for (int i = 0; i < n; i++)
+    {
+        Note note = getNote(p, track, targets[i]);
+        if (allOn)
+            note.flags &= (uint8_t)~kNoteFlagSlide;
+        else
+        {
+            note.flags |= kNoteFlagSlide;
+            // the note before (starting last before this one): held up to this one
+            int before = -1;
+            for (int k = 0; k < count; k++)
+            {
+                const Note o = getNote(p, track, k);
+                if (o.start < note.start && (before < 0 || o.start > getNote(p, track, before).start))
+                    before = k;
+            }
+            if (before >= 0)
+            {
+                Note o = getNote(p, track, before);
+                if (o.start + o.length < note.start)
+                {
+                    o.length = (uint16_t)(note.start - o.start);
+                    setNote(p, track, before, o);
+                }
+            }
+        }
+        setNote(p, track, targets[i], note);
+    }
+    markChanged();
+    mtPopups.show(0, allOn ? "Slide OFF" : "Slide ON", 1);
+    refreshView();
+}
+
 void cPianoRoll::pressDelete()
 {
     if (mode == Mode::BoxDrag)
@@ -888,6 +1171,11 @@ void cPianoRoll::toggleShift()
 
 void cPianoRoll::changeParam(int delta)
 {
+    if (whistle == Whistle::Preview)
+    {
+        changeWhistle((int)param, delta > 0 ? 1 : -1);
+        return;
+    }
     Sequencer::strPattern* p = current();
     int targets[kMaxNotes];
     const bool sing = singMode();
@@ -1763,10 +2051,22 @@ static bool inMenu()
     return PR->menu != cPianoRoll::Menu::None;
 }
 
+// a whistle take is being recorded: most buttons wait
+static bool taking()
+{
+    return PR->whistle == cPianoRoll::Whistle::Taking;
+}
+
 static void functPlay(uint8_t state)
 {
     if (state != buttonPress)
         return;
+    if (taking())
+    {
+        // stop: the take ends with what was whistled so far
+        sequencer.stop();
+        return;
+    }
     if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP && !sequencer.isCountingIn())
     {
         if (shiftActive() && !inMenu())
@@ -1787,6 +2087,10 @@ static void functRec(uint8_t state)
 {
     if (inMenu())
         return;
+    if (taking())
+        return;
+    if (state == buttonRelease && PR->whistle == cPianoRoll::Whistle::Preview)
+        PR->keepIfPreview(); // a tap (live rec) keeps the take; held 1 s: again (update)
     RecAction a = recButton(state);
     if (a == RecAction::Undo)
     {
@@ -1839,6 +2143,14 @@ static void functMiddle(uint8_t state)
 {
     if (middleBlocked(state))
         return;
+    if (taking())
+        return;
+    if (PR->whistle == cPianoRoll::Whistle::Preview && !inMenu())
+    {
+        if (state == buttonPress)
+            PR->keepWhistle();
+        return;
+    }
     if (inMenu())
     {
         if (state == buttonPress)
@@ -1871,15 +2183,40 @@ static void functMiddle(uint8_t state)
 
 static void functDelete(uint8_t state)
 {
-    if (state == buttonPress && !inMenu())
-        PR->pressDelete();
+    if (state != buttonPress || inMenu())
+        return;
+    if (taking())
+    {
+        whistlerec::cancel(); // no take
+        sequencer.stop();
+        PR->whistle = cPianoRoll::Whistle::None;
+        mtPopups.show(0, "Whistle take cancelled", 1);
+        PR->refreshView();
+        return;
+    }
+    if (PR->whistle == cPianoRoll::Whistle::Preview)
+    {
+        PR->dropWhistle();
+        return;
+    }
+    PR->pressDelete();
 }
 
 static void functInsert(uint8_t state)
 {
-    if (state != buttonPress || inMenu() || shiftActive())
+    if (state != buttonPress || inMenu() || taking())
         return;
-    PR->pressInsert();
+    if (PR->whistle == cPianoRoll::Whistle::Preview && !shiftActive())
+    {
+        PR->wSlides = !PR->wSlides; // the take's glides as slides, or not
+        PR->applyWhistle();
+        return;
+    }
+    PR->keepIfPreview();
+    if (shiftActive())
+        PR->toggleSlide();
+    else
+        PR->pressInsert();
 }
 
 static void functShift(uint8_t state)
@@ -1893,6 +2230,10 @@ static void functEncoder(int16_t value)
     // the Mini's big +/- send +/-10, the small ones +/-1
     bool big = value >= 10 || value <= -10;
     int dir = value > 0 ? 1 : -1;
+    if (taking())
+        return;
+    if (PR->whistle == cPianoRoll::Whistle::Preview && !PR->paramHeld && !big)
+        PR->keepIfPreview(); // note length: an edit
     if (inMenu())
     {
         PR->menuChange(dir, big);
@@ -1913,6 +2254,10 @@ static void functTopRow(uint8_t button, uint8_t state)
     int idx = button - interfaceButton0;
     if (topRowBounce(idx, state))
         return; // the contact bouncing as the button is let go
+    if (taking())
+        return;
+    if (state == buttonPress)
+        PR->keepIfPreview();
     if (inMenu())
     {
         if (state == buttonPress)
@@ -1937,10 +2282,11 @@ static void functParamButton(uint8_t button, uint8_t state)
         }
         return;
     }
-    if (state != buttonPress || inMenu())
+    if (state != buttonPress || inMenu() || taking())
         return;
     if (shiftActive())
     {
+        PR->keepIfPreview();
         if (button == interfaceButtonNote)
             PR->openMenu(cPianoRoll::Menu::Quantize);
         else if (button == interfaceButtonInstr)
@@ -1981,7 +2327,9 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
-    if (state == buttonPress && !inMenu() && (shiftActive() || PR->view.help.active))
+    if (taking())
+        return; // a whistle take: no menu
+    if (state == buttonPress && !inMenu() && !mtMenuPopup.isPopupVisible() && (shiftActive() || PR->view.help.active))
     {
         toggleHelp(PR->view.help, PR->ip);
         PR->refreshView();
@@ -1997,8 +2345,11 @@ static void functMenu(uint8_t state)
 
 static void functCopy(uint8_t state)
 {
-    if (state == buttonPress && !inMenu())
+    if (state == buttonPress && !inMenu() && !taking())
+    {
+        PR->keepIfPreview();
         PR->copyOrPaste();
+    }
 }
 
 static void functParams(uint8_t state)

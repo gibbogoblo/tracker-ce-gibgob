@@ -282,7 +282,7 @@ class MorphangutanVoice : public sdk::CustomSynthVoice<MorphangutanVoice, MorphP
             std::fill(right.begin(), right.end(), 0.0f);
         }
 #else
-        dsp.render(params, ctx.tempo, pitchBendSemitones, left.data(), right.data(), n);
+        dsp.render(params, ctx.tempo, bendForBlock(n), left.data(), right.data(), n);
 #endif
 #ifdef MORPH_DIAG
         {

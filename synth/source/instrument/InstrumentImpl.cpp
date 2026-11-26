@@ -457,6 +457,14 @@ void InstrumentImpl::sendParamCC(int paramId, Patch::paramvalue_t newValue)
 
 void InstrumentImpl::handleMidiCC(const MidiEvent::Data::ControlChange& controlChange)
 {
+    // CC 84, portamento control: the next note glides in from the note in
+    // the value (GibGob slides). Handed to the voice that plays that note.
+    if (controlChange.id == MidiEvent::Data::ControlChange::kSlideFromCC)
+    {
+        slideFromNote = controlChange.value;
+        return;
+    }
+
     if (patchAssigned == nullptr)
     {
         return;
@@ -562,6 +570,16 @@ void InstrumentImpl::handleNoteOn(const MidiEvent& event, int sourceId)
                                      voiceIdx);
     }
 
+    if (slideFromNote != 0)
+    {
+        // this note glides in: the voice hears where from, just before the note
+        const MidiEvent slide = { .type = MidiEvent::Type::kControlChange,
+                                  .channel = static_cast<uint8_t>(midiChannel),
+                                  .data = MidiEvent::Data{ .controlChange = MidiEvent::Data::ControlChange{
+                                                             .id = MidiEvent::Data::ControlChange::kSlideFromCC, .value = slideFromNote } } };
+        voice.voice->onMidiEvent({ getTempo() }, slide);
+        slideFromNote = 0;
+    }
     voice.voice->onMidiEvent({ getTempo() }, event);
     if (!voices.empty() && voices[0].voice->hasPostProcess())
     {

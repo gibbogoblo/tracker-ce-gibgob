@@ -3208,14 +3208,15 @@ static void functMenu(uint8_t state)
 
     if (state == buttonPress)
     {
+        // GibGob OS: Menu toggles the menu; pressed while it is open, it goes
+        // to the item. There's a need to keep order of instructions, the flag
+        // is used deep inside popup callback.
+        if (mtMenuPopup.isPopupVisible())
+            SR->isSwitchingFromMenu = true;
         mtMenuPopup.showModulePopup(SR, functSwitchModule);
     }
-    else if (state == buttonRelease && mtMenuPopup.isPopupVisible())
+    else if (state == buttonRelease)
     {
-        // There's a need to keep order of instructions, the flag  is used deep inside
-        // popup callback - it would be better to pass it as a context to the show function but
-        // it would complicate generic handling of module switching.
-        SR->isSwitchingFromMenu = true;
         mtMenuPopup.hideModulePopup(SR);
     }
 }

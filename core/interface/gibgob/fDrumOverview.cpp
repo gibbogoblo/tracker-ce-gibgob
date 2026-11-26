@@ -1056,7 +1056,7 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
-    if (state == buttonPress && (shiftActive() || DO->view->help.active))
+    if (state == buttonPress && !mtMenuPopup.isPopupVisible() && (shiftActive() || DO->view->help.active))
     {
         toggleHelp(DO->view->help, DO->ip);
         DO->refresh();

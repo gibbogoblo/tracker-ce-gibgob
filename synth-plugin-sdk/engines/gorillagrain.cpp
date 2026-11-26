@@ -250,11 +250,11 @@ class GorillaGrainVoice : public sdk::CustomSynthVoice<GorillaGrainVoice, GrainP
                 left[i] = right[i] = b;
                 ++blip;
             }
-            dsp.render(params, ctx.tempo, pitchBendSemitones, scratchL.data(), scratchR.data(), n);
+            dsp.render(params, ctx.tempo, bendForBlock(n), scratchL.data(), scratchR.data(), n);
             return;
         }
         blip = 0;
-        dsp.render(params, ctx.tempo, pitchBendSemitones, left.data(), right.data(), n);
+        dsp.render(params, ctx.tempo, bendForBlock(n), left.data(), right.data(), n);
 #ifdef GORILLA_DIAG
         // after ~0.3 s of a held note, a stage that never made sound beeps its number:
         // 1 the grains are silent  2 the filter kills them  3 the envelope / volume is 0

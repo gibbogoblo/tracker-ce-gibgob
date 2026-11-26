@@ -21,9 +21,12 @@ namespace gibgob
 
 // told about every note the sequencer starts (the master duck listens)
 void (*g_noteStartHook)(int track) = nullptr;
+void (*g_trackTickHook)(int track, int tick, int trackTicks) = nullptr;
 bool (*g_singsSyllables)(uint8_t instrument) = nullptr;
 int g_liveSyllable = 0;
 static volatile uint8_t s_lastSyllable[kTracks] = {};
+// the pitch each track last started (a synth's slide glides from it)
+static uint8_t s_lastStartPitch[kTracks] = {};
 const char* const kSyllableNames[kSyllables] = { "tah", "dee", "umm", "lee", "aah", "bah", "so", "lah" };
 
 
@@ -702,8 +705,14 @@ void startNote(int track,
     else
     {
         s_lastSyllable[track & (kTracks - 1)] = (uint8_t)(((noteFlags >> 4) & 0x0F) % kSyllables);
+        // a slide on a synth: it glides in from the note before (MIDI CC 84,
+        // portamento control, just before the note)
+        const uint8_t from = s_lastStartPitch[track & (kTracks - 1)];
+        if ((noteFlags & kNoteFlagSlide) && from != 0 && from != pitch && isSynthInstrument(instrument))
+            sendCC(kSlideFromCC, from, (uint8_t)instrumentIdxToMidiChannel(instrument), true);
         soundOnPoly(instrument, pitch, velocity, (noteFlags >> 4) & 0x0F);
     }
+    s_lastStartPitch[track & (kTracks - 1)] = pitch;
 }
 
 void removeHeldAt(ArpState& a, int i)
@@ -1812,6 +1821,8 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     int trackTicks = effectiveSteps(p, track, has ? &h : nullptr) * kTicksPerStep;
     int tick = tickInPattern % trackTicks;
     s_playTick[track] = tick;
+    if (g_trackTickHook != nullptr)
+        g_trackTickHook(track, tick, trackTicks);
 
     // 1. count down / release sounding notes and held arp notes
     for (auto& a : st.notes)

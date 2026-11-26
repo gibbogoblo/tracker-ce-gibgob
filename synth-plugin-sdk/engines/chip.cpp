@@ -210,7 +210,7 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
         const float qDamper = std::clamp(1.0f - 0.85f * filterResonance, 0.12f, 1.0f);
 
-        const float baseNoteOffset = tuneSemitones + (fineCents * 0.01f) + pitchBendSemitones;
+        const float baseNoteOffset = tuneSemitones + (fineCents * 0.01f) + bendForBlock(static_cast<int>(out.size()));
         const float pwmPhaseInc = pwmRateHz * invSr;
         const float vibPhaseInc = vibRateHz * invSr;
         const float vibDepthSemi = vibDepth * 1.5f;

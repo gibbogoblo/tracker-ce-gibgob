@@ -55,6 +55,7 @@ struct MidiEvent
             static constexpr uint8_t kMaxValue = 127;
             static constexpr uint8_t kBankChangeCC = 0;
             static constexpr uint8_t kAllNotesOffCC = 123;
+            static constexpr uint8_t kSlideFromCC = 84; // portamento control: the next note glides from this note
 
             bool operator==(const ControlChange&) const = default;
         } controlChange;

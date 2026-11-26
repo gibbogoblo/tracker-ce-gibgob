@@ -270,11 +270,49 @@ static void testMiddleCarryOver()
     gibgob::middleBlocked(buttonRelease);
 }
 
+// the Rec button: a tap goes off -> REC -> Q REC -> off; held 1 s asks for a whistle take once
+static void testRecButton()
+{
+    setRecArmed(false);
+    setQuantizedRecording(false);
+    auto tap = [] {
+        recButton(buttonPress);
+        g_testMillis += 80;
+        recPoll();
+        recButton(buttonRelease);
+        g_testMillis += 200;
+    };
+    tap();
+    if (!g_recArmed || quantizedRecording()) { printf("  rec: first tap is not REC\n"); fails++; }
+    tap();
+    if (!g_recArmed || !quantizedRecording()) { printf("  rec: second tap is not Q REC\n"); fails++; }
+    tap();
+    if (g_recArmed || quantizedRecording()) { printf("  rec: third tap is not off\n"); fails++; }
+    if (takeWhistleRequest()) { printf("  rec: a tap asked for a whistle\n"); fails++; }
+    // held 1 s: a whistle take is asked for, once; the rec mode does not change
+    recButton(buttonPress);
+    g_testMillis += 1050;
+    recPoll();
+    if (!takeWhistleRequest()) { printf("  rec: holding did not ask for a whistle\n"); fails++; }
+    if (takeWhistleRequest()) { printf("  rec: the whistle was asked for twice\n"); fails++; }
+    recButton(buttonRelease);
+    if (g_recArmed) { printf("  rec: holding changed the rec mode\n"); fails++; }
+    // asked for on a screen that cannot whistle: forgotten after a moment
+    recButton(buttonPress);
+    g_testMillis += 1050;
+    recPoll();
+    recButton(buttonRelease);
+    g_testMillis += 400;
+    recPoll();
+    if (takeWhistleRequest()) { printf("  rec: a stale whistle request came through\n"); fails++; }
+}
+
 int main()
 {
     const int kLimit = 1500; // whole frame may hold about 2040; title bar and popups need the rest
     testMiddleCarryOver();
     testTopRowBounce();
+    testRecButton();
     // the Menu: a video game style list, every item standing in the middle once
     {
         static const char* const kNames[11] = { "Sequencer", "Instrument Parameters", "Sample Playback", "Master",
@@ -350,6 +388,7 @@ int main()
         {
             Note n{}; n.start = (i % 64) * 48 + (i % 5); n.length = 20 + (i * 7) % 90; n.pitch = 40 + (i * 5) % 36;
             n.velocity = 30 + (i * 37) % 97; n.flags = (i % 2) ? kNoteFlagSelected : 0; n.setChance(i % 3 ? 100 : 50);
+            if (t % 2 && i % 2 == 0) n.flags |= kNoteFlagSlide; // half the melodic notes slide (the ramps)
             addNote(&pat, t, n);
         }
     }
@@ -459,6 +498,32 @@ int main()
         if (tile.count != 4 || tile.marks[0].x0 != 48) { printf("  vision: window start not followed (%d)\n", tile.count ? tile.marks[0].x0 : -1); fails++; }
     }
 
+
+    // a picture of slides: the whistled take "slides.wav" as it lands (PIANO_SVG=file.svg)
+    if (const char* out = getenv("PIANO_SVG"))
+    {
+        static Sequencer::strPattern wp;
+        memset(&wp, 0, sizeof(wp));
+        setTrackType(&wp, 0, TrackType::Melodic);
+        const struct { int s, l, p; bool slide; } take[] = { { 0, 6, 59, false }, { 6, 10, 64, true }, { 16, 10, 68, true },
+                                                             { 26, 4, 64, true }, { 30, 4, 64, false }, { 34, 12, 59, true } };
+        for (auto& t : take)
+        {
+            Note n{}; n.start = (uint16_t)(t.s * 48); n.length = (uint16_t)(t.l * 48); n.pitch = (uint8_t)t.p; n.velocity = 100;
+            n.flags = t.slide ? kNoteFlagSlide : 0;
+            addNote(&wp, 0, n);
+        }
+        PianoRollView pv; pv.pattern = &wp; pv.track = 0; pv.stepsVisible = 48; pv.rowsVisible = 16; pv.topPitch = 72;
+        pv.patternTicks = 64 * 48; pv.cursorTick = 6 * 48; pv.cursorPitch = 64; pv.showGhost = false;
+        snprintf(pv.title, sizeof(pv.title), "Track 1  E major"); snprintf(pv.mode, 12, "WHISTLE"); pv.modeColor = 0xFF5A5A;
+        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &pv;
+        PianoRollControl pc(&prop);
+        g_svg = fopen(out, "w");
+        fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'><rect width='800' height='480' fill='#000'/>\n");
+        render(pc, "piano roll slides (svg)", kLimit, false);
+        fprintf(g_svg, "</svg>\n");
+        fclose(g_svg); g_svg = nullptr;
+    }
 
     for (int zoom : { -12, 0, 24, 48 })
     {

@@ -302,12 +302,16 @@ void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
 // called (audio context) whenever the sequencer starts a note on a track
 extern void (*g_noteStartHook)(int track);
+// called (audio context) on every micro step each track plays: the tick
+// inside the track and the track's length (the whistle take times itself by it)
+extern void (*g_trackTickHook)(int track, int tick, int trackTicks);
 // Singing synths (LILITRON): a note's syllable lives in the top half of its
 // flags (where sample notes keep their envelope variant). The UI sets this to
 // say which instruments sing; the syllable then goes out as MIDI CC 3 just
 // before the note.
 extern bool (*g_singsSyllables)(uint8_t instrument);
 static constexpr uint8_t kSyllableCC = 3;
+static constexpr uint8_t kSlideFromCC = 84; // a synth note glides in from this note (portamento control)
 static constexpr int kSyllables = 8;
 inline int noteSyllable(const Note& n)
 {

@@ -271,6 +271,13 @@ class CustomSynthVoice : public InstrumentVoice
             case MidiEvent::Type::kNoteOff:
                 handleNoteOffInternal(ctx, event.data.note.note);
                 break;
+            case MidiEvent::Type::kControlChange:
+                // the host's "glide in from this note" for the next note on (GibGob slides)
+                if (event.data.controlChange.id == MidiEvent::Data::ControlChange::kSlideFromCC)
+                {
+                    slideFromNote = event.data.controlChange.value;
+                }
+                break;
             case MidiEvent::Type::kPitchBendChange:
                 pitchBendSemitones =
                   (static_cast<float>(event.data.pitchBendChange.value) * kPitchBendRangeSemitones) /
@@ -339,6 +346,23 @@ class CustomSynthVoice : public InstrumentVoice
 
   protected:
     static constexpr float kPitchBendRangeSemitones = 2.0f;
+    static constexpr float kSlideSeconds = 0.09f; // a slide takes about 90 ms
+    static constexpr float kSlideSampleRate = 44100.0f;
+
+    // the pitch bend plus a running slide, in semitones, for the next `frames`
+    // samples: engines pass this where they took pitchBendSemitones
+    float bendForBlock(int frames)
+    {
+        const float now = pitchBendSemitones + slideSemitones;
+        if (slideSemitones != 0.0f)
+        {
+            const float next = slideSemitones - slideStepPerFrame * static_cast<float>(frames);
+            // done once it passes zero
+            slideSemitones = (next > 0.0f) == (slideSemitones > 0.0f) ? next : 0.0f;
+        }
+        return now;
+    }
+
 
     struct HeldNote
     {
@@ -350,6 +374,9 @@ class CustomSynthVoice : public InstrumentVoice
     tiny_optional<note_t> lastNote = std::nullopt;
     float currentVelocity = 1.0f;
     float pitchBendSemitones = 0.0f;
+    uint8_t slideFromNote = 0;     // set by the host just before a note that slides in
+    float slideSemitones = 0.0f;   // how far the slide still has to go
+    float slideStepPerFrame = 0.0f;
     PlayMode playMode = PlayMode::kAlways;
 
     using ParamHandlerFn = void (*)(VoiceClass& voice, Patch::optional_paramvalue_t newValue);
@@ -386,6 +413,15 @@ class CustomSynthVoice : public InstrumentVoice
         heldNotes.push_back({ note, velocity });
         lastNote = note;
         currentVelocity = velocity;
+
+        // a slide: start at the note it comes from and glide to this one
+        slideSemitones = 0.0f;
+        if (slideFromNote != 0)
+        {
+            slideSemitones = static_cast<float>(slideFromNote) - static_cast<float>(note);
+            slideStepPerFrame = slideSemitones / (kSlideSeconds * kSlideSampleRate);
+            slideFromNote = 0;
+        }
 
         const bool isLegato = hadHeldNote && (playMode == PlayMode::kLegato);
         onNoteOn(ctx, note, velocity, isLegato);

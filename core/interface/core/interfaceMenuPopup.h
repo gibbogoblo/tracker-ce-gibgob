@@ -47,6 +47,12 @@ class InterfaceMenuPopup
 
     void setModulePopupFunct();
     void handleFailedSwitching();
+    // GibGob OS: the Menu button toggles the menu. showModulePopup (Menu
+    // pressed) opens it, or goes to the highlighted item if it is open;
+    // hideModulePopup (Menu let go) does nothing after the press that opened it.
+    void openPopup(ModuleBase* sourceModule, void (*switchModuleCallback)(uint8_t));
+    void closePopup(ModuleBase* modulePtr);
+    bool ignoreNextRelease = false;
     void updateGameMenu(); // GibGob OS: the video game style menu's view
 
     hControl boxMenu;

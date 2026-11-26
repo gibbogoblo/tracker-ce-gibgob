@@ -1153,7 +1153,7 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
-    if (state == buttonPress && (shiftActive() || GP->view.help.active))
+    if (state == buttonPress && !mtMenuPopup.isPopupVisible() && (shiftActive() || GP->view.help.active))
     {
         toggleHelp(GP->view.help, GP->ip);
         GP->refresh();

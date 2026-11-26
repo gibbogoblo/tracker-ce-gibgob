@@ -19,6 +19,7 @@ constexpr uint32_t kKeyWhite = 0xC8CDD2;
 constexpr uint32_t kKeyBlack = 0x2A3036;
 constexpr uint32_t kNote = 0x3FB8AF;
 constexpr uint32_t kNoteSelected = 0xFFB347;
+constexpr uint32_t kSlide = 0xF4F1FF; // the ramp into a note that slides
 constexpr uint32_t kCrosshair = 0x26313A;
 constexpr uint32_t kOtherNote = 0xB7AEF5;  // other tracks' notes (drawn faint)
 constexpr uint32_t kOtherKey = 0x9A8CF0;   // keys the other tracks play at the cursor
@@ -347,6 +348,44 @@ void PianoRollControl::update()
                     draw::rect(x1, y1, x2, y2);
             }
         }
+    }
+
+    // ---- slides: a ramp from the note before into the note that slides ----
+    if (view->pattern && !overlay)
+    {
+        const int count = noteCount(view->pattern, view->track);
+        draw::lineWidth(tiny ? 16 : 32);
+        draw::color(kSlide);
+        for (int i = 0; i < count; i++)
+        {
+            const Note n = getNote(view->pattern, view->track, i);
+            if (!(n.flags & kNoteFlagSlide) || n.start < firstTick || n.start >= lastTick)
+                continue;
+            if (n.pitch > view->topPitch || n.pitch < bottomPitch)
+                continue;
+            // the note before: the one starting last before this one
+            int from = -1, fromStart = -1;
+            for (int k = 0; k < count; k++)
+            {
+                const Note o = getNote(view->pattern, view->track, k);
+                if (o.start < n.start && (int)o.start > fromStart)
+                {
+                    fromStart = o.start;
+                    from = o.pitch;
+                }
+            }
+            if (from < 0 || from == n.pitch || !draw::room(8 + kReserve))
+                continue;
+            const int x2 = tickToX(n.start);
+            const int x1 = x2 - (cellW < 24 ? cellW : 24);
+            const int yTo = pitchToY(n.pitch) + rh / 2;
+            int yFrom = pitchToY(from) + rh / 2;
+            // a note before off the view: the ramp starts at the edge
+            yFrom = yFrom < gy1 ? gy1 : (yFrom > gy2 ? gy2 : yFrom);
+            const int16_t xy[4] = { (int16_t)(x1 < kGridX1 ? kGridX1 : x1), (int16_t)yFrom, (int16_t)x2, (int16_t)yTo };
+            draw::lineStrip(xy, 2);
+        }
+        draw::lineWidth(16);
     }
 
     // ---- syllables on the notes (a singing synth), where a note is wide enough ----

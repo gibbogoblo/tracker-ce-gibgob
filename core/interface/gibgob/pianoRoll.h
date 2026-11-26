@@ -49,6 +49,7 @@ class cPianoRoll : public ModuleBase
     void pressMiddle();
     bool assignSliceToHeld(); // slice track: held top button + Middle
     void pressInsert();
+    void toggleSlide(); // Shift + Insert
     void pressDelete();
     void toggleShift();
     void changeParam(int delta);
@@ -116,6 +117,30 @@ class cPianoRoll : public ModuleBase
     bool heldFeel[8] = { false };      // a chord played through the track's feel (strum, arp, humanize)
     uint8_t heldNotes[8][gibgob::kMaxChordNotes];
     uint8_t heldCount[8] = { 0 };
+
+    // ---- a whistle take (Rec held 1 s): the notes it found, previewed ----
+    static constexpr uint32_t kOptionWhistle = 0x200; // start(): begin a whistle take
+    enum class Whistle : uint8_t
+    {
+        None,
+        Taking,  // count-in and recording
+        Preview, // the notes are in; Middle keeps them, Delete throws them away
+    };
+    Whistle whistle = Whistle::None;
+    int wOctaves = -2;
+    int wKey = 0;
+    uint8_t wSnap = 1;
+    int wGrid = 3; // index into the grid choices (1/16)
+    bool wSlides = true;
+    int wBackupCount = 0; // the track's notes before the take (s_whistleBackup, external RAM)
+    uint32_t wLastDraw = 0;
+    void startWhistle();
+    void whistlePoll();
+    void applyWhistle();
+    void keepWhistle();
+    void dropWhistle();
+    void changeWhistle(int which, int dir);
+    void keepIfPreview(); // any other edit keeps the take first
 
     gibgob::PianoRollView view;
     hControl grid = -1;

@@ -90,8 +90,30 @@ void InterfaceMenuPopup::refreshColors()
     display.setControlColors(boxMenu, display.getTheme().miniBoxMenuColors);
 }
 
+// GibGob OS: Menu pressed. Closed: open it (the release right after keeps it
+// open). Open: go to the highlighted item.
 void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
                                          void (*switchModuleCallback)(uint8_t))
+{
+    if (isVisible)
+    {
+        ignoreNextRelease = false;
+        closePopup(sourceModule);
+        return;
+    }
+    ignoreNextRelease = true;
+    openPopup(sourceModule, switchModuleCallback);
+}
+
+// Menu let go: nothing (the menu stays until Menu is pressed again)
+void InterfaceMenuPopup::hideModulePopup(ModuleBase* modulePtr)
+{
+    (void)modulePtr;
+    ignoreNextRelease = false;
+}
+
+void InterfaceMenuPopup::openPopup(ModuleBase* sourceModule,
+                                   void (*switchModuleCallback)(uint8_t))
 {
     constexpr int boxesCount = kMenuRowsCount * kMenuColumnsCount;
 
@@ -185,7 +207,7 @@ void InterfaceMenuPopup::showModulePopup(ModuleBase* sourceModule,
     display.synchronizeRefresh();
 }
 
-void InterfaceMenuPopup::hideModulePopup(ModuleBase* modulePtr)
+void InterfaceMenuPopup::closePopup(ModuleBase* modulePtr)
 {
     display.exclusiveControl = -1;
     display.setControlHide(boxMenu);
@@ -396,7 +418,8 @@ void InterfaceMenuPopup::changeModuleMode()
     }
     if (sourceModule->wasLastSwitchingSuccessfull())
     {
-        showModulePopup(destModule);
+        isVisible = false; // the menu goes on over the new screen
+        openPopup(destModule, nullptr);
     }
     else
     {

@@ -201,25 +201,42 @@ RecAction recButton(uint8_t state)
         s_recDown = false;
         if (!s_recLongDone)
         {
-            setRecArmed(!g_recArmed);
+            // a tap: off -> REC -> Q REC -> off
+            if (!g_recArmed)
+            {
+                setQuantizedRecording(false);
+                setRecArmed(true);
+            }
+            else if (!quantizedRecording())
+                setQuantizedRecording(true);
+            else
+            {
+                setQuantizedRecording(false);
+                setRecArmed(false);
+            }
             return RecAction::Toggled;
         }
     }
     return RecAction::None;
 }
 
+static uint32_t s_whistleAskedAt = 0;
+static bool s_whistleAsked = false;
+
 bool recPoll()
 {
     bool changed = false;
     if (s_recDown && !s_recLongDone && (uint32_t)s_uiClock - s_recPressedAt >= 1000)
     {
+        // held: a whistle take (the screen that can do one picks it up)
         s_recLongDone = true;
-        bool q = !quantizedRecording();
-        setQuantizedRecording(q);
-        if (q)
-            setRecArmed(true);
+        s_whistleAsked = true;
+        s_whistleAskedAt = (uint32_t)s_uiClock;
         changed = true;
     }
+    // nobody took it up: forgotten
+    if (s_whistleAsked && (uint32_t)s_uiClock - s_whistleAskedAt > 300)
+        s_whistleAsked = false;
     // playback stopped while recording: live recording ends
     bool playing = sequencer.isPlay();
     if (s_wasPlaying && !playing && !sequencer.isCountingIn() && g_recArmed)
@@ -229,6 +246,13 @@ bool recPoll()
     }
     s_wasPlaying = playing;
     return changed;
+}
+
+bool takeWhistleRequest()
+{
+    const bool asked = s_whistleAsked;
+    s_whistleAsked = false;
+    return asked;
 }
 
 const char* recModeText()

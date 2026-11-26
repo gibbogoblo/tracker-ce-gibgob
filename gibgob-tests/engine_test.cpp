@@ -214,6 +214,29 @@ int main()
         setNoteSyllable(c, 3); c.flags |= kNoteFlagAccent; CHECK(noteSyllable(c) == 3 && (c.flags & kNoteFlagAccent));
     }
 
+    // T1d: a slide on a synth: CC 84 with the note before, just before the note
+    {
+        freshPattern();
+        events.clear(); stopAll();
+        setTrackType(&pat, 5, TrackType::Melodic); setSound(&pat, 5, 64);
+        Note a = mk(0, 4 * 48, 60); addNote(&pat, 5, a);
+        Note b = mk(4 * 48, 4 * 48, 67); b.flags |= kNoteFlagSlide; addNote(&pat, 5, b);
+        Note c = mk(8 * 48, 4 * 48, 65); addNote(&pat, 5, c); // no slide: no CC
+        runTicks(0, 16 * 48);
+        int ccs = 0; bool ok = true;
+        for (size_t i = 0; i < events.size(); i++)
+            if (events[i].kind == 'C')
+            {
+                ccs++;
+                ok = ok && events[i].b == 60 && i + 1 < events.size() && events[i + 1].kind == 'M' &&
+                     events[i + 1].b == 67 && events[i + 1].tick == events[i].tick;
+            }
+        CHECK(ccs == 1 && ok);
+        CHECK(countKind('M') == 3);
+        events.clear(); stopAll();
+        CHECK(stuckSynth() == 0);
+    }
+
     // T1c: the top buttons' notes: a minor scale from the base note, then what was picked;
     // a new pattern takes them over; the slice map and the notes share a slot without mixing
     {

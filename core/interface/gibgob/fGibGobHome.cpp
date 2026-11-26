@@ -308,6 +308,19 @@ void cGibGobHome::update()
 {
     perform::uiTick();
     bool changed = recPoll();
+    if (takeWhistleRequest())
+    {
+        // Rec held 1 s: a whistle take on this track, in its piano roll
+        const int t = cursor;
+        if (isMelodic(current(), t) && !isSliceTrack(current(), t))
+        {
+            mtInterface.deactivateModule(this);
+            pianoRoll.view.cursorTick = 0;
+            mtInterface.activateModule(&pianoRoll, (uint32_t)t | cPianoRoll::kOptionWhistle);
+            return;
+        }
+        mtPopups.show(0, "Whistle: stand on a melodic track", 2);
+    }
 
     // pictures: frame 1, frame 2, one after the other (the display
     // decodes them into its own memory)
@@ -1007,7 +1020,7 @@ static void functSwitchModule(uint8_t button)
 
 static void functMenu(uint8_t state)
 {
-    if (state == buttonPress && (shiftActive() || GH->view->help.active))
+    if (state == buttonPress && !mtMenuPopup.isPopupVisible() && (shiftActive() || GH->view->help.active))
     {
         toggleHelp(GH->view->help, GH->ip);
         GH->refresh();

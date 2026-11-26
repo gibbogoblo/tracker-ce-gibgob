@@ -100,6 +100,8 @@ class InstrumentImpl final
 
     int instrumentId;
     int midiChannel = 0;
+    // CC 84 (portamento control): the next note glides in from this note (0 = none)
+    uint8_t slideFromNote = 0;
     std::shared_ptr<MidiSink> midiSink = nullptr;
     LocalMode localMode = LocalMode::kOn;
 
