@@ -72,6 +72,27 @@ inline void setNoteFill(Note& n, int fill)
 {
     n.chanceInv = fill > 0 ? kCondFillOnly : (fill < 0 ? kCondNoFill : 0);
 }
+// ---- trig conditions: A:B = plays on the A-th of every B times round the track ----
+// (kept in chanceInv from kCondFirst: those also always pass the chance)
+static constexpr uint8_t kCondFirst = 202;
+static constexpr int kCondCount = 17;
+static constexpr uint8_t kCondA[kCondCount] = { 1, 2, 1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 7, 8 };
+static constexpr uint8_t kCondB[kCondCount] = { 2, 2, 3, 3, 3, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8 };
+// the note's condition (0 .. kCondCount - 1), -1 = none
+inline int noteCond(const Note& n)
+{
+    return (n.chanceInv >= kCondFirst && n.chanceInv < kCondFirst + kCondCount) ? n.chanceInv - kCondFirst : -1;
+}
+inline void setNoteCond(Note& n, int cond)
+{
+    n.chanceInv = (cond >= 0 && cond < kCondCount) ? (uint8_t)(kCondFirst + cond) : 0;
+}
+// does a note with condition `cond` play on pass `pass` (0 = the first time round)?
+inline bool condPasses(int cond, uint32_t pass)
+{
+    return cond < 0 || cond >= kCondCount || (int)(pass % kCondB[cond]) == kCondA[cond] - 1;
+}
+
 // while true (Insert held on the drum overview), the fill is playing
 extern volatile bool g_fillActive;
 
@@ -179,6 +200,51 @@ bool drumStepsOn(const Sequencer::strPattern* p, int track);
 void enableDrumSteps(Sequencer::strPattern* p, int track);
 // the track's extra sample k (1..kAltSamples): its instrument, -1 if none
 int altSample(const Sequencer::strPattern* p, int track, int k);
+// ---- drum steps: two effects per step (the drum overview's Shift + FX1 / FX2) ----
+// Kept in the stock tracker's step bytes of the same track (track[t].step[s]),
+// which GibGob tracks do not play: the step's note stays empty, so saving,
+// transposing and the stock player leave them alone.
+enum StepFxKind : uint8_t
+{
+    kStepFxOff = 0,
+    kStepFxDelay,     // delay send
+    kStepFxReverb,    // reverb send
+    kStepFxCrush,     // bit depth
+    kStepFxReverse,   // the sample backwards
+    kStepFxLowpass,   // cutoff
+    kStepFxHighpass,  // cutoff
+    kStepFxBandpass,  // centre
+    kStepFxDrive,     // overdrive
+    kStepFxPan,       // left .. right
+    kStepFxPitchUp,   // pitch slides up (speed)
+    kStepFxPitchDown, // pitch drops (speed): 808 falls, tape stops
+    kStepFxStart,     // where in the sample it starts
+    kStepFxVibrato,   // pitch wobble (speed)
+    kStepFxWobble,    // filter wobble (speed)
+    kStepFxTremolo,   // volume wobble (speed)
+    kStepFxCount
+};
+static_assert(kStepFxCount <= 16, "a step effect kind fits in 4 bits");
+struct StepFx
+{
+    uint8_t kind[2];  // StepFxKind for FX1, FX2
+    uint8_t value[2]; // in the effect's own range (stepFxMin .. stepFxMax)
+};
+extern const char* const kStepFxNames[kStepFxCount];
+extern const char* const kStepFxShort[kStepFxCount]; // up to 5 letters, over / under a step
+StepFx getStepFx(const Sequencer::strPattern* p, int track, int step);
+// (makes the track a GibGob track first if it is not one yet)
+void setStepFx(Sequencer::strPattern* p, int track, int step, const StepFx& fx);
+void clearAllStepFx(Sequencer::strPattern* p, int track);
+bool hasStepFx(const Sequencer::strPattern* p, int track, int step);
+int stepFxMin(int kind);
+int stepFxMax(int kind);
+int stepFxDefault(int kind);
+// the value as shown ("40", "L20", "+5", "on")
+void stepFxValueText(int kind, int value, char* out, int outLen);
+// the sample engine's effect for a step effect (FX_TYPE_*), 0 = none
+uint8_t stepFxEngineType(int kind);
+
 // the extra sample slot for `instrument` (0 if it is the track's own sound);
 // a free slot is taken, or one no note uses any more; -1 when all are in use
 int altSlotFor(Sequencer::strPattern* p, int track, uint8_t instrument);
@@ -198,6 +264,42 @@ int findNoteAt(const Sequencer::strPattern* p, int track, int tick, int pitch);
 // slices: pitch kFirstSliceNote + slice, like the stock beat-slice playback.
 // It plays like a drum track: each chop cuts the one before.
 static constexpr int kFirstSliceNote = 24;
+
+// ---- slice tracks: the FX lane, 8 rows right under slice 1 ----
+// An FX note there (pitch 23 = Roll, 22 = Reverse, ... 16 = Fade) switches its
+// effect on for the slices that play while it lasts. Its velocity is the
+// effect's setting, its chance / condition / fill mark decide if it happens.
+static constexpr int kSliceFxCount = 8;
+static constexpr int kSliceFxFirstNote = kFirstSliceNote - kSliceFxCount; // 16
+enum SliceFx : uint8_t
+{
+    kSfxRoll = 0, // re-hits the slice playing: 1/16, 1/16T, 1/32, 1/32T, 1/64
+    kSfxReverse,  // slices backwards
+    kSfxPitch,    // -12 .. +12 semitones
+    kSfxFilter,   // low-pass (setting < 64) or high-pass, cutoff
+    kSfxSpeed,    // half speed (< 64) or double speed
+    kSfxGate,     // slices cut short: how much of a step they last
+    kSfxCrush,    // bit crush
+    kSfxFade,     // fade out (< 64) or in, over the FX note
+};
+extern const char* const kSliceFxNames[kSliceFxCount];
+inline bool isSliceFxPitch(int pitch)
+{
+    return pitch >= kSliceFxFirstNote && pitch < kFirstSliceNote;
+}
+inline int sliceFxOfPitch(int pitch)
+{
+    return kFirstSliceNote - 1 - pitch;
+}
+inline int pitchOfSliceFx(int fx)
+{
+    return kFirstSliceNote - 1 - fx;
+}
+uint8_t sliceFxDefault(int fx); // a good first setting (the FX note's velocity)
+void sliceFxSettingText(int fx, int setting, char* out, int outLen);
+// Shift + a top button held in the slice editor: that effect on while held
+// (audio safe: the engine picks it up on the next micro step)
+void setLiveSliceFx(int track, int fx, bool on, uint8_t setting);
 bool isSliceTrack(const Sequencer::strPattern* p, int track);
 int sliceCount(const Sequencer::strPattern* p, int track); // 0 when not a slice track
 // the slice (0..) a top-row button plays (default: button 1 = slice 1 ...)

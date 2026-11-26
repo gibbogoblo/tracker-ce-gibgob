@@ -23,6 +23,7 @@ constexpr uint32_t kFillHit = color::kBox;   // plays only in fills
 constexpr uint32_t kEmpty = color::kLine;
 constexpr uint32_t kCursor = color::kSelect;
 constexpr uint32_t kNoFillTag = 0x3C3C46;
+constexpr uint32_t kFxMark = color::kFx1Btn; // a step with effects
 
 constexpr int kTop = kInfoY + kInfoH + 6; // the bands (below the info strip)
 constexpr int kBot = kBottomBarY - 8;      // ... down to the button bar
@@ -247,6 +248,22 @@ void DrumOverviewControl::update()
             draw::color(col[i]);
             draw::dots(holes, nl);
         }
+        // the selected track's steps with effects: a small dot under the hit
+        if (sel && v.fxMark)
+        {
+            int16_t fx[3 * 8];
+            int nf = 0;
+            for (int s = 0; s < DrumOverviewView::kSteps; s++)
+                if ((t.exists & t.hit & v.fxMark) & (1 << s))
+                {
+                    fx[3 * nf] = (int16_t)(kX0 + s * kStepX);
+                    fx[3 * nf + 1] = (int16_t)(mid + R + 13);
+                    fx[3 * nf + 2] = 4;
+                    nf++;
+                }
+            draw::color(kFxMark);
+            draw::dots(fx, nf);
+        }
     }
 
     // ---- the button bar: the 8 steps on screen (Shift: the CHIMP OUT effects) ----
@@ -270,7 +287,43 @@ void DrumOverviewControl::update()
         drawBottomBar(steps, fBold);
     }
 
-    // ---- the selected track's locks and fill tags (details: these go first when room runs out) ----
+    // ---- Shift + FX1 / FX2 held: the effect list under its box ----
+    if (v.fxList >= 2 && v.fxList <= 3 && v.fxCount > 0)
+    {
+        constexpr int kRows = 7, kRowH = 24, boxW = 112;
+        const int x1 = kScreenW - 4 * (boxW + 4) - 2 + v.fxList * (boxW + 4);
+        const int y0 = kInfoY + kInfoH + 2;
+        const uint32_t accent = v.fxList == 2 ? color::kFx1Btn : color::kFx2Btn;
+        int first = v.fxSel - kRows / 2;
+        first = first < 0 ? 0 : (first > v.fxCount - kRows ? (v.fxCount - kRows < 0 ? 0 : v.fxCount - kRows) : first);
+        const int rows = v.fxCount < kRows ? v.fxCount : kRows;
+        draw::color(accent);
+        draw::rect(x1 - 2, y0 - 2, x1 + boxW + 2, y0 + rows * kRowH + 1);
+        draw::color(color::kPanel);
+        draw::rect(x1, y0, x1 + boxW, y0 + rows * kRowH - 1);
+        for (int r = 0; r < rows; r++)
+        {
+            const int k = first + r;
+            const int y = y0 + r * kRowH;
+            if (k == v.fxSel)
+            {
+                draw::color(accent);
+                draw::rect(x1, y, x1 + boxW, y + kRowH - 1);
+            }
+            draw::color(k == v.fxSel ? color::kTextDark : color::kText);
+            draw::text(x1 + 8, y + kRowH / 2, k == v.fxSel ? fBold : fRegular, OPT_CENTERY, v.fxNames[k] ? v.fxNames[k] : "");
+        }
+        // more above / below
+        draw::color(color::kTextDim);
+        if (first > 0)
+            draw::text(x1 + boxW - 8, y0 + kRowH / 2, fSmall, OPT_CENTERY | OPT_RIGHTX, "^");
+        if (first + rows < v.fxCount)
+            draw::text(x1 + boxW - 8, y0 + (rows - 1) * kRowH + kRowH / 2, fSmall, OPT_CENTERY | OPT_RIGHTX, "v");
+    }
+
+    // ---- the selected track's locks and fill tags (details: these go first when room runs out;
+    // not while the effect list is open: it needs the room) ----
+    if (v.fxList < 0)
     {
         const int i = v.sel;
         const int mid = (edge[i] + edge[i + 1]) / 2;

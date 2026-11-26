@@ -499,6 +499,39 @@ int main()
     }
 
 
+    // a picture of a slice track with its FX lane (SLICE_SVG=file.svg)
+    if (const char* out = getenv("SLICE_SVG"))
+    {
+        static Sequencer::strPattern sp;
+        memset(&sp, 0, sizeof(sp));
+        setTrackType(&sp, 0, TrackType::Drum);
+        const int hitsAt[] = { 0, 3, 4, 6, 8, 10, 11, 12, 14, 16, 19, 20, 22, 24, 26, 27, 28, 30 };
+        int k = 0;
+        for (int st : hitsAt)
+        {
+            Note n{}; n.start = (uint16_t)(st * 48); n.length = 48; n.pitch = (uint8_t)(kFirstSliceNote + (k * 5) % 12); n.velocity = 100;
+            addNote(&sp, 0, n); k++;
+        }
+        const struct { int s, l, f; } fx[] = { { 12, 4, kSfxRoll }, { 20, 2, kSfxReverse }, { 24, 8, kSfxFilter }, { 28, 4, kSfxSpeed }, { 6, 2, kSfxGate } };
+        for (auto& f : fx)
+        {
+            Note n{}; n.start = (uint16_t)(f.s * 48); n.length = (uint16_t)(f.l * 48); n.pitch = (uint8_t)pitchOfSliceFx(f.f); n.velocity = 60;
+            addNote(&sp, 0, n);
+        }
+        PianoRollView pv; pv.pattern = &sp; pv.track = 0; pv.stepsVisible = 32; pv.rowsVisible = 20; pv.sliceCount = 12;
+        pv.topPitch = kFirstSliceNote + 11; pv.patternTicks = 32 * 48; pv.cursorTick = 12 * 48; pv.cursorPitch = pitchOfSliceFx(kSfxRoll);
+        pv.showGhost = false;
+        snprintf(pv.title, sizeof(pv.title), "Roll 1/32  Step 13  Len 4.00");
+        snprintf(pv.params[1].label, 8, "Set"); snprintf(pv.params[1].value, 10, "1/32");
+        strControlProperties prop; prop.y = 29; prop.w = 800; prop.h = 451; prop.data = &pv;
+        PianoRollControl pc(&prop);
+        g_svg = fopen(out, "w");
+        fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'><rect width='800' height='480' fill='#000'/>\n");
+        render(pc, "slice editor + FX lane (svg)", kLimit, false);
+        fprintf(g_svg, "</svg>\n");
+        fclose(g_svg); g_svg = nullptr;
+    }
+
     // a picture of slides: the whistled take "slides.wav" as it lands (PIANO_SVG=file.svg)
     if (const char* out = getenv("PIANO_SVG"))
     {
@@ -677,6 +710,11 @@ int main()
                 dv.shift = true; dv.fillOn = true; dv.cloudLit = 2;
                 snprintf(nm, sizeof(nm), "drum overview, %d tracks, shift, full", count);
                 render(dc2, nm, kLimit, true);
+                // Shift + FX2 held: the effect list open, every step with effects
+                dv.fxMark = 0xFF; dv.fxList = 3; dv.fxCount = kStepFxCount; dv.fxSel = kStepFxCount - 1; dv.cloudLit = 3;
+                for (int i = 0; i < kStepFxCount; i++) dv.fxNames[i] = kStepFxNames[i];
+                snprintf(nm, sizeof(nm), "drum overview, %d tracks, fx list", count);
+                render(dc2, nm, kLimit, true);
             }
             fillAll(4, true); dv.cursor = -1; // the cursor on the track name
             render(dc2, "drum overview, cursor on the name, full", kLimit, false);
@@ -694,7 +732,21 @@ int main()
                 for (int k = 0; k < 4; k++)
                 {
                     fillAll(counts[k], false);
-                    if (k == 3) { dv.shift = true; dv.fillOn = true; dv.cloudLit = 0; dv.tracks[1].noFill = 0x10; dv.tracks[1].hit |= 0x10; }
+                    if (k == 3)
+                    {
+                        // Shift + FX1 held: the effect list under its box, effects on steps 3 and 6
+                        dv.shift = true; dv.fillOn = true; dv.cloudLit = 2; dv.tracks[1].noFill = 0x10; dv.tracks[1].hit |= 0x24;
+                        dv.fxMark = 0x24; dv.fxList = 2; dv.fxCount = kStepFxCount; dv.fxSel = kStepFxReverb;
+                        for (int i = 0; i < kStepFxCount; i++) dv.fxNames[i] = kStepFxNames[i];
+                        snprintf(dv.labelTop[0], 10, "ratchet"); snprintf(dv.labelTop[1], 10, "sample");
+                        snprintf(dv.labelBot[0], 10, "fx1"); snprintf(dv.labelBot[1], 10, "fx2");
+                        for (int st = 0; st < 8; st++) for (int q = 0; q < 2; q++) { dv.lockTop[st][q][0] = 0; dv.lockBot[st][q][0] = 0; }
+                        snprintf(dv.lockBot[2][0], 8, "Rvb"); snprintf(dv.lockBot[2][1], 8, "LP"); snprintf(dv.lockBot[5][0], 8, "Drop");
+                        snprintf(dv.cloudLabel[0], 10, "ratchet"); snprintf(dv.cloudLabel[1], 10, "sample");
+                        snprintf(dv.cloudLabel[2], 10, "fx1"); snprintf(dv.cloudLabel[3], 10, "fx2");
+                        snprintf(dv.cloudValue[0], 10, "off"); snprintf(dv.cloudValue[1], 10, "kick");
+                        snprintf(dv.cloudValue[2], 10, "Rvb 40"); snprintf(dv.cloudValue[3], 10, "LP 35");
+                    }
                     char path[256]; snprintf(path, sizeof(path), "%s.%d.svg", out, k);
                     g_svg = fopen(path, "w");
                     fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");

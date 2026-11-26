@@ -734,6 +734,7 @@ void cGibGobHome::clearTrack()
     beginEdit(kEditClear);
     stopTrack(cursor);
     clearNotes(current(), cursor);
+    clearAllStepFx(current(), cursor); // the steps' effects too
     markChanged();
     mtPopups.show(0, "Track cleared", 1);
     refresh();

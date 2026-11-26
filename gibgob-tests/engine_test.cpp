@@ -35,8 +35,10 @@ static bool voiceSounding[8];
 
 static int lastSampleVolume = -1;
 static std::vector<int> sInstr; // the instrument of each sample note-on
-uint8_t playerEngine::noteOn(uint8_t instr, int8_t note, int8_t vel, uint8_t, uint8_t, uint8_t, uint8_t)
+static uint8_t lastFx[4];       // the effects of the last sample note-on
+uint8_t playerEngine::noteOn(uint8_t instr, int8_t note, int8_t vel, uint8_t f1, uint8_t v1, uint8_t f2, uint8_t v2)
 {
+    lastFx[0] = f1; lastFx[1] = v1; lastFx[2] = f2; lastFx[3] = v2;
     lastSampleVolume = vel;
     if (irqDepth) { printf("FAIL noteOn under lock\n"); failures++; }
     (void)instr; (void)vel;
@@ -296,6 +298,85 @@ int main()
     addNote(&pat, 0, mk(0, 96, 60));
     runTicks(0, 300);
     CHECK(countKind('S') == 1 && countKind('s') == 1);
+
+    // T3d: trig conditions: 1:2 plays on passes 1, 3, ...; 3:4 on the 3rd of every 4
+    {
+        freshPattern();
+        stopAll();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        Note a = mk(0, 24, 60); setNoteCond(a, 0); addNote(&pat, 0, a);        // 1:2
+        Note b = mk(4 * 48, 24, 62); setNoteCond(b, 7); addNote(&pat, 0, b);   // 3:4
+        CHECK(noteCond(getNote(&pat, 0, 0)) == 0 && getNote(&pat, 0, 0).chance() == 100 && noteFill(getNote(&pat, 0, 0)) == 0);
+        events.clear();
+        std::vector<int> passA, passB;
+        for (int pass = 0; pass < 8; pass++)
+        {
+            const size_t before = events.size();
+            runTicks(pass * 16 * 48, 16 * 48);
+            for (size_t e = before; e < events.size(); e++)
+                if (events[e].kind == 'S') (events[e].b == 60 ? passA : passB).push_back(pass);
+        }
+        CHECK(passA == std::vector<int>({ 0, 2, 4, 6 }));
+        CHECK(passB == std::vector<int>({ 2, 6 }));
+        // after a stop it counts from the first pass again
+        stopAll(); events.clear();
+        runTicks(0, 16 * 48);
+        int n = 0; for (auto& e : events) if (e.kind == 'S' && e.b == 60) n++;
+        CHECK(n == 1);
+        stopAll(); events.clear();
+    }
+
+    // T3c: drum steps: two effects per step, kept in the tracker step's spare bytes
+    {
+        freshPattern();
+        setTrackType(&pat, 0, TrackType::Drum); setSound(&pat, 0, 0);
+        enableDrumSteps(&pat, 0);
+        addNote(&pat, 0, mk(0, 48, 60));
+        Note r = mk(2 * 48, 48, 60); setNoteRatchet(r, 1); addNote(&pat, 0, r); // 2 hits
+        addNote(&pat, 0, mk(4 * 48, 48, 60));
+        StepFx fx{ { kStepFxReverb, kStepFxLowpass }, { 70, 30 } };
+        setStepFx(&pat, 0, 0, fx);
+        StepFx f2{ { kStepFxPitchDown, kStepFxOff }, { 99, 0 } };
+        setStepFx(&pat, 0, 2, f2);
+        CHECK(hasStepFx(&pat, 0, 0) && hasStepFx(&pat, 0, 2) && !hasStepFx(&pat, 0, 4));
+        StepFx back = getStepFx(&pat, 0, 0);
+        CHECK(back.kind[0] == kStepFxReverb && back.kind[1] == kStepFxLowpass && back.value[0] == 70 && back.value[1] == 30);
+        CHECK(pat.track[0].step[0].note == Sequencer::STEP_NOTE_EMPTY && pat.track[0].step[0].fx[0].type == 0 &&
+              pat.track[0].step[0].fx[1].type == 0); // still an empty tracker step
+        // the notes are untouched by it
+        CHECK(noteCount(&pat, 0) == 3 && getNote(&pat, 0, 0).pitch == 60);
+        events.clear();
+        std::vector<std::vector<uint8_t>> fxAt;
+        for (int t = 0; t < 5 * 48; t++)
+        {
+            const size_t before = events.size();
+            runTicks(t, 1);
+            for (size_t e = before; e < events.size(); e++)
+                if (events[e].kind == 'S') fxAt.push_back({ lastFx[0], lastFx[1], lastFx[2], lastFx[3] });
+        }
+        CHECK(fxAt.size() == 4); // step 1, the ratchet's 2 hits, step 5
+        if (fxAt.size() == 4)
+        {
+            CHECK(fxAt[0] == std::vector<uint8_t>({ Sequencer::strFxConsts::FX_TYPE_REVERB_SEND, 70, Sequencer::strFxConsts::FX_TYPE_FILTER_LOWPASS, 30 }));
+            CHECK(fxAt[1][0] == Sequencer::strFxConsts::FX_TYPE_SLIDE_DOWN && fxAt[1][1] == 99 && fxAt[1][2] == 0);
+            CHECK(fxAt[2] == fxAt[1]); // the ratchet's second hit too
+            CHECK(fxAt[3] == std::vector<uint8_t>({ 0, 0, 0, 0 }));
+        }
+        // off again: the tracker step goes back to empty
+        setStepFx(&pat, 0, 0, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } });
+        CHECK(!hasStepFx(&pat, 0, 0) && pat.track[0].step[0].volume == Sequencer::STEP_VELO_DEFAULT &&
+              pat.track[0].step[0].micromove == -1);
+        // doubling the track takes the effects along
+        CHECK(duplicateTrack(&pat, 0));
+        CHECK(hasStepFx(&pat, 0, 2) && hasStepFx(&pat, 0, 2 + 16) && getStepFx(&pat, 0, 18).kind[0] == kStepFxPitchDown);
+        clearAllStepFx(&pat, 0);
+        CHECK(!hasStepFx(&pat, 0, 2) && !hasStepFx(&pat, 0, 18));
+        // a track that is not a GibGob track reads no effects from old tracker steps
+        freshPattern();
+        pat.track[3].step[0].micromove = 0x47; pat.track[3].step[0].volume = 0x21;
+        CHECK(!hasStepFx(&pat, 3, 0));
+        stopAll(); events.clear();
+    }
 
     // T3b: drum steps: a ratchet, an extra sample per step
     {
@@ -768,6 +849,84 @@ int main()
     mtProject.instrument[7].playMode = playModeBeatSlice;
     mtProject.instrument[7].sliceNumber = 0;
     CHECK(!isSliceTrack(&pat, 2));
+
+    // T22b: a slice track's FX lane: FX notes make no sound, they change the slices under them
+    {
+        freshPattern();
+        stopAll();
+        mtProject.instrument[7].playMode = playModeBeatSlice;
+        mtProject.instrument[7].sliceNumber = 12;
+        mtProject.instrument[7].isActive = 1;
+        setTrackType(&pat, 1, TrackType::Drum); setSound(&pat, 1, 7);
+        CHECK(isSliceTrack(&pat, 1));
+        CHECK(pitchOfSliceFx(kSfxRoll) == kFirstSliceNote - 1 && sliceFxOfPitch(kSliceFxFirstNote) == kSfxFade);
+        CHECK(isSliceFxPitch(kSliceFxFirstNote) && !isSliceFxPitch(kFirstSliceNote) && !isSliceFxPitch(kSliceFxFirstNote - 1));
+        addNote(&pat, 1, mk(0, 48, kFirstSliceNote + 2));          // slice 3, plain
+        addNote(&pat, 1, mk(4 * 48, 48, kFirstSliceNote + 5));     // slice 6 under Reverse
+        Note rev = mk(4 * 48, 4 * 48, pitchOfSliceFx(kSfxReverse)); rev.velocity = 100;
+        addNote(&pat, 1, rev);
+        addNote(&pat, 1, mk(8 * 48, 48, kFirstSliceNote + 1));     // slice 2 under Roll 1/32 for 2 steps
+        Note roll = mk(8 * 48, 96, pitchOfSliceFx(kSfxRoll)); roll.velocity = 60; // 1/32
+        addNote(&pat, 1, roll);
+        events.clear();
+        std::vector<std::pair<int, std::vector<uint8_t>>> hits; // tick, effects
+        for (int t = 0; t < 16 * 48; t++)
+        {
+            const size_t before = events.size();
+            runTicks(t, 1);
+            for (size_t e = before; e < events.size(); e++)
+                if (events[e].kind == 'S')
+                {
+                    CHECK(events[e].b >= kFirstSliceNote); // never an FX row as a sound
+                    hits.push_back({ t, { lastFx[0], lastFx[1], lastFx[2], lastFx[3] } });
+                }
+        }
+        // 0: plain; 192: reversed; 384 + the roll's hits every 24 for 2 steps (384..480)
+        std::vector<int> at;
+        for (auto& h : hits) at.push_back(h.first);
+        CHECK(at == std::vector<int>({ 0, 192, 384, 408, 432, 456 }));
+        if (hits.size() >= 2)
+        {
+            CHECK(hits[0].second[0] == 0);
+            CHECK(hits[1].second[0] == Sequencer::strFxConsts::FX_TYPE_REVERSE_PLAYBACK);
+        }
+        // a chance of 0 %: the effect does not come on
+        stopAll(); events.clear();
+        Note r2 = getNote(&pat, 1, 1).pitch == pitchOfSliceFx(kSfxReverse) ? getNote(&pat, 1, 1) : rev;
+        (void)r2;
+        for (int i = 0; i < noteCount(&pat, 1); i++)
+        {
+            Note n = getNote(&pat, 1, i);
+            if (n.pitch == pitchOfSliceFx(kSfxReverse)) { n.setChance(0); setNote(&pat, 1, i, n); }
+        }
+        bool reversed = false;
+        for (int t = 0; t < 8 * 48; t++)
+        {
+            const size_t before = events.size();
+            runTicks(t, 1);
+            for (size_t e = before; e < events.size(); e++)
+                if (events[e].kind == 'S' && lastFx[0] == Sequencer::strFxConsts::FX_TYPE_REVERSE_PLAYBACK) reversed = true;
+        }
+        CHECK(!reversed);
+        // live (Shift + top held): Speed half while held, gone when let go
+        stopAll(); events.clear();
+        setLiveSliceFx(1, kSfxSpeed, true, 20);
+        runTicks(0, 1);
+        CHECK(countKind('S') == 1 && lastFx[0] == Sequencer::strFxConsts::FX_TYPE_TUNE);
+        setLiveSliceFx(1, kSfxSpeed, false, 20);
+        stopAll(); events.clear();
+        runTicks(0, 1);
+        CHECK(countKind('S') == 1 && lastFx[0] == 0);
+        // the settings' texts
+        char txt[16];
+        sliceFxSettingText(kSfxRoll, 60, txt, sizeof(txt)); CHECK(strcmp(txt, "1/32") == 0);
+        sliceFxSettingText(kSfxSpeed, 20, txt, sizeof(txt)); CHECK(strcmp(txt, "half") == 0);
+        sliceFxSettingText(kSfxFilter, 100, txt, sizeof(txt)); CHECK(strncmp(txt, "HP", 2) == 0);
+        sliceFxSettingText(kSfxPitch, 127, txt, sizeof(txt)); CHECK(strcmp(txt, "+12") == 0);
+        sliceFxSettingText(kSfxPitch, 1, txt, sizeof(txt)); CHECK(strcmp(txt, "-12") == 0);
+        stopAll(); events.clear();
+        mtProject.instrument[7].playMode = 0;
+    }
 
     // T23: live chord feel (Shift + top in the piano roll): strum, arp, humanize
     {

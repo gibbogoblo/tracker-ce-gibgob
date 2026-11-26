@@ -50,6 +50,7 @@ class cPianoRoll : public ModuleBase
     bool assignSliceToHeld(); // slice track: held top button + Middle
     void pressInsert();
     void toggleSlide(); // Shift + Insert
+    void sliceFxButton(int fx); // a slice track: Shift + top
     void pressDelete();
     void toggleShift();
     void changeParam(int delta);
@@ -115,6 +116,7 @@ class cPianoRoll : public ModuleBase
     bool heldIsNote[8] = { false }; // held to play its own note (can be retuned while held)
     bool heldRecording[8] = { false };
     bool heldFeel[8] = { false };      // a chord played through the track's feel (strum, arp, humanize)
+    bool heldFx[8] = { false };        // a slice track: Shift + top = an FX lane effect, on while held
     uint8_t heldNotes[8][gibgob::kMaxChordNotes];
     uint8_t heldCount[8] = { 0 };
 

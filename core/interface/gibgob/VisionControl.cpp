@@ -116,6 +116,10 @@ void buildVisionTile(const Sequencer::strPattern* p, int track, int startTick, V
                 m.y0 = (hi - note.pitch) * 255 / span;
                 m.y1 = m.y0 + 255 / span;
             }
+            else if (slice && isSliceFxPitch(note.pitch))
+            {
+                continue; // an FX lane note: not a hit
+            }
             else if (slice)
             {
                 int s = (int)note.pitch - kFirstSliceNote;

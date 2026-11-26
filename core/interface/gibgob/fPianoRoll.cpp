@@ -32,6 +32,15 @@ static elapsedMillis s_clock;
 __NOINIT(EXTERNAL_RAM) static gibgob::Note s_whistleBackup[gibgob::kMaxNotes];
 __NOINIT(EXTERNAL_RAM) static gibgob::Note s_whistleNotes[gibgob::kMaxNotes];
 
+// a slice track's FX lane: the setting each effect gets when Shift + top plays,
+// records or places it (the last one set by hand; 0 = the effect's own default)
+static uint8_t s_sliceFxSetting[kSampleTracks][gibgob::kSliceFxCount] = {};
+static uint8_t sliceFxSetting(int track, int fx)
+{
+    const uint8_t v = s_sliceFxSetting[track & 7][fx];
+    return v ? v : gibgob::sliceFxDefault(fx);
+}
+
 // the whistle take's choices (Grid, Scale) and the key names
 static const int kWhistleGrid[6] = { 0, 12, 24, 48, 96, 192 };
 static const char* const kWhistleGridNames[6] = { "Free", "1/64", "1/32", "1/16", "1/8", "1/4" };
@@ -255,7 +264,7 @@ void cPianoRoll::refreshView()
     view.sliceCount = slices;
     view.otherTracks = s_otherTracks && slices == 0;
     if (slices > 0)
-        view.cursorPitch = clampInt(view.cursorPitch, kFirstSliceNote, kFirstSliceNote + slices - 1);
+        view.cursorPitch = clampInt(view.cursorPitch, kSliceFxFirstNote, kFirstSliceNote + slices - 1); // slices + FX lane
 
     // scroll horizontally just enough to keep the cursor visible
     int vis = view.stepsVisible * view.gridTicks;
@@ -360,7 +369,17 @@ void cPianoRoll::refreshView()
         nud = n.start - ((n.start + kTicksPerStep / 2) / kTicksPerStep) * kTicksPerStep;
     }
 
-    if (pads)
+    const bool fxRow = pads && isSliceFxPitch(pitch);
+    char fxSet[16] = { 0 };
+    if (fxRow)
+    {
+        // an FX lane row: the effect and its setting (the note's velocity)
+        const int f = sliceFxOfPitch(pitch);
+        sliceFxSettingText(f, idx >= 0 ? vel : sliceFxSetting(track, f), fxSet, sizeof(fxSet));
+        snprintf(view.title, sizeof(view.title), "%s %s  Step %d  Len %d.%02d", kSliceFxNames[f], fxSet,
+                 view.cursorTick / kTicksPerStep + 1, len / kTicksPerStep, (len % kTicksPerStep) * 100 / kTicksPerStep);
+    }
+    else if (pads)
         snprintf(view.title, sizeof(view.title), "Slice %d  Step %d  Len %d.%02d", pitch - kFirstSliceNote + 1,
                  view.cursorTick / kTicksPerStep + 1, len / kTicksPerStep,
                  (len % kTicksPerStep) * 100 / kTicksPerStep);
@@ -400,8 +419,11 @@ void cPianoRoll::refreshView()
     snprintf(view.params[0].label, sizeof(view.params[0].label), "Prob");
     snprintf(view.params[0].value, sizeof(view.params[0].value), "%d%%", chn);
     view.params[0].color = color::kNoteBtn;
-    snprintf(view.params[1].label, sizeof(view.params[1].label), "Vel");
-    snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
+    snprintf(view.params[1].label, sizeof(view.params[1].label), "%s", fxRow ? "Set" : "Vel");
+    if (fxRow)
+        snprintf(view.params[1].value, sizeof(view.params[1].value), "%s", fxSet); // the FX note's setting
+    else
+        snprintf(view.params[1].value, sizeof(view.params[1].value), "%d", vel);
     view.params[1].color = color::kInstrBtn;
     snprintf(view.params[2].label, sizeof(view.params[2].label), "Nudge");
     snprintf(view.params[2].value, sizeof(view.params[2].value), "%+d", nud);
@@ -488,9 +510,10 @@ void cPianoRoll::refreshView()
         }
         else if (view.shift)
         {
-            barText[i][0] = 0;
-            view.bar.fill[i] = 0;
-            view.bar.highlighted[i] = false;
+            // a slice track: Shift + top = the FX lane's effects
+            snprintf(barText[i], sizeof(barText[i]), "%s", kSliceFxNames[i]);
+            view.bar.fill[i] = color::kFx1Btn;
+            view.bar.highlighted[i] = held[i] || view.cursorPitch == pitchOfSliceFx(i);
         }
         else if (sing)
         {
@@ -879,11 +902,14 @@ void cPianoRoll::moveSelection(int dTicks, int dPitch)
             dPitch = 127 - note.pitch;
         if (view.sliceCount > 0)
         {
-            // slices stay on slice rows
-            if (note.pitch + dPitch < kFirstSliceNote)
-                dPitch = kFirstSliceNote - note.pitch;
-            if (note.pitch + dPitch > kFirstSliceNote + view.sliceCount - 1)
-                dPitch = kFirstSliceNote + view.sliceCount - 1 - note.pitch;
+            // slices stay on slice rows, FX notes in the FX lane
+            const bool fx = isSliceFxPitch(note.pitch);
+            const int lo = fx ? kSliceFxFirstNote : kFirstSliceNote;
+            const int hi = fx ? kFirstSliceNote - 1 : kFirstSliceNote + view.sliceCount - 1;
+            if (note.pitch + dPitch < lo)
+                dPitch = lo - note.pitch;
+            if (note.pitch + dPitch > hi)
+                dPitch = hi - note.pitch;
         }
     }
     if (dTicks == 0 && dPitch == 0)
@@ -965,6 +991,8 @@ void cPianoRoll::placeGhost()
         n.length = (uint16_t)lengthTicks;
         n.pitch = pitch;
         n.velocity = (uint8_t)velocity;
+        if (view.sliceCount > 0 && isSliceFxPitch(pitch))
+            n.velocity = sliceFxSetting(track, sliceFxOfPitch(pitch)); // an FX note: its setting
         n.setChance(chance);
         if (singMode())
             setNoteSyllable(n, syllable);
@@ -1220,7 +1248,11 @@ void cPianoRoll::changeParam(int delta)
         switch (param)
         {
             case kParamProb: note.setChance(note.chance() + delta * 5); break;
-            case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127); break;
+            case kParamVelocity:
+                note.velocity = (uint8_t)clampInt(note.velocity + delta, 1, 127);
+                if (view.sliceCount > 0 && isSliceFxPitch(note.pitch))
+                    s_sliceFxSetting[track & 7][sliceFxOfPitch(note.pitch)] = note.velocity; // the next one gets it too
+                break;
             case kParamNudge:
                 note.start = (uint16_t)clampInt(note.start + delta, 0, view.patternTicks - 1);
                 break;
@@ -1293,6 +1325,11 @@ void cPianoRoll::topButton(int button, bool pressed)
         if (!held[button])
             return;
         held[button] = false;
+        if (heldFx[button])
+        {
+            heldFx[button] = false;
+            setLiveSliceFx(track, button, false, 0); // the effect goes off
+        }
         if (heldFeel[button])
         {
             heldFeel[button] = false;
@@ -1319,7 +1356,10 @@ void cPianoRoll::topButton(int button, bool pressed)
     bool pads = padsMode();
     const bool chords = shiftActive(); // Shift + top: the chord palette
     if (chords && pads)
-        return; // a slice track has no chords
+    {
+        sliceFxButton(button);
+        return;
+    }
     bool recording = g_recArmed && sequencer.isPlay();
     int slot = button; // Shift + top 1-8 = palette chords 1-8
     heldIsNote[button] = false;
@@ -1409,6 +1449,53 @@ void cPianoRoll::topButton(int button, bool pressed)
     refreshView();
 }
 
+// a slice track, Shift + top button: the FX lane's effect `fx`.
+//  - always: on while held, for the slices playing (live)
+//  - playing with Rec on: recorded as an FX note as long as it is held
+//  - stopped: an FX note placed at the cursor (the ghost's length)
+void cPianoRoll::sliceFxButton(int fx)
+{
+    Sequencer::strPattern* p = current();
+    const uint8_t pitch = (uint8_t)pitchOfSliceFx(fx);
+    const uint8_t setting = sliceFxSetting(track, fx);
+    held[fx] = true;
+    heldFx[fx] = true;
+    heldIsNote[fx] = false;
+    heldFeel[fx] = false;
+    heldCount[fx] = 1;
+    heldNotes[fx][0] = pitch;
+    setLiveSliceFx(track, fx, true, setting);
+    view.cursorPitch = pitch;
+    if (g_recArmed && sequencer.isPlay())
+    {
+        beginEdit(kEditRecord);
+        if (liveRecordOn(track, &pitch, 1, setting, true))
+        {
+            heldRecording[fx] = true;
+            markChanged();
+        }
+        else
+            mtPopups.show(0, "Track is full (123 notes)", 1);
+    }
+    else if (!sequencer.isPlay())
+    {
+        if (findEditNote(view.cursorTick, pitch) < 0)
+        {
+            beginEdit(kEditPlace);
+            Note n{};
+            n.start = (uint16_t)clampInt(view.cursorTick, 0, view.patternTicks - 1);
+            n.length = (uint16_t)lengthTicks;
+            n.pitch = pitch;
+            n.velocity = setting;
+            if (addNote(p, track, n) < 0)
+                mtPopups.show(0, "Track is full (123 notes)", 1);
+            else
+                markChanged();
+        }
+    }
+    refreshView();
+}
+
 bool cPianoRoll::retuneHeld(int semis)
 {
     int b = -1;
@@ -1440,6 +1527,11 @@ void cPianoRoll::releaseAllButtons()
         if (!held[i])
             continue;
         held[i] = false;
+        if (heldFx[i])
+        {
+            heldFx[i] = false;
+            setLiveSliceFx(track, i, false, 0);
+        }
         if (heldFeel[i])
         {
             heldFeel[i] = false;

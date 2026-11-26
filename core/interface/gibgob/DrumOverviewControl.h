@@ -47,6 +47,15 @@ struct DrumOverviewView
     char pageText[8] = { 0 }; // "2/4": this page of 8 steps of all
     int firstStep = 0;        // the first step on screen (0-based)
 
+    // the selected track: steps that have effects (FX1 / FX2): a small mark under the hit
+    uint8_t fxMark = 0;
+    // Shift + FX1 / FX2 held: the effect list drops down from that box
+    static constexpr int kFxListMax = 16;
+    int fxList = -1;     // the box it drops from (2 = FX1, 3 = FX2), -1 = closed
+    int fxCount = 0;
+    int fxSel = 0;       // the effect the step has
+    const char* fxNames[kFxListMax] = { nullptr };
+
     bool shift = false;
     BottomBar bar; // with Shift on: the CHIMP OUT effects (else the 8 steps on screen)
     char message[48] = { 0 }; // shown instead of the bands (no drum tracks)

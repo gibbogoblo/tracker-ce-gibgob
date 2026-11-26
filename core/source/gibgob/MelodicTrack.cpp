@@ -7,6 +7,7 @@
 
 #include <new>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #if __has_include("cr_section_macros.h")
@@ -14,6 +15,9 @@
 #endif
 #ifndef __NOINIT
 #define __NOINIT(x)
+#endif
+#ifndef __BSS
+#define __BSS(x)
 #endif
 
 namespace gibgob
@@ -407,9 +411,27 @@ struct TrackPlayState
     uint8_t rollPitch;
     uint8_t rollVel;
     uint8_t rollInstrument;
+    uint8_t rollFx[4]; // its step's effects (type, value, type, value)
+    uint32_t pass; // times round the track since playback started (trig conditions)
 };
 
 TrackPlayState playState[kTracks];
+
+// slice tracks: the FX lane's effects while they are on (in the on-chip RAM:
+// the fast RAM is full; read on every micro step)
+struct SliceFxState
+{
+    int16_t left[kSliceFxCount]; // micro steps the effect still lasts (0 = off)
+    uint16_t age[kSliceFxCount]; // micro steps since it came on
+    uint16_t len[kSliceFxCount]; // its whole length
+    uint8_t value[kSliceFxCount];
+    volatile uint8_t live;            // Shift + top held: these effects on
+    volatile uint8_t liveValue[kSliceFxCount];
+    uint16_t liveAge[kSliceFxCount];
+    uint8_t lastPitch; // the slice playing (Roll hits it again)
+    uint8_t lastVel;
+};
+__BSS(SRAM_OC) static SliceFxState s_sliceFx[kTracks];
 volatile int s_playTick[kTracks];
 volatile bool s_liveMetronome = false;
 bool s_quantizedRec = false;
@@ -453,6 +475,7 @@ void ensureInit()
         playState[t].arp.ratchetIn = 0;
         playState[t].arp.arpIdx = 0;
         playState[t].runTicks = 0;
+        playState[t].pass = 0;
         playState[t].serialCounter = 0;
         playState[t].skipTick = -1;
         playState[t].skipCount = 0;
@@ -630,7 +653,8 @@ void startNote(int track,
                uint8_t velocity,
                int lengthTicks,
                bool oneShot,
-               uint8_t noteFlags = 0)
+               uint8_t noteFlags = 0,
+               const uint8_t* stepFx = nullptr) // a drum step's effects: type, value, type, value
 {
     if (g_noteStartHook != nullptr)
         g_noteStartHook(track);
@@ -697,8 +721,16 @@ void startNote(int track,
         int v = allocVoice(track, slot->serial, legatoVoice);
         slot->voice = (int8_t)v;
         uint8_t fxType[2], fxValue[2];
-        noteEffects(instrument, legatoVoice >= 0 ? noteFlags : (uint8_t)(noteFlags & ~kNoteFlagSlide), fxType,
-                    fxValue);
+        if (stepFx != nullptr)
+        {
+            fxType[0] = stepFx[0];
+            fxValue[0] = stepFx[1];
+            fxType[1] = stepFx[2];
+            fxValue[1] = stepFx[3];
+        }
+        else
+            noteEffects(instrument, legatoVoice >= 0 ? noteFlags : (uint8_t)(noteFlags & ~kNoteFlagSlide), fxType,
+                        fxValue);
         instrumentPlayer[v].noteOn(instrument, (int8_t)pitch, velocityToVolume(instrument, velocity), fxType[0],
                                    fxValue[0], fxType[1], fxValue[1]);
     }
@@ -929,6 +961,298 @@ void enableDrumSteps(Sequencer::strPattern* p, int track)
         base[i * sizeof(Note) + offsetof(Note, flags)] &= 0x03;
     h.flags |= kHeaderFlagDrumSteps;
     writeHeaderLocked(p, track, h);
+}
+
+// ---- per-step effects (drum tracks) ----
+
+namespace
+{
+constexpr int8_t kStepFxMark = 0x47; // in the stock step's micromove byte: "GibGob step effects here"
+}
+
+const char* const kStepFxNames[kStepFxCount] = { "Off",     "Delay",  "Reverb", "Crush",   "Reverse", "Lowpass",
+                                                 "Highpass", "Bandpass", "Drive", "Pan",     "Pitch up", "Pitch drop",
+                                                 "Start",   "Vibrato", "Wobble", "Tremolo" };
+
+const char* const kSliceFxNames[kSliceFxCount] = { "Roll", "Reverse", "Pitch", "Filter",
+                                                   "Speed", "Gate",    "Crush", "Fade" };
+static const uint8_t kSliceRollTicks[5] = { 48, 32, 24, 16, 12 }; // 1/16, 1/16T, 1/32, 1/32T, 1/64
+static const char* const kSliceRollNames[5] = { "1/16", "1/16T", "1/32", "1/32T", "1/64" };
+
+static int sliceRollIndex(int setting)
+{
+    return clampInt(setting * 5 / 128, 0, 4);
+}
+static int slicePitchSemis(int setting)
+{
+    return clampInt((setting - 64) * 12 / 63, -12, 12);
+}
+
+uint8_t sliceFxDefault(int fx)
+{
+    switch (fx)
+    {
+        case kSfxRoll: return 60;    // 1/32
+        case kSfxPitch: return 64 + 32; // +6 (a tritone up: it shows it is working)
+        case kSfxFilter: return 30;  // low-pass, darker
+        case kSfxSpeed: return 32;   // half speed
+        case kSfxGate: return 40;    // about a third of a step
+        case kSfxCrush: return 64;
+        case kSfxFade: return 32;    // fade out
+        default: return 100;
+    }
+}
+
+void sliceFxSettingText(int fx, int setting, char* out, int outLen)
+{
+    setting = clampInt(setting, 1, 127);
+    switch (fx)
+    {
+        case kSfxRoll: snprintf(out, (size_t)outLen, "%s", kSliceRollNames[sliceRollIndex(setting)]); break;
+        case kSfxReverse: snprintf(out, (size_t)outLen, "on"); break;
+        case kSfxPitch: snprintf(out, (size_t)outLen, "%+d", slicePitchSemis(setting)); break;
+        case kSfxFilter:
+            if (setting < 64)
+                snprintf(out, (size_t)outLen, "LP %d", setting * 100 / 63);
+            else
+                snprintf(out, (size_t)outLen, "HP %d", (setting - 64) * 100 / 63);
+            break;
+        case kSfxSpeed: snprintf(out, (size_t)outLen, "%s", setting < 64 ? "half" : "double"); break;
+        case kSfxGate: snprintf(out, (size_t)outLen, "%d%%", setting * 100 / 127); break;
+        case kSfxCrush: snprintf(out, (size_t)outLen, "%d", setting * 100 / 127); break;
+        case kSfxFade: snprintf(out, (size_t)outLen, "%s", setting < 64 ? "out" : "in"); break;
+        default: snprintf(out, (size_t)outLen, "%d", setting); break;
+    }
+}
+
+void setLiveSliceFx(int track, int fx, bool on, uint8_t setting)
+{
+    if (!validTrack(track) || fx < 0 || fx >= kSliceFxCount)
+        return;
+    SliceFxState& sx = s_sliceFx[track];
+    sx.liveValue[fx] = setting;
+    if (on && !(sx.live & (1u << fx)))
+        sx.liveAge[fx] = 0;
+    sx.live = on ? (uint8_t)(sx.live | (1u << fx)) : (uint8_t)(sx.live & ~(1u << fx));
+}
+
+// the effect `fx` on now? (an FX note, or held live); its setting and how far along (0..1)
+static bool sliceFxOn(const SliceFxState& sx, int fx, uint8_t& value, float& along, uint16_t& age)
+{
+    if (sx.left[fx] > 0)
+    {
+        value = sx.value[fx];
+        age = sx.age[fx];
+        along = sx.len[fx] > 0 ? (float)sx.age[fx] / (float)sx.len[fx] : 0.0f;
+        return true;
+    }
+    if (sx.live & (1u << fx))
+    {
+        value = sx.liveValue[fx];
+        age = sx.liveAge[fx];
+        along = 0.5f;
+        return true;
+    }
+    return false;
+}
+
+// a slice hit with the FX lane's effects: up to 2 engine effects, the length, the velocity
+static void sliceFxForHit(const SliceFxState& sx, uint8_t* fx, int& length, bool& oneShot, uint8_t& velocity)
+{
+    using F = Sequencer::strFxConsts;
+    fx[0] = fx[1] = fx[2] = fx[3] = 0;
+    int k = 0;
+    auto add = [&](uint8_t type, int v) {
+        if (k >= 2)
+            return;
+        fx[2 * k] = type;
+        fx[2 * k + 1] = (uint8_t)clampInt(v, sequencer.getFxMin(type), sequencer.getFxMax(type));
+        k++;
+    };
+    uint8_t v;
+    float along;
+    uint16_t age;
+    if (sliceFxOn(sx, kSfxReverse, v, along, age))
+        add(F::FX_TYPE_REVERSE_PLAYBACK, sequencer.getFxMax(F::FX_TYPE_REVERSE_PLAYBACK));
+    int semis = 0;
+    if (sliceFxOn(sx, kSfxPitch, v, along, age))
+        semis += slicePitchSemis(v);
+    if (sliceFxOn(sx, kSfxSpeed, v, along, age))
+        semis += v < 64 ? -12 : 12;
+    if (semis != 0)
+    {
+        // the tune effect: its middle is no change, the range is +-24 semitones
+        const int lo = sequencer.getFxMin(F::FX_TYPE_TUNE), hi = sequencer.getFxMax(F::FX_TYPE_TUNE);
+        add(F::FX_TYPE_TUNE, (lo + hi) / 2 + clampInt(semis, -24, 24) * (hi - lo) / 48);
+    }
+    if (sliceFxOn(sx, kSfxFilter, v, along, age))
+    {
+        const bool low = v < 64;
+        const uint8_t type = low ? F::FX_TYPE_FILTER_LOWPASS : F::FX_TYPE_FILTER_HIGHPASS;
+        const int lo = sequencer.getFxMin(type), hi = sequencer.getFxMax(type);
+        const int amount = low ? v : v - 64; // 0..63
+        add(type, lo + (hi - lo) * amount / 63);
+    }
+    if (sliceFxOn(sx, kSfxCrush, v, along, age))
+    {
+        // more crush = fewer bits
+        const int lo = sequencer.getFxMin(F::FX_TYPE_BIT_DEPTH), hi = sequencer.getFxMax(F::FX_TYPE_BIT_DEPTH);
+        add(F::FX_TYPE_BIT_DEPTH, hi - (hi - lo) * v / 127);
+    }
+    if (sliceFxOn(sx, kSfxGate, v, along, age))
+    {
+        length = clampInt(kTicksPerStep * v / 127, 3, length);
+        oneShot = false;
+    }
+    if (sliceFxOn(sx, kSfxFade, v, along, age))
+    {
+        const float g = v < 64 ? 1.0f - along : along;
+        velocity = (uint8_t)clampInt((int)((float)velocity * (0.08f + 0.92f * g) + 0.5f), 1, 127);
+    }
+}
+
+const char* const kStepFxShort[kStepFxCount] = { "-",  "Dly", "Rvb", "Crsh", "Rev", "LP",  "HP",  "BP",
+                                                 "Drv", "Pan", "Up",  "Drop", "Strt", "Vib", "Wob", "Trem" };
+
+uint8_t stepFxEngineType(int kind)
+{
+    using F = Sequencer::strFxConsts;
+    switch (kind)
+    {
+        case kStepFxDelay: return F::FX_TYPE_DELAY_SEND;
+        case kStepFxReverb: return F::FX_TYPE_REVERB_SEND;
+        case kStepFxCrush: return F::FX_TYPE_BIT_DEPTH;
+        case kStepFxReverse: return F::FX_TYPE_REVERSE_PLAYBACK;
+        case kStepFxLowpass: return F::FX_TYPE_FILTER_LOWPASS;
+        case kStepFxHighpass: return F::FX_TYPE_FILTER_HIGHPASS;
+        case kStepFxBandpass: return F::FX_TYPE_FILTER_BANDPASS;
+        case kStepFxDrive: return F::FX_TYPE_OVERDRIVE;
+        case kStepFxPan: return F::FX_TYPE_PANNING;
+        case kStepFxPitchUp: return F::FX_TYPE_SLIDE_UP;
+        case kStepFxPitchDown: return F::FX_TYPE_SLIDE_DOWN;
+        case kStepFxStart: return F::FX_TYPE_POSITION;
+        case kStepFxVibrato: return F::FX_TYPE_FINETUNE_LFO;
+        case kStepFxWobble: return F::FX_TYPE_FILTER_LFO;
+        case kStepFxTremolo: return F::FX_TYPE_VOLUME_LFO;
+        default: return 0;
+    }
+}
+
+int stepFxMin(int kind)
+{
+    const uint8_t t = stepFxEngineType(kind);
+    if (kind == kStepFxReverse)
+        return 1; // just on
+    return t ? clampInt(sequencer.getFxMin(t), 0, 255) : 0;
+}
+
+int stepFxMax(int kind)
+{
+    const uint8_t t = stepFxEngineType(kind);
+    return t ? clampInt(sequencer.getFxMax(t), 0, 255) : 0;
+}
+
+int stepFxDefault(int kind)
+{
+    const int lo = stepFxMin(kind), hi = stepFxMax(kind);
+    switch (kind)
+    {
+        case kStepFxDelay:
+        case kStepFxReverb: return clampInt(lo + (hi - lo) * 40 / 100, lo, hi); // a good splash
+        case kStepFxLowpass: return clampInt(lo + (hi - lo) * 35 / 100, lo, hi);
+        case kStepFxHighpass: return clampInt(lo + (hi - lo) * 55 / 100, lo, hi);
+        case kStepFxBandpass: return clampInt(lo + (hi - lo) / 2, lo, hi);
+        case kStepFxPan: return clampInt(lo + (hi - lo) / 4, lo, hi); // left
+        case kStepFxStart: return clampInt(lo + (hi - lo) / 4, lo, hi);
+        case kStepFxReverse: return hi;
+        default: return clampInt(lo + (hi - lo) / 2, lo, hi);
+    }
+}
+
+void stepFxValueText(int kind, int value, char* out, int outLen)
+{
+    const int lo = stepFxMin(kind), hi = stepFxMax(kind);
+    if (kind == kStepFxOff)
+        snprintf(out, (size_t)outLen, "-");
+    else if (kind == kStepFxReverse)
+        snprintf(out, (size_t)outLen, "on");
+    else if (kind == kStepFxPan)
+    {
+        const int mid = (lo + hi) / 2;
+        if (value == mid)
+            snprintf(out, (size_t)outLen, "C");
+        else
+            snprintf(out, (size_t)outLen, "%c%d", value < mid ? 'L' : 'R', value < mid ? mid - value : value - mid);
+    }
+    else
+        snprintf(out, (size_t)outLen, "%d", value);
+}
+
+StepFx getStepFx(const Sequencer::strPattern* p, int track, int step)
+{
+    StepFx fx{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
+    if (!validTrack(track) || p == nullptr || step < 0 || step > Sequencer::MAXSTEP || !hasHeader(p, track))
+        return fx;
+    const auto& st = p->track[track].step[step];
+    if (st.micromove != kStepFxMark || st.note != Sequencer::STEP_NOTE_EMPTY)
+        return fx;
+    const uint8_t kinds = (uint8_t)st.volume;
+    for (int i = 0; i < 2; i++)
+    {
+        const int k = i == 0 ? (kinds & 0x0F) : (kinds >> 4);
+        if (k <= kStepFxOff || k >= kStepFxCount)
+            continue;
+        fx.kind[i] = (uint8_t)k;
+        fx.value[i] = (uint8_t)clampInt(st.fx[i].value, stepFxMin(k), stepFxMax(k));
+    }
+    return fx;
+}
+
+bool hasStepFx(const Sequencer::strPattern* p, int track, int step)
+{
+    const StepFx fx = getStepFx(p, track, step);
+    return fx.kind[0] != kStepFxOff || fx.kind[1] != kStepFxOff;
+}
+
+void setStepFx(Sequencer::strPattern* p, int track, int step, const StepFx& fx)
+{
+    if (!validTrack(track) || p == nullptr || step < 0 || step > Sequencer::MAXSTEP)
+        return;
+    AudioLock lock;
+    ensureHeaderLocked(p, track);
+    auto& st = p->track[track].step[step];
+    // the step stays an empty tracker step: only its spare bytes carry the effects
+    st.note = Sequencer::STEP_NOTE_EMPTY;
+    st.instrument = 0;
+    st.fx[0].type = 0;
+    st.fx[1].type = 0;
+    const bool any = fx.kind[0] != kStepFxOff || fx.kind[1] != kStepFxOff;
+    if (!any)
+    {
+        st.fx[0].value = st.fx[1].value = 0;
+        st.volume = Sequencer::STEP_VELO_DEFAULT;
+        st.micromove = -1;
+        return;
+    }
+    uint8_t kinds = 0;
+    for (int i = 0; i < 2; i++)
+    {
+        const int k = fx.kind[i] < kStepFxCount ? fx.kind[i] : kStepFxOff;
+        kinds |= (uint8_t)(k << (4 * i));
+        st.fx[i].value = k == kStepFxOff ? 0 : (uint8_t)clampInt(fx.value[i], stepFxMin(k), stepFxMax(k));
+    }
+    st.volume = (int8_t)kinds;
+    st.micromove = kStepFxMark;
+}
+
+void clearAllStepFx(Sequencer::strPattern* p, int track)
+{
+    if (!validTrack(track) || p == nullptr || !hasHeader(p, track))
+        return;
+    const StepFx none{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
+    for (int s = 0; s <= Sequencer::MAXSTEP; s++)
+        if (p->track[track].step[s].micromove == kStepFxMark)
+            setStepFx(p, track, s, none);
 }
 
 int altSample(const Sequencer::strPattern* p, int track, int k)
@@ -1560,6 +1884,10 @@ bool duplicateTrack(Sequencer::strPattern* p, int track)
         n.start = (uint16_t)(n.start + offset);
         addNote(p, track, n);
     }
+    // the steps' effects come along (drum tracks)
+    for (int st = 0; st < steps; st++)
+        if (hasStepFx(p, track, st))
+            setStepFx(p, track, st + steps, getStepFx(p, track, st));
     setTrackSteps(p, track, steps * 2);
     return true;
 }
@@ -1821,6 +2149,8 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     int trackTicks = effectiveSteps(p, track, has ? &h : nullptr) * kTicksPerStep;
     int tick = tickInPattern % trackTicks;
     s_playTick[track] = tick;
+    if (tick == 0 && runTick > 0)
+        st.pass++; // round again
     if (g_trackTickHook != nullptr)
         g_trackTickHook(track, tick, trackTicks);
 
@@ -1841,6 +2171,8 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     if (muted || !has)
     {
         st.rollLeft = 0;
+        for (int f = 0; f < kSliceFxCount; f++)
+            s_sliceFx[track].left[f] = 0;
         return;
     }
 
@@ -1863,12 +2195,43 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
 
     // 3. notes that begin on this micro step
     const uint8_t* base = raw + kSlotNotes * kSlotBytes;
+
+    // 3a. a slice track's FX lane: the effects that start now come on first,
+    // so the slices starting at the same moment already get them
+    const bool sliceTrk = drum && isSampleInstrument(instrument) && isBeatSliceSound(instrument);
+    SliceFxState& sx = s_sliceFx[track];
+    if (sliceTrk)
+    {
+        for (int i = 0; i < h.count; i++)
+        {
+            Note n;
+            memcpy(&n, base + i * sizeof(Note), sizeof(Note));
+            if (n.start != tick || n.length == 0 || !isSliceFxPitch(n.pitch))
+                continue;
+            const int chance = n.chance();
+            if (chance < 100 && !percent(chance))
+                continue;
+            if (!condPasses(noteCond(n), st.pass))
+                continue;
+            const int fill = noteFill(n);
+            if ((fill > 0 && !g_fillActive) || (fill < 0 && g_fillActive))
+                continue;
+            const int f = sliceFxOfPitch(n.pitch);
+            sx.left[f] = (int16_t)clampInt(n.length, 1, 0x7FFF);
+            sx.len[f] = n.length;
+            sx.age[f] = 0;
+            sx.value[f] = n.velocity ? n.velocity : 100;
+        }
+    }
+
     for (int i = 0; i < h.count; i++)
     {
         Note n;
         memcpy(&n, base + i * sizeof(Note), sizeof(Note));
         if (n.start != tick || n.length == 0)
             continue;
+        if (sliceTrk && isSliceFxPitch(n.pitch))
+            continue; // an FX lane note: no sound of its own (3a)
 
         if (st.skipTick == tick)
         {
@@ -1885,6 +2248,8 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
 
         int chance = n.chance();
         if (chance < 100 && !percent(chance))
+            continue;
+        if (!condPasses(noteCond(n), st.pass))
             continue;
         // fill marks: only in a fill / never in a fill
         const int fill = noteFill(n);
@@ -1919,13 +2284,20 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
                         mtProject.instrument[v - 1].isActive == 1)
                         ins = (uint8_t)(v - 1);
                 }
+                // the step's effects (FX1, FX2), for every hit of its ratchet too
+                const StepFx sfx = getStepFx(p, track, (n.start + kTicksPerStep / 2) / kTicksPerStep);
+                for (int k2 = 0; k2 < 2; k2++)
+                {
+                    st.rollFx[2 * k2] = stepFxEngineType(sfx.kind[k2]);
+                    st.rollFx[2 * k2 + 1] = sfx.value[k2];
+                }
                 const int hits = kRatchetHits[noteRatchet(n)];
                 if (hits > 1)
                 {
                     const int interval = kTicksPerStep / hits;
                     int span = (n.length + kTicksPerStep / 2) / kTicksPerStep;
                     span = span < 1 ? 1 : (span > 8 ? 8 : span);
-                    startNote(track, st, ins, n.pitch, velocity, interval, true);
+                    startNote(track, st, ins, n.pitch, velocity, interval, true, 0, st.rollFx);
                     st.rollLeft = (int16_t)(span * hits - 1);
                     st.rollIn = (int16_t)interval;
                     st.rollInterval = (int16_t)interval;
@@ -1934,17 +2306,61 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
                     st.rollInstrument = ins;
                 }
                 else
-                    startNote(track, st, ins, n.pitch, velocity, n.length, oneShot);
+                    startNote(track, st, ins, n.pitch, velocity, n.length, oneShot, 0, st.rollFx);
+            }
+            else if (sliceTrk)
+            {
+                // a slice, with whatever the FX lane has on now
+                int length = n.length;
+                bool one = oneShot;
+                uint8_t vel = velocity;
+                uint8_t fx[4];
+                sliceFxForHit(sx, fx, length, one, vel);
+                sx.lastPitch = n.pitch;
+                sx.lastVel = velocity;
+                startNote(track, st, instrument, n.pitch, vel, length, one, 0, fx);
             }
             else
                 startNote(track, st, instrument, n.pitch, velocity, n.length, oneShot, n.flags);
         }
     }
 
+    // 3b. Roll on: the slice playing is hit again at the roll's rate
+    if (sliceTrk && !arp && sx.lastPitch >= kFirstSliceNote)
+    {
+        uint8_t v;
+        float along;
+        uint16_t age;
+        if (sliceFxOn(sx, kSfxRoll, v, along, age) && age > 0 && age % kSliceRollTicks[sliceRollIndex(v)] == 0)
+        {
+            int length = kSliceRollTicks[sliceRollIndex(v)];
+            bool one = true;
+            uint8_t vel = sx.lastVel ? sx.lastVel : 100;
+            uint8_t fx[4];
+            sliceFxForHit(sx, fx, length, one, vel);
+            chokeTrack(track, st);
+            startNote(track, st, instrument, sx.lastPitch, vel, length, one, 0, fx);
+        }
+    }
+    // the FX lane's effects count down
+    if (sliceTrk)
+    {
+        for (int f = 0; f < kSliceFxCount; f++)
+        {
+            if (sx.left[f] > 0)
+            {
+                sx.left[f]--;
+                sx.age[f]++;
+            }
+            if (sx.live & (1u << f))
+                sx.liveAge[f]++;
+        }
+    }
+
     if (rollDue && st.rollLeft > 0)
     {
         chokeTrack(track, st);
-        startNote(track, st, st.rollInstrument, st.rollPitch, st.rollVel, st.rollInterval, true);
+        startNote(track, st, st.rollInstrument, st.rollPitch, st.rollVel, st.rollInterval, true, 0, st.rollFx);
         st.rollLeft--;
         st.rollIn = st.rollInterval;
     }
@@ -1974,6 +2390,10 @@ void stopTrack(int track)
     st.arp.heldCount = 0;
     st.arp.ratchetIn = 0;
     st.rollLeft = 0;
+    SliceFxState& sx = s_sliceFx[track];
+    for (int f = 0; f < kSliceFxCount; f++)
+        sx.left[f] = 0;
+    sx.lastPitch = 0;
 }
 
 void stopAll()
@@ -1983,6 +2403,7 @@ void stopAll()
     {
         stopTrack(t);
         playState[t].runTicks = 0; // the next playback starts its arp cycle fresh
+        playState[t].pass = 0;
     }
 
     // silence every sample voice we started (ringing one-shots, loops)
@@ -2072,6 +2493,8 @@ void auditionChordWith(int track, int forceInstrument, const uint8_t* pitches, i
     bool sample = isSampleInstrument(instrument);
     if (sample && mtProject.instrument[instrument].isActive != 1)
         return; // empty sample slot: nothing to play
+    if (isBeatSliceSound(instrument) && isSliceFxPitch(pitches[0]))
+        return; // a slice track's FX lane row: no sound of its own
 
     Audition& a = audition[track];
     a.instrument = instrument;

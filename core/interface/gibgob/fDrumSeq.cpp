@@ -513,6 +513,7 @@ static void functDelete(uint8_t state)
         beginEdit(kEditClear);
         stopTrack(DS->track);
         clearNotes(current(), DS->track);
+        clearAllStepFx(current(), DS->track); // the steps' effects too
         markChanged();
         mtPopups.show(0, "Track cleared", 1);
         DS->refresh();

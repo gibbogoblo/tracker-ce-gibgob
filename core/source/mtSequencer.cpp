@@ -336,6 +336,17 @@ AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
                (uint8_t*)&patternRow.step[playerRow.actual_pos],
                sizeof(strPattern::strTrack::strStep));
 
+        // GibGob OS: a GibGob track plays from its own note data; its tracker
+        // steps stay empty here (their spare bytes hold the steps' effects)
+        if (row < kSampleTracks && gibgob::hasHeader(currentPattern, row))
+        {
+            stepToSend.note = STEP_NOTE_EMPTY;
+            stepToSend.fx[0].type = stepToSend.fx[1].type = 0;
+            stepToSend.fx[0].value = stepToSend.fx[1].value = 0;
+            stepToSend.volume = STEP_VELO_DEFAULT;
+            stepToSend.micromove = -1;
+        }
+
         if (isCustomPlayMode(row))
         {
             if (playerRow.custom_fx)

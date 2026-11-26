@@ -80,6 +80,7 @@ struct PageClip
     bool full;
     bool has[kSteps];
     Note note[kSteps]; // start = offset from its step
+    StepFx fx[kSteps];  // the steps' effects
 };
 __NOINIT(EXTERNAL_RAM) PageClip s_clip;
 bool s_clipReady = false;
@@ -292,7 +293,12 @@ void cDrumOverview::refresh()
         const Note n = getNote(p, t, idx[0]);
         if (shift)
         {
-            // Shift: the ratchet ("x4", "x4/2" = for 2 steps) and the step's own sample ("S2")
+            // Shift: the step's effects under it ("Rvb", "LP"), the ratchet ("x4",
+            // "x4/2" = for 2 steps) and the step's own sample ("S2") over it
+            const StepFx fx = getStepFx(p, t, step);
+            for (int k = 0; k < 2; k++)
+                if (fx.kind[k] != kStepFxOff)
+                    snprintf(v.lockBot[s][k], 8, "%s", kStepFxShort[fx.kind[k]]);
             if (!steps2)
                 continue;
             const int hits = kRatchetHits[noteRatchet(n)];
@@ -303,7 +309,9 @@ void cDrumOverview::refresh()
                 snprintf(v.lockTop[s][1], 8, "S%d", noteSample(n));
             continue;
         }
-        if (n.chance() < 100)
+        if (noteCond(n) >= 0)
+            snprintf(v.lockTop[s][0], 8, "%d:%d", kCondA[noteCond(n)], kCondB[noteCond(n)]);
+        else if (n.chance() < 100)
             snprintf(v.lockTop[s][0], 8, "%d%%", n.chance());
         if (n.velocity != 100)
             snprintf(v.lockTop[s][1], 8, "%d", n.velocity);
@@ -336,12 +344,45 @@ void cDrumOverview::refresh()
         gibgobSoundName((uint8_t)ins, nm, sizeof(nm));
         snprintf(v.cloudValue[1], sizeof(v.cloudValue[1]), "%.9s", nm);
     }
+    if (shift && !onName)
+    {
+        // the cursor step's effects: "Rvb 70"
+        const StepFx fx = getStepFx(p, t, cursor);
+        for (int k = 0; k < 2; k++)
+        {
+            if (fx.kind[k] == kStepFxOff)
+                continue;
+            char val[8];
+            stepFxValueText(fx.kind[k], fx.value[k], val, sizeof(val));
+            if (fx.kind[k] == kStepFxReverse)
+                snprintf(v.cloudValue[2 + k], sizeof(v.cloudValue[2 + k]), "%s", kStepFxShort[fx.kind[k]]);
+            else
+                snprintf(v.cloudValue[2 + k], sizeof(v.cloudValue[2 + k]), "%s %s", kStepFxShort[fx.kind[k]], val);
+        }
+    }
+    // the steps with effects (a small mark), and the effect list while FX1 / FX2 is held
+    v.fxMark = 0;
+    for (int s = 0; s < kSteps; s++)
+        if (first + s < steps && hasStepFx(p, t, first + s))
+            v.fxMark |= (uint8_t)(1u << s);
+    v.fxList = -1;
+    if ((param == kParamFx1 || param == kParamFx2) && !onName)
+    {
+        const int k = param == kParamFx1 ? 0 : 1;
+        v.fxList = 2 + k;
+        v.fxCount = kStepFxCount;
+        for (int i = 0; i < kStepFxCount && i < DrumOverviewView::kFxListMax; i++)
+            v.fxNames[i] = kStepFxNames[i];
+        v.fxSel = getStepFx(p, t, cursor).kind[k];
+    }
     if (!shift && stepNotes(t, cursor, idx, 1) > 0)
     {
         const Note n = getNote(p, t, idx[0]);
         const int f = noteFill(n);
         if (f != 0)
             snprintf(v.cloudValue[0], sizeof(v.cloudValue[0]), "%s", f > 0 ? "FILL" : "NO FILL");
+        else if (noteCond(n) >= 0)
+            snprintf(v.cloudValue[0], sizeof(v.cloudValue[0]), "%d:%d", kCondA[noteCond(n)], kCondB[noteCond(n)]);
         else
             snprintf(v.cloudValue[0], sizeof(v.cloudValue[0]), "%d%%", n.chance());
         snprintf(v.cloudValue[1], sizeof(v.cloudValue[1]), "%d", n.velocity);
@@ -350,8 +391,8 @@ void cDrumOverview::refresh()
     }
     v.cloudLit = (param == kParamProb || param == kParamRatchet)    ? 0
                  : (param == kParamVelocity || param == kParamSample) ? 1
-                 : param == kParamNudge                               ? 2
-                 : param == kParamPitch                               ? 3
+                 : (param == kParamNudge || param == kParamFx1)       ? 2
+                 : (param == kParamPitch || param == kParamFx2)       ? 3
                                                                       : -1;
 
     // Shift: the bottom shows the CHIMP OUT effects
@@ -513,6 +554,7 @@ void cDrumOverview::deleteStep()
     beginEdit(kEditStep);
     for (int i = n - 1; i >= 0; i--)
         removeNote(p, t, idx[i]);
+    setStepFx(p, t, cursor, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } }); // its effects go with it
     markChanged();
     refresh();
 }
@@ -525,6 +567,7 @@ void cDrumOverview::clearTrack()
     beginEdit(kEditClear);
     stopTrack(t);
     clearNotes(current(), t);
+    clearAllStepFx(current(), t);
     markChanged();
     mtPopups.show(0, "Track cleared", 1);
     refresh();
@@ -536,11 +579,6 @@ void cDrumOverview::changeParam(int dir, bool big)
     const int t = track();
     if (t < 0 || onName) // on the track name: no step to change
         return;
-    if (param == kParamShift)
-    {
-        mtPopups.show(0, "Effects per step: next version", 1);
-        return;
-    }
     Sequencer::strPattern* p = current();
     int idx[kMaxNotes];
     const int n = stepNotes(t, cursor, idx, kMaxNotes);
@@ -554,6 +592,11 @@ void cDrumOverview::changeParam(int dir, bool big)
         changeDrumStep(t, idx, n, dir, big);
         return;
     }
+    if (param == kParamFx1 || param == kParamFx2)
+    {
+        changeStepFx(dir, big);
+        return;
+    }
     const int trackTicks = trackSteps(p, t) * kTicksPerStep;
     beginEdit(kEditParam);
     for (int i = 0; i < n; i++)
@@ -561,7 +604,24 @@ void cDrumOverview::changeParam(int dir, bool big)
         Note note = getNote(p, t, idx[i]);
         switch (param)
         {
-            case kParamProb: note.setChance(note.chance() + dir * (big ? 25 : 5)); break; // ends a fill mark
+            case kParamProb:
+            {
+                // 0 .. 100 %, then on up the trig conditions 1:2, 2:2, 1:3 .. 8:8
+                const int cond = noteCond(note);
+                if (cond >= 0)
+                {
+                    const int next = cond + dir * (big ? 4 : 1);
+                    if (next < 0)
+                        note.setChance(100);
+                    else
+                        setNoteCond(note, next >= kCondCount ? kCondCount - 1 : next);
+                }
+                else if (dir > 0 && note.chance() >= 100 && noteFill(note) == 0)
+                    setNoteCond(note, 0);
+                else
+                    note.setChance(note.chance() + dir * (big ? 25 : 5)); // ends a fill mark
+                break;
+            }
             case kParamVelocity: note.velocity = (uint8_t)clampInt(note.velocity + dir * (big ? 10 : 1), 1, 127); break;
             case kParamNudge:
             {
@@ -582,6 +642,55 @@ void cDrumOverview::changeParam(int dir, bool big)
         auditionOn(t, note.pitch, note.velocity);
         auditionOffAt = (uint32_t)s_clock + 200;
     }
+    markChanged();
+    refresh();
+}
+
+// Shift + FX1 / FX2 held, +/-: how much of the step's effect (big: 10 at a time)
+void cDrumOverview::changeStepFx(int dir, bool big)
+{
+    const int t = track();
+    Sequencer::strPattern* p = current();
+    const int k = param == kParamFx1 ? 0 : 1;
+    StepFx fx = getStepFx(p, t, cursor);
+    if (fx.kind[k] == kStepFxOff)
+    {
+        mtPopups.show(0, "Up/Down: pick an effect first", 1);
+        return;
+    }
+    const int lo = stepFxMin(fx.kind[k]), hi = stepFxMax(fx.kind[k]);
+    const int v = clampInt((int)fx.value[k] + dir * (big ? 10 : 1), lo, hi);
+    if (v == fx.value[k])
+        return;
+    beginEdit(kEditParam);
+    fx.value[k] = (uint8_t)v;
+    setStepFx(p, t, cursor, fx);
+    markChanged();
+    refresh();
+}
+
+// Shift + FX1 / FX2 held, Up / Down: the effect on the step (Off .. Tremolo)
+void cDrumOverview::pickStepFx(int dir)
+{
+    const int t = track();
+    if (t < 0 || onName)
+        return;
+    Sequencer::strPattern* p = current();
+    int idx[kMaxNotes];
+    if (stepNotes(t, cursor, idx, 1) == 0)
+    {
+        mtPopups.show(0, "No hit on this step (top row adds one)", 1);
+        return;
+    }
+    const int k = param == kParamFx1 ? 0 : 1;
+    StepFx fx = getStepFx(p, t, cursor);
+    const int kind = clampInt((int)fx.kind[k] + dir, kStepFxOff, kStepFxCount - 1);
+    if (kind == fx.kind[k])
+        return;
+    beginEdit(kEditParam);
+    fx.kind[k] = (uint8_t)kind;
+    fx.value[k] = kind == kStepFxOff ? 0 : (uint8_t)stepFxDefault(kind);
+    setStepFx(p, t, cursor, fx);
     markChanged();
     refresh();
 }
@@ -768,6 +877,7 @@ void cDrumOverview::copyPage()
             s_clip.note[s] = n;
             s_clip.has[s] = true;
         }
+        s_clip.fx[s] = step < steps ? getStepFx(p, t, step) : StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
     }
     s_clip.full = true;
     mtPopups.show(0, "8 steps copied (Shift + Copy: paste)", 1);
@@ -805,6 +915,7 @@ void cDrumOverview::pastePage()
             if (addNote(p, t, note) < 0)
                 full = true;
         }
+        setStepFx(p, t, step, s_clip.fx[s]);
     }
     markChanged();
     mtPopups.show(0, full ? "Track is full: not every step pasted" : "8 steps pasted", 1);
@@ -900,14 +1011,34 @@ static bool pressOrRepeat(uint8_t s)
 {
     return s == buttonPress || s == buttonHold;
 }
+static bool fxHeld()
+{
+    return DO->param == cDrumOverview::kParamFx1 || DO->param == cDrumOverview::kParamFx2;
+}
 static void functUp(uint8_t s)
 {
-    if (!twisting(s, +1) && s == buttonPress)
+    if (twisting(s, +1))
+        return;
+    if (fxHeld())
+    {
+        if (pressOrRepeat(s))
+            DO->pickStepFx(-1); // up the list
+        return;
+    }
+    if (s == buttonPress)
         DO->selectTrack(-1);
 }
 static void functDown(uint8_t s)
 {
-    if (!twisting(s, -1) && s == buttonPress)
+    if (twisting(s, -1))
+        return;
+    if (fxHeld())
+    {
+        if (pressOrRepeat(s))
+            DO->pickStepFx(1);
+        return;
+    }
+    if (s == buttonPress)
         DO->selectTrack(1);
 }
 static void functLeft(uint8_t s)
@@ -1004,7 +1135,8 @@ static void functParamButton(uint8_t button, uint8_t state)
     if (shiftActive())
         DO->param = button == interfaceButtonNote    ? cDrumOverview::kParamRatchet
                     : button == interfaceButtonInstr ? cDrumOverview::kParamSample
-                                                     : cDrumOverview::kParamShift;
+                    : button == physFx1Button()      ? cDrumOverview::kParamFx1
+                                                     : cDrumOverview::kParamFx2;
     else if (button == interfaceButtonNote)
         DO->param = cDrumOverview::kParamProb;
     else if (button == interfaceButtonInstr)

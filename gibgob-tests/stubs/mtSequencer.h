@@ -9,9 +9,14 @@ class Sequencer
 {
   public:
     enum { MAXSTEP = 127 };
+    enum { STEP_NOTE_EMPTY = -1, STEP_VELO_DEFAULT = -1 };
     struct strFxConsts
     {
-        enum { FX_TYPE_NONE = 0, FX_TYPE_GLIDE = 20, FX_TYPE_FILTER_LOWPASS = 28, FX_TYPE_FILTER_BANDPASS = 30,
+        enum { FX_TYPE_NONE = 0, FX_TYPE_GLIDE = 20, FX_TYPE_FILTER_LOWPASS = 28, FX_TYPE_FILTER_HIGHPASS = 29,
+               FX_TYPE_FILTER_BANDPASS = 30, FX_TYPE_DELAY_SEND = 31, FX_TYPE_PANNING = 32, FX_TYPE_REVERB_SEND = 33,
+               FX_TYPE_REVERSE_PLAYBACK = 27, FX_TYPE_POSITION = 23, FX_TYPE_VOLUME_LFO = 24, FX_TYPE_FINETUNE_LFO = 34,
+               FX_TYPE_FILTER_LFO = 36, FX_TYPE_OVERDRIVE = 39, FX_TYPE_BIT_DEPTH = 40, FX_TYPE_TUNE = 41,
+               FX_TYPE_SLIDE_UP = 42, FX_TYPE_SLIDE_DOWN = 43,
                FX_TYPE_R31 = 50, FX_TYPE_FILTER_ENV = FX_TYPE_R31 };
     };
     int16_t getFxMax(uint8_t, bool = false) { return 127; }

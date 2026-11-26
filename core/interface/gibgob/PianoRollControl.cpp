@@ -20,6 +20,9 @@ constexpr uint32_t kKeyBlack = 0x2A3036;
 constexpr uint32_t kNote = 0x3FB8AF;
 constexpr uint32_t kNoteSelected = 0xFFB347;
 constexpr uint32_t kSlide = 0xF4F1FF; // the ramp into a note that slides
+constexpr uint32_t kFxLane = 0x221E30;  // a slice track's FX lane rows (every other one)
+constexpr uint32_t kFxKey = 0x5B4A8C;   // ... and their keys
+constexpr uint32_t kFxNote = color::kFx1Btn; // an FX note
 constexpr uint32_t kCrosshair = 0x26313A;
 constexpr uint32_t kOtherNote = 0xB7AEF5;  // other tracks' notes (drawn faint)
 constexpr uint32_t kOtherKey = 0x9A8CF0;   // keys the other tracks play at the cursor
@@ -107,8 +110,23 @@ void PianoRollControl::update()
         for (int r = 0; r < rows; r++)
         {
             int pitch = view->topPitch - r;
-            if (pitch < kFirstSliceNote || pitch > lastSlice)
+            if ((pitch < kFirstSliceNote && !isSliceFxPitch(pitch)) || pitch > lastSlice)
                 draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
+        // the FX lane under slice 1: its own tint, a line between it and the slices
+        draw::color(kFxLane);
+        for (int r = 0; r < rows; r++)
+        {
+            int pitch = view->topPitch - r;
+            if (isSliceFxPitch(pitch) && (sliceFxOfPitch(pitch) & 1))
+                draw::rect(kGridX1, gy1 + r * rh, kGridX2, gy1 + r * rh + rh - 1);
+        }
+        const int laneTop = kFirstSliceNote - 1;
+        if (laneTop <= view->topPitch && laneTop > view->topPitch - rows)
+        {
+            draw::color(color::kSlice);
+            const int y = gy1 + (view->topPitch - laneTop) * rh;
+            draw::rect(2, y - 1, kGridX2, y);
         }
     }
     else
@@ -207,6 +225,20 @@ void PianoRollControl::update()
             char t[12];
             snprintf(t, sizeof(t), "S%d", s + 1);
             draw::text(6, gy1 + r * rh + rh / 2, fRegular, OPT_CENTERY, t);
+        }
+        // the FX lane's keys: the effect names (Shift + top 1-8 plays them)
+        draw::color(kFxKey);
+        for (int r = 0; r < rows; r++)
+            if (isSliceFxPitch(view->topPitch - r))
+                draw::rect(2, gy1 + r * rh, kKeyW - 3, gy1 + r * rh + (rh > 2 ? rh - 2 : rh));
+        draw::color(color::kText);
+        for (int r = 0; r < rows; r++)
+        {
+            const int pitch = view->topPitch - r;
+            if (!isSliceFxPitch(pitch) || (few && rh < 10))
+                continue;
+            draw::text(6, gy1 + r * rh + rh / 2, rh < 14 ? fonts[4].handle : fRegular, OPT_CENTERY,
+                       kSliceFxNames[sliceFxOfPitch(pitch)]);
         }
     }
     else
@@ -335,7 +367,7 @@ void PianoRollControl::update()
             {
                 Note n = getNote(view->pattern, view->track, i);
                 bool sel = (n.flags & kNoteFlagSelected) != 0;
-                if (sel != selPass)
+                if (sel != selPass || (slices && isSliceFxPitch(n.pitch)))
                     continue;
                 int v = n.velocity ? n.velocity : 100;
                 int noteLevel = v >= 110 ? 2 : (v >= 70 ? 1 : 0);
@@ -348,6 +380,21 @@ void PianoRollControl::update()
                     draw::rect(x1, y1, x2, y2);
             }
         }
+        // a slice track's FX notes: in the FX colour (their velocity is a setting, not loudness)
+        if (slices)
+            for (int selPass = 0; selPass < 2; selPass++)
+            {
+                draw::color(selPass ? kNoteSelected : kFxNote);
+                for (int i = 0; i < count; i++)
+                {
+                    Note n = getNote(view->pattern, view->track, i);
+                    if (!isSliceFxPitch(n.pitch) || ((n.flags & kNoteFlagSelected) != 0) != (selPass != 0))
+                        continue;
+                    int x1, y1, x2, y2;
+                    if (noteRect(n, x1, y1, x2, y2) && draw::room(3 + kReserve))
+                        draw::rect(x1, y1, x2, y2);
+                }
+            }
     }
 
     // ---- slides: a ramp from the note before into the note that slides ----
