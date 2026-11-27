@@ -287,7 +287,7 @@ void cGibGobPerc::start(uint32_t options)
 
     SynthView& v = s->view;
     v.help.active = false;
-    v.help.title = "PERC - shortcuts";
+    v.help.title = "BONOBONGO - shortcuts";
     v.help.lines = kHelpPerc;
     v.help.count = (int)(sizeof(kHelpPerc) / sizeof(kHelpPerc[0]));
     v.avatar.names = nullptr;
@@ -378,6 +378,7 @@ void cGibGobPerc::refresh()
     info.shift = shiftActive();
     info.message = s_message;
     info.tabNames = s_tabNames;
+    info.look = pc::look();
     percui::fillView(s->view, s->model, page, s_view[page], s_cursor[page], snd(), info);
     s_cursor[page] = s->view.cursor;
     display.refreshControl(control);
@@ -501,7 +502,7 @@ void cGibGobPerc::middle(bool pressed)
         s->opened = snd();
         s->hasUndo = false;
         char t[48];
-        snprintf(t, sizeof(t), "Kit %s on the PERC tracks", pc::kitName(s_kit));
+        snprintf(t, sizeof(t), "Kit %s on the BONOBONGO tracks", pc::kitName(s_kit));
         say(t);
     }
     else if (id == kItemSaveAs)
@@ -533,6 +534,15 @@ void cGibGobPerc::tool(int button)
             break;
         }
         case 1: goApe(); break;
+        case 2:
+        {
+            // the next look: BLAST, CLUB, RED
+            static const char* const kNames[kLookCount] = { "", "Look: BLAST", "Look: CLUB", "Look: RED" };
+            const int next = pc::look() + 1 >= kLookCount ? kLookBlast : pc::look() + 1;
+            pc::setLook(next);
+            say(kNames[next]);
+            break;
+        }
         case 4:
             if (s->comparing)
             {

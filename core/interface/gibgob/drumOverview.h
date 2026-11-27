@@ -3,6 +3,7 @@
 
 #include "core/modulesBase.h"
 #include "gibgob/DrumOverviewControl.h"
+#include "gibgob/MelodicTrack.h"
 
 // GibGob OS drum overview: every drum track at once, 8 steps on screen (one
 // per top button). Opened with Middle on a drum track on the main screen.
@@ -17,7 +18,7 @@ class cDrumOverview : public ModuleBase
         kParamVelocity, // Instr
         kParamNudge,    // FX1
         kParamPitch,    // FX2
-        kParamFx1,      // Shift + FX1: the step's first effect (Up/Down: which, +/-: how much)
+        kParamFx1,      // Shift + FX1: the step's first effect (Up/Down: which, +/-: how much; BONOBONGO: a lock)
         kParamFx2,      // Shift + FX2: the step's second effect
         kParamRatchet,  // Shift + Note: small +/- speed, big +/- length
         kParamSample,   // Shift + Instr: the step's own sample
@@ -44,6 +45,7 @@ class cDrumOverview : public ModuleBase
     void changeDrumStep(int track, const int* idx, int n, int dir, bool big); // ratchet / sample
     void changeStepFx(int dir, bool big); // the held FX: its amount
     void pickStepFx(int dir);             // the held FX: Up/Down, which effect
+    void previewLocks(const gibgob::StepFx& fx); // stopped: a BONOBONGO step's hit with its locks
     void markFill(int fill);
     void clearFillMark();
     void copyPage();

@@ -138,6 +138,38 @@ void soundFromKit(int kit, int slot, Sound& out);
 void soundFromKitData(const uint8_t* lxrValues, int slot, Sound& out);
 int slotType(int slot);
 
+// ---- parameter locks: a drum step can set two of these for its hit (the drum overview, Shift + FX1/2) ----
+// A lock holds from its hit until the next one; a hit without it plays the sound as it is.
+enum LockKind : uint8_t
+{
+    kLockOff = 0,
+    kLockDecay,     // the amp envelope's decay (the LXR's has no release: the decay is the tail)
+    kLockAttack,
+    kLockTune,
+    kLockCutoff,
+    kLockReso,
+    kLockDrive,
+    kLockClick,     // the transient's level
+    kLockClickTune,
+    kLockPitchAmt,  // drum, snare: how far the pitch envelope bends
+    kLockPitchDecay,
+    kLockTone,      // drum: FM amount; snare: noise mix; cymbal, hat: modulator depth
+    kLockVolume,
+    kLockPan,
+    kLockCrush,     // the sample-rate reducer
+    kLockVariant,   // hat: open / closed; snare, cymbal: repeat (claps)
+    kLockKinds
+};
+static_assert(kLockKinds <= 16, "a lock kind fits in 4 bits");
+static constexpr int kLockHatOpen = -2; // lockParam: the hat's open / closed
+int lockParam(int kind, int type);     // the Param it sets (-1: none for this voice type)
+bool lockUsed(int kind, int type);
+int lockMax(int kind, int type);
+int lockValueOf(int kind, const Sound& s); // where the sound has it (a new lock starts there)
+const char* lockName(int kind, int type);  // "Decay", "FM Amt", "Open"...
+const char* lockShort(int kind, int type); // up to 4 letters, under a step
+void lockText(int kind, int type, int value, char* out, int outLen);
+
 // ---- the voices ----
 struct VoiceState
 {
@@ -157,6 +189,8 @@ struct VoiceState
     uint8_t live;      // rendering (cleared once the voice has gone quiet)
     float level;       // the last block's peak, 0..1
     float gain;        // the track's level and mute (0 = rendering on silently)
+    uint64_t lockMask;            // the values the last hit locked (bit per Param)
+    uint8_t lockVal[kParamCount]; // their locked values
 };
 
 class Engine
@@ -168,7 +202,8 @@ class Engine
     const Sound& sound(int v) const { return m_voice[v].sound; }
     void setValue(int v, int param, int value); // one value, live
     void setHatOpen(int v, bool open);
-    void trigger(int v, uint8_t velocity, int note); // note: 60 = the sound's own pitch
+    // note: 60 = the sound's own pitch; locks: kind, value, kind, value (LockKind, 0..127) or nullptr
+    void trigger(int v, uint8_t velocity, int note, const uint8_t* locks = nullptr);
     void stop(int v);
     // adds the voices into the stereo block (n: a multiple of 64)
     void render(float* left, float* right, int n);

@@ -334,9 +334,9 @@ int main()
         addNote(&pat, 0, mk(0, 48, 60));
         Note r = mk(2 * 48, 48, 60); setNoteRatchet(r, 1); addNote(&pat, 0, r); // 2 hits
         addNote(&pat, 0, mk(4 * 48, 48, 60));
-        StepFx fx{ { kStepFxReverb, kStepFxLowpass }, { 70, 30 } };
+        StepFx fx{ { kStepFxReverb, kStepFxLowpass }, { 70, 30 }, kStepFxSetSample };
         setStepFx(&pat, 0, 0, fx);
-        StepFx f2{ { kStepFxPitchDown, kStepFxOff }, { 99, 0 } };
+        StepFx f2{ { kStepFxPitchDown, kStepFxOff }, { 99, 0 }, kStepFxSetSample };
         setStepFx(&pat, 0, 2, f2);
         CHECK(hasStepFx(&pat, 0, 0) && hasStepFx(&pat, 0, 2) && !hasStepFx(&pat, 0, 4));
         StepFx back = getStepFx(&pat, 0, 0);
@@ -363,7 +363,7 @@ int main()
             CHECK(fxAt[3] == std::vector<uint8_t>({ 0, 0, 0, 0 }));
         }
         // off again: the tracker step goes back to empty
-        setStepFx(&pat, 0, 0, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } });
+        setStepFx(&pat, 0, 0, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 }, kStepFxSetSample });
         CHECK(!hasStepFx(&pat, 0, 0) && pat.track[0].step[0].volume == Sequencer::STEP_VELO_DEFAULT &&
               pat.track[0].step[0].micromove == -1);
         // doubling the track takes the effects along
@@ -371,6 +371,42 @@ int main()
         CHECK(hasStepFx(&pat, 0, 2) && hasStepFx(&pat, 0, 2 + 16) && getStepFx(&pat, 0, 18).kind[0] == kStepFxPitchDown);
         clearAllStepFx(&pat, 0);
         CHECK(!hasStepFx(&pat, 0, 2) && !hasStepFx(&pat, 0, 18));
+        // BONOBONGO locks: their own marker, raw 0..127 values; a locks step sends the sample engine no
+        // effects, and the drum synth hook gets them on every hit of the step (its ratchet too)
+        {
+            StepFx lk{ { 1, 15 }, { 127, 1 }, kStepFxSetLocks };
+            setStepFx(&pat, 0, 0, lk);
+            StepFx lb = getStepFx(&pat, 0, 0);
+            CHECK(lb.set == kStepFxSetLocks && lb.kind[0] == 1 && lb.kind[1] == 15 && lb.value[0] == 127 && lb.value[1] == 1);
+            CHECK(pat.track[0].step[0].micromove == 0x48 && pat.track[0].step[0].note == Sequencer::STEP_NOTE_EMPTY);
+            CHECK(getStepFx(&pat, 0, 2).set == kStepFxSetSample); // the other steps keep their effects
+            static std::vector<std::vector<uint8_t>> s_hits;
+            s_hits.clear();
+            g_percHit = [](int track, uint8_t, uint8_t, const uint8_t* locks) {
+                if (track != 0)
+                    return false;
+                s_hits.push_back(locks ? std::vector<uint8_t>(locks, locks + 4) : std::vector<uint8_t>());
+                return true;
+            };
+            setStepFx(&pat, 0, 2, StepFx{ { 4, 0 }, { 30, 0 }, kStepFxSetLocks });
+            stopAll(); events.clear();
+            for (int t = 0; t < 5 * 48; t++)
+                runTicks(t, 1);
+            g_percHit = nullptr;
+            CHECK(s_hits.size() == 4); // step 1, the ratchet's 2 hits, step 5
+            if (s_hits.size() == 4)
+            {
+                CHECK(s_hits[0] == std::vector<uint8_t>({ 1, 127, 15, 1 }));
+                CHECK(s_hits[1] == std::vector<uint8_t>({ 4, 30, 0, 0 }) && s_hits[2] == s_hits[1]);
+                CHECK(s_hits[3] == std::vector<uint8_t>({ 0, 0, 0, 0 }));
+            }
+            int sampleHits = 0;
+            for (const auto& e : events)
+                sampleHits += e.kind == 'S';
+            CHECK(sampleHits == 0); // the drum synth played them, not the sample engine
+            clearAllStepFx(&pat, 0);
+            CHECK(!hasStepFx(&pat, 0, 0) && !hasStepFx(&pat, 0, 2) && pat.track[0].step[0].micromove == -1);
+        }
         // a track that is not a GibGob track reads no effects from old tracker steps
         freshPattern();
         pat.track[3].step[0].micromove = 0x47; pat.track[3].step[0].volume = 0x21;

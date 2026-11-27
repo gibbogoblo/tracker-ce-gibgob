@@ -4,6 +4,7 @@
 #include "Perc.h"
 
 #include "PercKits.h"
+#include "PercSnareTame.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -330,6 +331,7 @@ void initVoiceDsp(VoiceState& s)
     s.decimCount = 0;
     s.decimHold = 0;
     s.modded = 0;
+    s.lockMask = 0;
     s.live = 0;
     s.level = 0;
     for (int p = 0; p < kParamCount; p++)
@@ -404,6 +406,82 @@ void Engine::setHatOpen(int v, bool open)
         m_voice[v].sound.hatOpen = open;
 }
 
+// ---- parameter locks ----
+namespace
+{
+const char* const kLockNames[kLockKinds] = { "Off",       "Decay", "Attack", "Tune",  "Cutoff", "Reso", "Drive",  "Click",
+                                             "Click tune", "P Amount", "P Decay", "Tone", "Volume", "Pan",  "Crush", "Variant" };
+const char* const kLockShorts[kLockKinds] = { "-",    "Dec", "Att", "Tune", "Cut", "Res", "Drv", "Clk",
+                                              "ClkT", "PAmt", "PDec", "Tone", "Vol", "Pan", "Crsh", "Var" };
+} // namespace
+
+int lockParam(int kind, int type)
+{
+    switch (kind)
+    {
+        case kLockDecay: return pDecay;
+        case kLockAttack: return pAttack;
+        case kLockTune: return pCoarse;
+        case kLockCutoff: return pFilterFreq;
+        case kLockReso: return pFilterReso;
+        case kLockDrive: return pDrive;
+        case kLockClick: return pTransVol;
+        case kLockClickTune: return pTransFreq;
+        case kLockPitchAmt: return type == kDrum || type == kSnare ? pPitchAmount : -1;
+        case kLockPitchDecay: return type == kDrum || type == kSnare ? pPitchDecay : -1;
+        case kLockTone: return type == kDrum ? pFmAmount : (type == kSnare ? pNoiseMix : pModGain1);
+        case kLockVolume: return pVolume;
+        case kLockPan: return pPan;
+        case kLockCrush: return pSampleRate;
+        case kLockVariant: return type == kHihat ? kLockHatOpen : (type == kSnare || type == kCymbal ? pRepeat : -1);
+        default: return -1;
+    }
+}
+
+bool lockUsed(int kind, int type)
+{
+    return lockParam(kind, type) != -1;
+}
+
+int lockMax(int kind, int type)
+{
+    const int p = lockParam(kind, type);
+    return p == kLockHatOpen ? 1 : (p >= 0 ? kInfo[p].max : 0);
+}
+
+int lockValueOf(int kind, const Sound& s)
+{
+    const int p = lockParam(kind, s.type);
+    return p == kLockHatOpen ? (s.hatOpen ? 1 : 0) : (p >= 0 ? s.value[p] : 0);
+}
+
+const char* lockName(int kind, int type)
+{
+    if (kind == kLockTone)
+        return type == kDrum ? "FM Amt" : (type == kSnare ? "N Mix" : "Depth 2");
+    if (kind == kLockVariant)
+        return type == kHihat ? "Open" : "Repeat";
+    return kind > 0 && kind < kLockKinds ? kLockNames[kind] : "-";
+}
+
+const char* lockShort(int kind, int type)
+{
+    if (kind == kLockVariant)
+        return type == kHihat ? "Open" : "Rep";
+    return kind > 0 && kind < kLockKinds ? kLockShorts[kind] : "-";
+}
+
+void lockText(int kind, int type, int value, char* out, int outLen)
+{
+    const int p = lockParam(kind, type);
+    if (p == kLockHatOpen)
+        snprintf(out, outLen, "%s", value ? "Open" : "Closed");
+    else if (p >= 0)
+        paramText(p, value, out, outLen);
+    else
+        snprintf(out, outLen, "-");
+}
+
 // ---- kits ----
 int kitCount() { return kKitCount; }
 const char* kitName(int kit) { return kKitName[clampi(kit, 0, kKitCount - 1)]; }
@@ -417,6 +495,14 @@ void soundFromKit(int kit, int slot, Sound& out)
 {
     kit = clampi(kit, 0, kKitCount - 1);
     soundFromKitData(kKit[kit], slot, out);
+    if (clampi(slot, 0, kKitSlotCount - 1) == kSlotSnare && kit < kSnareTameCount)
+    {
+        // the snares tamed (tools/perc_tame.cc): the LXR's are harsh next to everything else
+        out.value[pFilterReso] = kSnareTame[kit][0];
+        out.value[pFilterDrive] = kSnareTame[kit][1];
+        out.value[pDrive] = kSnareTame[kit][2];
+        out.value[pVolume] = kSnareTame[kit][3];
+    }
     snprintf(out.name, sizeof(out.name), "%.7s %s", kKitName[kit], kKitSlotNames[clampi(slot, 0, kKitSlotCount - 1)]);
 }
 
@@ -539,11 +625,30 @@ void Engine::setValue(int v, int param, int value)
     apply(st, param, st.sound.value[param]);
 }
 
-void Engine::trigger(int v, uint8_t velocity, int note)
+void Engine::trigger(int v, uint8_t velocity, int note, const uint8_t* locks)
 {
     if (v < 0 || v >= kVoices)
         return;
     VoiceState& st = m_voice[v];
+    // the last hit's locks end; this hit's begin (before the trigger: it reads some of them)
+    if (st.lockMask)
+        for (int p = 0; p < kParamCount; p++)
+            if (st.lockMask & (1ull << p))
+                apply(st, p, st.sound.value[p]);
+    st.lockMask = 0;
+    bool hatOpen = st.sound.hatOpen != 0;
+    for (int k = 0; locks != nullptr && k < 2; k++)
+    {
+        const int p = lockParam(locks[2 * k], st.sound.type);
+        if (p == kLockHatOpen)
+            hatOpen = locks[2 * k + 1] != 0;
+        else if (p >= 0)
+        {
+            st.lockVal[p] = (uint8_t)clampi(locks[2 * k + 1], 0, kInfo[p].max);
+            st.lockMask |= 1ull << p;
+            apply(st, p, st.lockVal[p]);
+        }
+    }
     const uint8_t n = (uint8_t)clampi(note, 0, 127);
     const uint8_t vel = (uint8_t)clampi(velocity, 1, 127);
     st.velocity = vel / 127.f;
@@ -555,7 +660,7 @@ void Engine::trigger(int v, uint8_t velocity, int note)
         case kDrum: PercDrum_trigger(&st.dsp.drum, vel, n); break;
         case kSnare: PercSnare_trigger(&st.dsp.snare, vel, n); break;
         case kCymbal: PercCymbal_trigger(&st.dsp.metal, vel, n); break;
-        default: PercHat_trigger(&st.dsp.metal, vel, st.sound.hatOpen, n); break;
+        default: PercHat_trigger(&st.dsp.metal, vel, hatOpen ? 1 : 0, n); break;
     }
     st.live = 1;
 }
@@ -577,6 +682,12 @@ void Engine::setTempo(float bpm)
     for (int v = 0; v < kVoices; v++)
         for (int l = 0; l < 2; l++)
             percLfo_recalc(&m_voice[v].lfo[l]);
+}
+
+// a value as this hit has it: locked, or the sound's
+inline int base(const VoiceState& s, int p)
+{
+    return (s.lockMask & (1ull << p)) ? s.lockVal[p] : s.sound.value[p];
 }
 
 IN_ITCM_RAM void Engine::renderVoice(VoiceState& s, int16_t* buf)
@@ -614,7 +725,7 @@ IN_ITCM_RAM void Engine::renderVoice(VoiceState& s, int16_t* buf)
         if (seen || p == pLfoAmount || p == pLfo2Amount)
             continue; // done above
         const int max = kInfo[p].max;
-        float v = s.sound.value[p] / (float)max;
+        float v = base(s, p) / (float)max;
         for (int j = i; j < 3; j++)
             if (dest[j] == dest[i])
                 v += delta[j];
@@ -626,7 +737,7 @@ IN_ITCM_RAM void Engine::renderVoice(VoiceState& s, int16_t* buf)
     if (gone)
         for (int p = 0; p < kParamCount; p++)
             if (gone & (1ull << p))
-                apply(s, p, s.sound.value[p]);
+                apply(s, p, base(s, p));
     s.modded = now;
 
     switch (s.sound.type)

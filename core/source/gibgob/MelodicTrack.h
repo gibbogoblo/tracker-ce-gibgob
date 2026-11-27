@@ -225,10 +225,20 @@ enum StepFxKind : uint8_t
     kStepFxCount
 };
 static_assert(kStepFxCount <= 16, "a step effect kind fits in 4 bits");
+// What a step's two slots hold: the sample effects above, or BONOBONGO's parameter locks (a track
+// playing its drum synth; the kinds are gibgob::perc::LockKind, the values 0..127). A step holds one
+// set or the other: each plays only on its own kind of track.
+enum StepFxSet : uint8_t
+{
+    kStepFxSetSample = 0,
+    kStepFxSetLocks,
+};
+static constexpr int kStepLockMax = 127;
 struct StepFx
 {
-    uint8_t kind[2];  // StepFxKind for FX1, FX2
-    uint8_t value[2]; // in the effect's own range (stepFxMin .. stepFxMax)
+    uint8_t kind[2];  // StepFxKind for FX1, FX2 (locks: the lock kind, 1..15)
+    uint8_t value[2]; // in the effect's own range (stepFxMin .. stepFxMax; locks: 0..127)
+    uint8_t set;      // StepFxSet
 };
 extern const char* const kStepFxNames[kStepFxCount];
 extern const char* const kStepFxShort[kStepFxCount]; // up to 5 letters, over / under a step
@@ -406,7 +416,8 @@ void stopAll();
 extern void (*g_noteStartHook)(int track);
 // set by PERC (gibgob/perc/PercDevice): plays a drum track's hit on its drum synth voice and says
 // true when the track is a PERC one (the sample engine then leaves the hit alone)
-extern bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity);
+// locks: the step's two parameter locks (kind, value, kind, value; kind 0 = none), or nullptr
+extern bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity, const uint8_t* locks);
 // called (audio context) on every micro step each track plays: the tick
 // inside the track and the track's length (the whistle take times itself by it)
 extern void (*g_trackTickHook)(int track, int tick, int trackTicks);

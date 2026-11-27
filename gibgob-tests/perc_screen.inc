@@ -28,11 +28,12 @@ static int percTests(int limit)
             { printf("  perc: %s has nothing on page %d\n", pc::kVoiceTypeNames[type], page); fails++; }
             for (int vw = 0; vw < views; vw++)
                 for (int shift = 0; shift < 2; shift++)
+                for (int look = kLookBlast; look < kLookCount; look++)
                 {
                     view = SynthView();
                     percui::Info info;
                     info.track = 2; info.presetName = "Badonka D1"; info.kitName = "Badonka";
-                    info.shift = shift; info.tabNames = tabs; info.sourcePerc = type != pc::kSnare;
+                    info.shift = shift; info.tabNames = tabs; info.sourcePerc = type != pc::kSnare; info.look = look;
                     percui::fillView(view, model, page, vw, 1, s, info);
                     // every box has a name; every parameter box its value
                     for (int i = 0; i < view.layout.cellCount; i++)
@@ -45,11 +46,13 @@ static int percTests(int limit)
                         if (c.id >= 0 && c.id < pc::kParamCount && !pc::paramUsed(c.id, type))
                         { printf("  perc: %s page %d shows '%s' it has not\n", pc::kVoiceTypeNames[type], page, view.cells[i].label); fails++; }
                     }
-                    char nm[64]; snprintf(nm, sizeof(nm), "PERC %s %s%s%s", pc::kVoiceTypeNames[type], kPageNames[page], vw ? " 2" : "", shift ? " shift" : "");
+                    static const char* const kLookNames[kLookCount] = { "", "blast", "club", "red" };
+                    if (view.look != look) { printf("  perc: look %d not set\n", look); fails++; }
+                    char nm[64]; snprintf(nm, sizeof(nm), "BONOBONGO %s %s%s %s%s", pc::kVoiceTypeNames[type], kPageNames[page], vw ? " 2" : "", kLookNames[look], shift ? " shift" : "");
                     render(sc, nm, limit, shift);
-                    if (svgDir && !shift && vw == 0)
+                    if (svgDir && !shift && vw == 0 && (look == kLookBlast || page <= kPageOsc))
                     {
-                        char path[256]; snprintf(path, sizeof(path), "%s/perc_%d_%d.svg", svgDir, type, page);
+                        char path[256]; snprintf(path, sizeof(path), "%s/perc_%d_%d_%d.svg", svgDir, type, page, look);
                         g_svg = fopen(path, "w");
                         if (g_svg) { fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n"); words = 0; sc.update(); fprintf(g_svg, "</svg>\n"); fclose(g_svg); g_svg = nullptr; }
                     }

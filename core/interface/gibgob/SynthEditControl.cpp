@@ -35,6 +35,108 @@ void fit(char* out, int outLen, const char* in, int chars)
     snprintf(out, (size_t)(chars + 1), "%s", in ? in : "");
 }
 
+// ---- the sharp looks: the synth editor's Y2K, and BONOBONGO's three (SynthView::look) ----
+struct Look
+{
+    uint32_t bg, panel, panelEdge, row, rowSel, graphBg, grid, chromeHi, chromeLo, chromeText, text, dim, dark, off;
+    uint32_t cyan, purple, pink, lime; // the cursor, the tab edges, the hot colour, the lit colour
+    uint32_t note, instr, fx1, fx2;    // the coloured buttons
+    uint32_t accent[4];                // the panels' colours
+    uint32_t tabText;
+};
+const Look kLooks[kLookCount] = {
+    // the Y2K synth editor
+    { y2k::kBg, y2k::kPanel, y2k::kPanelEdge, y2k::kRow, y2k::kRowSel, y2k::kGraphBg, y2k::kGrid, y2k::kChromeHi,
+      y2k::kChromeLo, y2k::kChromeText, y2k::kText, y2k::kDim, y2k::kDark, y2k::kOff, y2k::kCyan, y2k::kPurple,
+      y2k::kPink, y2k::kLime, y2k::kNote, y2k::kInstr, y2k::kFx1, y2k::kFx2,
+      { y2k::kAccent[0], y2k::kAccent[1], y2k::kAccent[2], y2k::kAccent[3] }, 0xCFC4FF },
+    // BLAST: explosive Y2K edge, a burst of yellow, orange and hot red on soot
+    { 0x0A0605, 0x1A0C08, 0xFF5A1F, 0x26110A, 0x4C1A08, 0x0E0604, 0x2C130A, 0xFFF6C2, 0xFF7A1A, 0x1A0500, 0xFFFFFF,
+      0xFFB98A, 0x160600, 0x3C1B10, 0xFFE14D, 0xFF5A1F, 0xFF2D55, 0xC6FF00, 0x39FF88, 0xFFE14D, 0xB36BFF, 0x3DD6FF,
+      { 0xFFE14D, 0xFF7A1A, 0xFF2D55, 0xC6FF00 }, 0xFFD3AE },
+    // CLUB: a rainforest nightclub, jade and leaf under UV and magenta lasers
+    { 0x040C09, 0x0A1912, 0x1FBF86, 0x0F241A, 0x2B0F40, 0x030907, 0x12302A, 0xE27BFF, 0x2FFFB4, 0x06120D, 0xEFFFF6,
+      0x8FD9B8, 0x06110C, 0x163225, 0xFF4FD8, 0x24A870, 0xFF4FD8, 0xB6FF3B, 0x39FF88, 0xFFE14D, 0xB36BFF, 0x3DD6FF,
+      { 0x39FFB0, 0xFF4FD8, 0xFFD23F, 0x7B8CFF }, 0xBFFFE0 },
+    // RED: red and black, 90s cool
+    { 0x0A0A0A, 0x151515, 0xD10A0A, 0x1E1E1E, 0x420707, 0x050505, 0x2A2A2A, 0xFF2A2A, 0x8E0000, 0xFFFFFF, 0xFFFFFF,
+      0xBDBDBD, 0x000000, 0x303030, 0xFF2A2A, 0x7A0000, 0xFF2A2A, 0xFF2A2A, 0x39FF88, 0xFFE14D, 0xB36BFF, 0x3DD6FF,
+      { 0xFF2A2A, 0xFFFFFF, 0xB0B0B0, 0xFF8080 }, 0xE6E6E6 },
+};
+const Look* L = &kLooks[0];
+
+// BONOBONGO's looks: what lies behind the panels (shows in the gaps, around the header and the tabs)
+void drawLookDecor(const SynthView& v)
+{
+    if (v.look == kLookBlast)
+    {
+        // an explosion between the page's title and the quick boxes: rays of yellow, orange and hot red
+        static const int16_t kRay[12][2] = { { 0, -60 },  { 40, -44 },  { 62, -6 },  { 50, 34 },  { 18, 58 },  { -22, 56 },
+                                             { -54, 30 }, { -64, -8 }, { -44, -46 }, { 28, -58 }, { 58, 18 }, { -10, 62 } };
+        const int cx = 282, cy = 48;
+        for (int k = 0; k < 12; k++)
+        {
+            // squashed to the strip between the header and the panels (y 30 .. 68)
+            const int16_t xy[4] = { (int16_t)cx, (int16_t)cy, (int16_t)(cx + kRay[k][0] * 3 / 4), (int16_t)(cy + kRay[k][1] / 3) };
+            draw::color(k % 3 == 0 ? 0xFFE14D : (k % 3 == 1 ? 0xFF7A1A : 0xFF2D55));
+            draw::lineWidth(k % 2 ? 48 : 80);
+            draw::lineStrip(xy, 2);
+        }
+        draw::color(0xFFF6C2);
+        draw::roundRect(cx - 9, cy - 8, cx + 9, cy + 8, 8);
+        draw::lineWidth(16);
+        return;
+    }
+    if (v.look == kLookClub)
+    {
+        // spotlights from the ceiling (magenta, laser green, UV), leaves at the floor's corners
+        static const int16_t kBeam[3][2] = { { 150, 0xFF }, { 640, 0x01 }, { 400, 0x02 } };
+        static const uint32_t kBeamCol[3] = { 0xFF4FD8, 0x2FFFB4, 0x8A5CFF };
+        draw::alpha(46);
+        for (int k = 0; k < 3; k++)
+        {
+            const int x = kBeam[k][0];
+            const int x1 = clampi(x - 170, 0, kScreenW - 1), x2 = clampi(x + 170, 0, kScreenW - 1);
+            const int16_t xy[6] = { (int16_t)x1, 479, (int16_t)x, 30, (int16_t)x2, 479 };
+            draw::color(kBeamCol[k]);
+            draw::fillUnder(xy, 3, x1, 30, x2, 479);
+        }
+        draw::alpha(255);
+        static const int16_t kLeaf[6][4] = { { 0, 479, 70, 400 },     { 30, 479, 120, 420 },   { 0, 440, 60, 360 },
+                                             { 799, 479, 730, 400 }, { 770, 479, 680, 420 }, { 799, 440, 740, 360 } };
+        for (int k = 0; k < 6; k++)
+        {
+            const int16_t xy[4] = { kLeaf[k][0], kLeaf[k][1], kLeaf[k][2], kLeaf[k][3] };
+            draw::color(k % 3 == 1 ? 0x1E6B4A : 0x14503A);
+            draw::lineWidth(k % 3 == 1 ? 200 : 260);
+            draw::lineStrip(xy, 2);
+        }
+        draw::lineWidth(16);
+        return;
+    }
+    if (v.look == kLookRed)
+    {
+        // a red rule under the header (the racing stripes go on the header itself: drawLookHeader)
+        draw::color(0xD10A0A);
+        draw::rect(0, 29, kScreenW - 1, 31);
+    }
+}
+
+// on the header bar, under its text: the red look's racing stripes (white and black)
+void drawLookHeader(const SynthView& v)
+{
+    if (v.look != kLookRed)
+        return;
+    for (int k = 0; k < 3; k++)
+    {
+        const int16_t xy[4] = { (int16_t)(352 + k * 22), 28, (int16_t)(376 + k * 22), 0 };
+        draw::color(k == 1 ? 0x000000 : 0xFFFFFF);
+        draw::lineWidth(k == 1 ? 56 : 72);
+        draw::lineStrip(xy, 2);
+    }
+    draw::lineWidth(16);
+}
+
 uint32_t panelColor(const SynthView& v, int panel)
 {
     const ViewLayout& l = v.layout;
@@ -50,9 +152,9 @@ uint32_t panelColor(const SynthView& v, int panel)
         return kJ[(g < 0 ? panel : g) & 3];
     }
     if (l.style == kStyleMain || l.style == kStylePatch)
-        return panel == 0 ? y2k::kCyan : y2k::kPink;
+        return panel == 0 ? L->cyan : L->pink;
     const int g = l.panel[panel].group;
-    return y2k::kAccent[(g < 0 ? panel : g) & 3];
+    return L->accent[(g < 0 ? panel : g) & 3];
 }
 
 // one sample of a waveform, -1..1
@@ -243,20 +345,20 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
         draw::fadeRect(x1, y1, x2, y2, jungle::kRiver, 0x06201C, true);
     else
     {
-        draw::color(y2k::kGraphBg);
+        draw::color(L->graphBg);
         draw::rect(x1, y1, x2, y2);
     }
     const int mid = y1 + h / 2;
     if (!gv.hasSample)
     {
-        draw::color(j ? jungle::kSoft : y2k::kDim);
+        draw::color(j ? jungle::kSoft : L->dim);
         draw::text((x1 + x2) / 2, mid, f.small, OPT_CENTER, "No sample: Middle on Sample to pick one");
         return;
     }
     // the sample's shape: one bar per stretch
     const int bins = SynthGrainView::kBins;
     const float bw = (float)(w - 8) / bins;
-    draw::color(j ? jungle::kWave : y2k::kPanelEdge);
+    draw::color(j ? jungle::kWave : L->panelEdge);
     for (int b = 0; b < bins; b++)
     {
         const int bh = 1 + gv.peaks[b] * (h / 2 - 6) / 255;
@@ -273,15 +375,15 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
         draw::color(0xFFFFFF);
         draw::text(x1 + 32, y1 + 15, f.bold, OPT_CENTERY, t);
         const int lx1 = x1 + 200, lx2 = x1 + 360, ly = y1 + 11;
-        draw::color(j ? jungle::kRow : y2k::kOff);
+        draw::color(j ? jungle::kRow : L->off);
         draw::rect(lx1, ly, lx2, ly + 8);
         const float lv = clampf(gv.recLevel, 0, 1);
         if (lv > 0.0f)
         {
-            draw::color(lv > 0.9f ? 0xFF3B30 : (j ? jungle::kFirefly : y2k::kLime));
+            draw::color(lv > 0.9f ? 0xFF3B30 : (j ? jungle::kFirefly : L->lime));
             draw::rect(lx1, ly, lx1 + (int)((lx2 - lx1) * lv), ly + 8);
         }
-        draw::color(j ? jungle::kSoft : y2k::kDim);
+        draw::color(j ? jungle::kSoft : L->dim);
         draw::text(x2 - 10, y2 - 12, f.small, OPT_CENTERY | OPT_RIGHTX, "Rec: stop and keep");
         return;
     }
@@ -295,7 +397,7 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
         draw::alpha(255);
     }
     // playheads
-    draw::color(j ? jungle::kMoon : y2k::kLime);
+    draw::color(j ? jungle::kMoon : L->lime);
     for (int k = 0; k < gv.heads && k < SynthGrainView::kMaxHeads; k++)
     {
         const int px = x1 + 4 + (int)(clampf(gv.head[k], 0, 1) * (w - 9));
@@ -318,7 +420,7 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
             light[3 * i + 2] = (int16_t)(2 + lv * 3);
         }
         draw::alpha(60);
-        draw::color(j ? jungle::kFirefly : y2k::kCyan);
+        draw::color(j ? jungle::kFirefly : L->cyan);
         draw::dots(glow, n);
         draw::alpha(255);
         draw::color(j ? jungle::kFireflyHi : 0xC8FAFF);
@@ -326,7 +428,7 @@ void drawSampleView(const SynthView& v, int x1, int y1, int x2, int y2, const Fo
     }
     char info[20];
     snprintf(info, sizeof(info), j ? "%d fireflies" : "%d grains", n);
-    draw::color(j ? jungle::kSoft : y2k::kDim);
+    draw::color(j ? jungle::kSoft : L->dim);
     draw::text(x2 - 10, y2 - 12, f.small, OPT_CENTERY | OPT_RIGHTX, info);
 }
 
@@ -345,9 +447,9 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
     }
     if (p.graph != kGraphAvatar)
     {
-        draw::color(v.angelic ? angelic::kGraphBg : (v.jungle ? 0x07171A : y2k::kGraphBg));
+        draw::color(v.angelic ? angelic::kGraphBg : (v.jungle ? 0x07171A : L->graphBg));
         draw::rect(x1, y1, x2, y2);
-        draw::color(v.angelic ? angelic::kRing : (v.jungle ? jungle::kRing : y2k::kPanelEdge));
+        draw::color(v.angelic ? angelic::kRing : (v.jungle ? jungle::kRing : L->panelEdge));
         draw::frame(x1, y1, x2, y2, 1);
     }
 
@@ -370,15 +472,15 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
             if (p.gh > 120)
             {
                 // the four handles, in the colours of the buttons that pick them
-                static const uint32_t kHandle[4] = { y2k::kNote, y2k::kInstr, y2k::kFx1, y2k::kFx2 };
+                const uint32_t kHandle[4] = { L->note, L->instr, L->fx1, L->fx2 };
                 static const char* const kName[4] = { "A", "D", "S", "R" };
                 for (int k = 0; k < 4; k++)
                 {
                     const int hx = clampi(hp[2 * k], ix + 9, ix + iw - 10);
                     const int hy = clampi(hp[2 * k + 1], iy + 9, iy + ih - 10);
                     const int s = (g.handle == k) ? 11 : 8;
-                    draw::slant(hx - s, hy - s, hx + s, hy + s, s, kHandle[k], v.angelic ? angelic::kGraphBg : y2k::kGraphBg);
-                    draw::color(y2k::kDark);
+                    draw::slant(hx - s, hy - s, hx + s, hy + s, s, kHandle[k], v.angelic ? angelic::kGraphBg : L->graphBg);
+                    draw::color(L->dark);
                     draw::text(hx, hy, f.small, OPT_CENTER, kName[k]);
                 }
             }
@@ -397,7 +499,7 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
         case kGraphFilter:
         {
             // a grid line at each decade
-            draw::color(v.angelic ? angelic::kGrid : y2k::kGrid);
+            draw::color(v.angelic ? angelic::kGrid : L->grid);
             for (int k = 1; k < 3; k++)
                 draw::rect(ix + iw * k / 3, iy, ix + iw * k / 3, iy + ih - 1);
             n = filterPoints(g, ix, iy, iw, ih, pts, 48);
@@ -409,7 +511,7 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
             draw::lineStrip(pts, n);
             // the cutoff
             const int cx = ix + (int)((0.03f + clampf(g.cutoff, 0, 1) * 0.94f) * (iw - 1));
-            draw::color(v.angelic ? angelic::kAccent[0] : y2k::kPink);
+            draw::color(v.angelic ? angelic::kAccent[0] : L->pink);
             draw::rect(cx, iy, cx, iy + ih - 1);
             break;
         }
@@ -475,19 +577,19 @@ void drawGraph(const SynthView& v, int pi, const Fonts& f)
                 const int x2 = x1 + tw - 1, y2 = y1 + th - 1;
                 const bool lit = av.sung == k;
                 if (lit)
-                    draw::slant(x1, y1, x2, y2, 12, y2k::kLime, y2k::kPanel);
+                    draw::slant(x1, y1, x2, y2, 12, L->lime, L->panel);
                 else
                 {
-                    draw::color(y2k::kRow);
+                    draw::color(L->row);
                     draw::rect(x1 + 6, y1, x2 - 6, y2);
                 }
                 if (av.picked == k)
-                    draw::slantOutline(x1, y1, x2, y2, 12, y2k::kCyan, 32);
+                    draw::slantOutline(x1, y1, x2, y2, 12, L->cyan, 32);
                 char num[4];
                 snprintf(num, sizeof(num), "%d", k + 1);
-                draw::color(lit ? y2k::kDark : y2k::kDim);
+                draw::color(lit ? L->dark : L->dim);
                 draw::text(x1 + 18, y1 + 16, f.small, OPT_CENTERY, num);
-                draw::color(lit ? y2k::kDark : y2k::kText);
+                draw::color(lit ? L->dark : L->text);
                 draw::text((x1 + x2) / 2, (y1 + y2) / 2 + 4, f.big, OPT_CENTER, av.names[k]);
             }
             break;
@@ -521,11 +623,11 @@ void drawPanel(const SynthView& v, int pi, const Fonts& f)
 {
     const PanelPos& p = v.layout.panel[pi];
     const int x2 = p.x + p.w - 1, y2 = p.y + p.h - 1;
-    draw::cutBox(p.x, p.y, x2, y2, 12, y2k::kPanel, y2k::kBg);
+    draw::cutBox(p.x, p.y, x2, y2, 12, L->panel, L->bg);
     const int16_t edge[14] = { (int16_t)(p.x + 12), (int16_t)p.y, (int16_t)x2, (int16_t)p.y, (int16_t)x2,
                                (int16_t)(y2 - 12), (int16_t)(x2 - 12), (int16_t)y2, (int16_t)p.x, (int16_t)y2,
                                (int16_t)p.x, (int16_t)(p.y + 12), (int16_t)(p.x + 12), (int16_t)p.y };
-    draw::color(y2k::kPanelEdge);
+    draw::color(L->panelEdge);
     draw::lineWidth(16);
     draw::lineStrip(edge, 7);
     const uint32_t col = panelColor(v, pi);
@@ -536,7 +638,7 @@ void drawPanel(const SynthView& v, int pi, const Fonts& f)
     }
     if (v.panelInfo[pi][0] && p.w >= 400)
     {
-        draw::color(y2k::kDim);
+        draw::color(L->dim);
         draw::text(x2 - 14, p.y + 15, f.small, OPT_CENTERY | OPT_RIGHTX, v.panelInfo[pi]);
     }
     drawGraph(v, pi, f);
@@ -565,7 +667,7 @@ void ledBar(int x1, int y, int x2, int fill, bool bipolar, uint32_t col)
     }
     for (int pass = 0; pass < 2; pass++)
     {
-        draw::color(pass == 0 ? col : y2k::kOff);
+        draw::color(pass == 0 ? col : L->off);
         for (int k = 0; k < segs; k++)
             if (on[k] == (pass == 0))
                 draw::rect(x1 + k * w, y, x1 + k * w + w - 4, y + 6);
@@ -579,22 +681,22 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
     const bool sel = i == v.cursor;
     const uint32_t col = panelColor(v, c.panel);
     const int x2 = c.x + c.w - 1, y2 = c.y + c.h - 1;
-    const uint32_t under = (v.layout.style == kStyleColumns || v.layout.style == kStylePatch) ? y2k::kPanel : y2k::kBg;
+    const uint32_t under = (v.layout.style == kStyleColumns || v.layout.style == kStylePatch) ? L->panel : L->bg;
     char label[20], value[16];
 
     switch (c.kind)
     {
         case kCellChip:
         {
-            static const uint32_t kChip[4] = { y2k::kNote, y2k::kInstr, y2k::kFx1, y2k::kFx2 };
+            const uint32_t kChip[4] = { L->note, L->instr, L->fx1, L->fx2 };
             static const char* const kName[4] = { "A", "D", "S", "R" };
             const int k = clampi(c.role - kRoleAttack, 0, 3);
-            draw::slant(c.x, c.y, x2, y2, kSlant, sel ? y2k::kRowSel : y2k::kRow, under);
+            draw::slant(c.x, c.y, x2, y2, kSlant, sel ? L->rowSel : L->row, under);
             if (sel)
-                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
+                draw::slantOutline(c.x, c.y, x2, y2, kSlant, L->cyan, 32);
             draw::color(kChip[k]);
             draw::text(c.x + kSlant + 6, c.y + 11, f.small, OPT_CENTERY, kName[k]);
-            draw::color(y2k::kText);
+            draw::color(L->text);
             fit(value, sizeof(value), t.value, c.w / 9);
             draw::text(x2 - 10, c.y + c.h - 13, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
             break;
@@ -603,42 +705,42 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
         {
             if (sel)
             {
-                draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kRowSel, y2k::kBg);
-                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
+                draw::slant(c.x, c.y, x2, y2, kSlant, L->rowSel, L->bg);
+                draw::slantOutline(c.x, c.y, x2, y2, kSlant, L->cyan, 32);
             }
             else
             {
-                draw::color(y2k::kRow);
+                draw::color(L->row);
                 draw::rect(c.x, c.y, x2, y2);
             }
-            draw::color(sel ? y2k::kCyan : y2k::kDim);
+            draw::color(sel ? L->cyan : L->dim);
             fit(label, sizeof(label), t.label, 10);
             draw::text(c.x + 12, c.y + 15, f.small, OPT_CENTERY, label);
-            draw::color(y2k::kText);
+            draw::color(L->text);
             fit(value, sizeof(value), t.value, 7);
             draw::text(x2 - 10, c.y + 15, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
             if (t.fill >= 0)
-                ledBar(c.x + 12, c.y + c.h - 16, x2 - 8, t.fill, t.bipolar, y2k::kAccent[(i / 3) & 3]);
+                ledBar(c.x + 12, c.y + c.h - 16, x2 - 8, t.fill, t.bipolar, L->accent[(i / 3) & 3]);
             break;
         }
         case kCellAction:
         {
             // lit: the engine in use (lime)
             if (t.lit)
-                draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kLime, under);
+                draw::slant(c.x, c.y, x2, y2, kSlant, L->lime, under);
             else if (sel)
-                draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kRowSel, under);
+                draw::slant(c.x, c.y, x2, y2, kSlant, L->rowSel, under);
             else
             {
-                draw::color(y2k::kRow);
+                draw::color(L->row);
                 draw::rect(c.x, c.y, x2, y2);
             }
             if (sel)
-                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
-            draw::color(t.lit ? y2k::kDark : (sel ? y2k::kCyan : y2k::kText));
+                draw::slantOutline(c.x, c.y, x2, y2, kSlant, L->cyan, 32);
+            draw::color(t.lit ? L->dark : (sel ? L->cyan : L->text));
             fit(label, sizeof(label), t.label, 18);
             draw::text(c.x + 14, c.y + c.h / 2, f.bold, OPT_CENTERY, label);
-            draw::color(t.lit ? y2k::kDark : y2k::kDim);
+            draw::color(t.lit ? L->dark : L->dim);
             fit(value, sizeof(value), t.value, 15);
             draw::text(x2 - 12, c.y + c.h / 2, f.small, OPT_CENTERY | OPT_RIGHTX, value);
             break;
@@ -647,12 +749,12 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
         {
             if (sel)
             {
-                draw::slant(c.x, c.y, x2, y2, kSlant, y2k::kRowSel, under);
-                draw::slantOutline(c.x, c.y, x2, y2, kSlant, y2k::kCyan, 32);
+                draw::slant(c.x, c.y, x2, y2, kSlant, L->rowSel, under);
+                draw::slantOutline(c.x, c.y, x2, y2, kSlant, L->cyan, 32);
             }
             else
             {
-                draw::color(y2k::kRow);
+                draw::color(L->row);
                 draw::rect(c.x, c.y, x2, y2);
             }
             // name and value, sharing the width
@@ -664,9 +766,9 @@ void drawCell(const SynthView& v, int i, const Fonts& f)
                 lc = 6;
             fit(label, sizeof(label), t.label, lc);
             fit(value, sizeof(value), t.value, chars - lc - 1 > 4 ? chars - lc - 1 : 4);
-            draw::color(sel ? y2k::kCyan : y2k::kDim);
+            draw::color(sel ? L->cyan : L->dim);
             draw::text(c.x + 12, c.y + c.h / 2, f.label, OPT_CENTERY, label);
-            draw::color(y2k::kText);
+            draw::color(L->text);
             draw::text(x2 - 10, c.y + c.h / 2, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
             (void)col;
             break;
@@ -682,7 +784,7 @@ void drawMainExtras(const SynthView& v, const Fonts& f)
     if (v.angelic)
         draw::color(v.warn ? angelic::kAccent[0] : angelic::kSoft);
     else
-        draw::color(v.warn ? y2k::kPink : y2k::kDim);
+        draw::color(v.warn ? L->pink : L->dim);
     fit(line, sizeof(line), v.pathText, (p.w - 24) / 9);
     draw::text(p.x + 14, p.y + p.h - 52, f.small, OPT_CENTERY, line);
     fit(line, sizeof(line), v.hint, (p.w - 24) / 9);
@@ -690,7 +792,7 @@ void drawMainExtras(const SynthView& v, const Fonts& f)
 }
 
 // the singer picture in the bottom right corner (kStyleSinger). Its background
-// is meant to match the screen's (y2k::kBg), so it is drawn at its true
+// is meant to match the screen's (L->bg), so it is drawn at its true
 // colours even while Shift lightens everything else, on a patch of unlightened
 // background.
 void drawSinger(const SynthView& v)
@@ -705,7 +807,7 @@ void drawSinger(const SynthView& v)
         if (v.shift && !v.cute)
         {
             draw::setLighten(false);
-            draw::color(y2k::kBg);
+            draw::color(L->bg);
             draw::rect(x, y, kSingerRight, kSingerBottom);
         }
         draw::bitmap(av.address[k], w, h, x, y);
@@ -724,12 +826,12 @@ void drawSinger(const SynthView& v)
         }
         else
         {
-            draw::color(y2k::kPurple);
+            draw::color(L->purple);
             draw::rect(cx - r - 5, cy - r - 8, cx + r + 5, cy - r + 16);
         }
         draw::color(catFace ? 0xFFB347 : 0xFFD9EC);
         draw::rect(cx - r, cy - r, cx + r, cy + r);
-        draw::color(y2k::kDark);
+        draw::color(L->dark);
         draw::rect(cx - 20, cy - 14, cx - 10, cy - 2);
         draw::rect(cx + 10, cy - 14, cx + 20, cy - 2);
         if (av.singing)
@@ -1038,7 +1140,7 @@ void cuteTabs(const SynthView& v, const Fonts& f)
 
 void drawQuickBoxes(const SynthView& v, const Fonts& f)
 {
-    static const uint32_t kBtn[4] = { y2k::kNote, y2k::kInstr, y2k::kFx1, y2k::kFx2 };
+    const uint32_t kBtn[4] = { L->note, L->instr, L->fx1, L->fx2 };
     for (int k = 0; k < 4; k++)
     {
         const int x1 = kQuickX0 + k * 116, x2 = x1 + kQuickW - 1;
@@ -1046,11 +1148,11 @@ void drawQuickBoxes(const SynthView& v, const Fonts& f)
         const bool on = v.quickActive[k];
         if (v.quick[k].label[0] == 0)
         {
-            draw::slantOutline(x1, y1, x2, y2, kSlant, y2k::kOff, 16);
+            draw::slantOutline(x1, y1, x2, y2, kSlant, L->off, 16);
             continue;
         }
         if (on)
-            draw::slant(x1, y1, x2, y2, kSlant, kBtn[k], y2k::kBg);
+            draw::slant(x1, y1, x2, y2, kSlant, kBtn[k], L->bg);
         else
             draw::slantOutline(x1, y1, x2, y2, kSlant, kBtn[k], 24);
         char label[10], value[10];
@@ -1058,9 +1160,9 @@ void drawQuickBoxes(const SynthView& v, const Fonts& f)
         // the name gets what the value leaves (small font: about 6.5 pixels a letter)
         const int labelChars = clampi((86 - (int)strlen(value) * 8) * 2 / 13, 2, 8);
         abbreviate(v.quick[k].label, label, labelChars);
-        draw::color(on ? y2k::kDark : kBtn[k]);
+        draw::color(on ? L->dark : kBtn[k]);
         draw::text(x1 + kSlant + 6, (y1 + y2) / 2, f.small, OPT_CENTERY, label);
-        draw::color(on ? y2k::kDark : y2k::kText);
+        draw::color(on ? L->dark : L->text);
         draw::text(x2 - kSlant - 2, (y1 + y2) / 2, f.bold, OPT_CENTERY | OPT_RIGHTX, value);
     }
 }
@@ -1074,14 +1176,14 @@ void drawTabs(const SynthView& v, const Fonts& f)
         const int y1 = kTabsY, y2 = kTabsY + kTabsH - 1;
         const bool on = v.tabOn[i];
         if (on && v.shift)
-            draw::slant(x1, y1, x2, y2, 10, y2k::kLime, y2k::kBg); // a tool that is on
+            draw::slant(x1, y1, x2, y2, 10, L->lime, L->bg); // a tool that is on
         else if (on)
-            draw::slantFade(x1, y1, x2, y2, 10, y2k::kCyan, y2k::kPink, y2k::kBg);
+            draw::slantFade(x1, y1, x2, y2, 10, L->cyan, L->pink, L->bg);
         else
-            draw::slantOutline(x1, y1, x2, y2, 10, y2k::kPurple, 24);
+            draw::slantOutline(x1, y1, x2, y2, 10, L->purple, 24);
         if (v.tabText[i] && v.tabText[i][0])
         {
-            draw::color(on ? y2k::kDark : 0xCFC4FF);
+            draw::color(on ? L->dark : L->tabText);
             draw::text((x1 + x2) / 2, (y1 + y2) / 2, f.bold, OPT_CENTER, v.tabText[i]);
         }
     }
@@ -1093,6 +1195,7 @@ void SynthEditControl::update()
     if (view == nullptr)
         return;
     const SynthView& v = *view;
+    L = (!v.cute && v.look < kLookCount) ? &kLooks[v.look] : &kLooks[0];
     // the angelic look is light: its labels in the regular weight (the thin
     // one fades into the pearl), same width
     const Fonts f{ v.angelic ? fonts[2].handle : fonts[0].handle, fonts[2].handle, fonts[3].handle, fonts[4].handle };
@@ -1114,8 +1217,10 @@ void SynthEditControl::update()
         draw::fadeRect(0, 0, kScreenW - 1, 479, jungle::kSkyTop, jungle::kSkyLow, true);
     else
     {
-        draw::color(y2k::kBg);
+        draw::color(L->bg);
         draw::rect(0, 0, kScreenW - 1, 479);
+        if (!v.cute)
+            drawLookDecor(v);
     }
 
     if (v.cute)
@@ -1158,11 +1263,13 @@ void SynthEditControl::update()
     }
 
     // header: a chrome bar with a slanted end
-    draw::fadeRect(0, 0, 459, 28, y2k::kChromeHi, y2k::kChromeLo, true);
-    draw::slantEnd(440, 0, 459, 28, y2k::kBg);
-    draw::color(y2k::kChromeText);
+    draw::fadeRect(0, 0, 459, 28, L->chromeHi, L->chromeLo, true);
+    draw::slantEnd(440, 0, 459, 28, L->bg);
+    if (!v.cute)
+        drawLookHeader(v);
+    draw::color(L->chromeText);
     draw::text(10, 14, f.big, OPT_CENTERY, v.synthName);
-    draw::color(y2k::kCyan);
+    draw::color(L->cyan);
     {
         char info[24];
         fit(info, sizeof(info), v.headerInfo, 20);
@@ -1170,13 +1277,13 @@ void SynthEditControl::update()
     }
     if (v.pageText[0])
     {
-        draw::color(y2k::kPink);
+        draw::color(L->pink);
         draw::text(790, 14, f.bold, OPT_CENTERY | OPT_RIGHTX, v.pageText);
     }
 
     if (!v.editing)
     {
-        draw::color(y2k::kText);
+        draw::color(L->text);
         draw::text(kScreenW / 2, 240, f.big, OPT_CENTER, v.message);
         drawTabs(v, f);
         if (v.shift)
@@ -1185,7 +1292,7 @@ void SynthEditControl::update()
         return;
     }
 
-    draw::color(y2k::kText);
+    draw::color(L->text);
     draw::text(12, kQuickY + kQuickH / 2, f.big, OPT_CENTERY, v.title);
     drawQuickBoxes(v, f);
     // the tabs before the content: if a busy page runs out of room, it loses
@@ -1202,7 +1309,7 @@ void SynthEditControl::update()
         drawSinger(v);
     if (v.hint[0] && v.layout.style != kStyleMain)
     {
-        draw::color(v.warn ? y2k::kPink : y2k::kDim);
+        draw::color(v.warn ? L->pink : L->dim);
         draw::text(24, 352, f.small, OPT_CENTERY, v.hint);
     }
 
@@ -1210,8 +1317,8 @@ void SynthEditControl::update()
     {
         // a short note over the tabs' top edge (copied, pasted ...)
         const int w = (int)strlen(v.message) * 8 + 24;
-        draw::slant(400 - w / 2, 396, 400 + w / 2, 422, kSlant, y2k::kLime, y2k::kBg);
-        draw::color(y2k::kDark);
+        draw::slant(400 - w / 2, 396, 400 + w / 2, 422, kSlant, L->lime, L->bg);
+        draw::color(L->dark);
         draw::text(400, 409, f.bold, OPT_CENTER, v.message);
     }
     if (v.shift)

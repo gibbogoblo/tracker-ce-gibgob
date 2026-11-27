@@ -119,8 +119,19 @@ struct SynthView
     bool cute = false;   // the round look (pink for LILITRON); Shift does not lighten it
     bool jungle = false; // with cute: the night jungle colours (GORILLAGRAIN)
     bool angelic = false; // with cute: the Y2K cyber angelic look (CHILLAMANG): pearl, halos, wings
+    uint8_t look = 0;     // not cute: 0 the Y2K look, BONOBONGO's kLookBlast / kLookClub / kLookRed
     char message[64];
     HelpView help;
+};
+
+// the sharp looks (SynthView::look)
+enum : uint8_t
+{
+    kLookY2k = 0,
+    kLookBlast, // explosive Y2K edge
+    kLookClub,  // rainforest nightclub
+    kLookRed,   // red and black, 90s cool
+    kLookCount
 };
 
 class SynthEditControl : public cDisplayControl

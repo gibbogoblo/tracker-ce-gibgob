@@ -4,6 +4,7 @@
 // samples. This test keeps the engine around them honest: kits, modulation, tempo, levels.
 #include "gibgob/perc/Perc.h"
 #include "lxr/Soundengine/DSPAudio/random.h"
+#include "gibgob/perc/tools/perc_measure.h"
 
 #include <cmath>
 #include <cstdio>
@@ -377,15 +378,101 @@ static void testEngine()
     CHECK(paramUsed(pNoiseMix, kSnare) && !paramUsed(pNoiseMix, kDrum));
     CHECK(paramUsed(pDecayOpen, kHihat) && !paramUsed(pDecayOpen, kCymbal));
     printf("engine: %zu bytes (8 voices)\n", sizeof(Engine));
-    CHECK(sizeof(Engine) <= 4096);
+    CHECK(sizeof(Engine) <= 4608); // in the on-chip RAM (SRAM_OC), with the locks
+}
+
+// the kits' snares are tamed (tools/perc_tame.cpp): none harsh or loud past the targets
+static void testSnares()
+{
+    int bad = 0;
+    double worstBand = -99, worstLoud = -99;
+    for (int kit = 0; kit < kitCount(); kit++)
+    {
+        Sound s;
+        soundFromKit(kit, kSlotSnare, s);
+        const percmeasure::Result r = percmeasure::measure(*g_engine, s);
+        if (r.peak < 0.003f)
+            continue;
+        const double band = r.loudness + 10 * log10(r.harshness + 1e-9);
+        worstBand = fmax(worstBand, band);
+        worstLoud = fmax(worstLoud, r.loudness);
+        if (band > -31.9 || r.loudness > -18.9)
+        {
+            printf("  snare %s: band %.1f dB, loudness %.1f dB\n", s.name, band, r.loudness);
+            bad++;
+        }
+    }
+    printf("snares: the harshest 2-6 kHz band %.1f dB, the loudest %.1f dB\n", worstBand, worstLoud);
+    CHECK(bad == 0);
+}
+
+// parameter locks: a hit's own values, gone again at the next hit
+static void testLocks()
+{
+    Engine& e = *g_engine;
+    Sound bell, hat;
+    defaultSound(3, bell);
+    defaultSound(2, hat);
+    auto hitLength = [&](const Sound& s, const uint8_t* locks) {
+        e.init();
+        e.setSound(0, s);
+        lxr_seedRandom(7);
+        e.trigger(0, 110, 60, locks);
+        std::vector<float> l(44100 / 64 * 64, 0), r(l.size(), 0);
+        e.render(l.data(), r.data(), (int)l.size());
+        int last = 0;
+        for (size_t i = 0; i < l.size(); i++)
+            if (fabsf(l[i]) > 0.00316f)
+                last = (int)i;
+        return last;
+    };
+    const int plain = hitLength(bell, nullptr);
+    const uint8_t shortDecay[4] = { kLockDecay, 10, kLockOff, 0 };
+    const uint8_t longDecay[4] = { kLockDecay, 70, kLockOff, 0 };
+    CHECK(hitLength(bell, shortDecay) < plain / 2);
+    CHECK(hitLength(bell, longDecay) > plain * 3 / 2);
+    // the hat's Variant opens it
+    const uint8_t open[4] = { kLockVariant, 1, kLockOff, 0 };
+    CHECK(hitLength(hat, open) > hitLength(hat, nullptr) * 2);
+    // the next hit without locks: the sound as it is (a locked hit, then a plain one, same as plain)
+    {
+        e.init();
+        e.setSound(0, bell);
+        e.trigger(0, 110, 60, shortDecay);
+        std::vector<float> l(44100 / 64 * 64, 0), r(l.size(), 0);
+        e.render(l.data(), r.data(), (int)l.size());
+        std::fill(l.begin(), l.end(), 0.f);
+        e.trigger(0, 110, 60, nullptr);
+        e.render(l.data(), r.data(), (int)l.size());
+        int last = 0;
+        for (size_t i = 0; i < l.size(); i++)
+            if (fabsf(l[i]) > 0.00316f)
+                last = (int)i;
+        CHECK(abs(last - plain) < 64 * 2);
+    }
+    // which locks each voice type has, their names
+    CHECK(lockUsed(kLockPitchAmt, kDrum) && !lockUsed(kLockPitchAmt, kHihat));
+    CHECK(lockUsed(kLockVariant, kHihat) && lockUsed(kLockVariant, kSnare) && !lockUsed(kLockVariant, kDrum));
+    CHECK(strcmp(lockName(kLockTone, kSnare), "N Mix") == 0 && strcmp(lockName(kLockVariant, kHihat), "Open") == 0);
+    CHECK(lockMax(kLockVariant, kHihat) == 1 && lockMax(kLockDecay, kDrum) == 127);
+    CHECK(lockValueOf(kLockDecay, bell) == bell.value[pDecay]);
+    char t[16];
+    lockText(kLockPan, kDrum, 64, t, sizeof t);
+    CHECK(strcmp(t, "C") == 0);
+    for (int type = 0; type < kVoiceTypeCount; type++)
+        for (int k = 1; k < kLockKinds; k++)
+            if (lockUsed(k, type))
+                CHECK(strlen(lockShort(k, type)) <= 4);
 }
 
 int main()
 {
     testKits();
+    testSnares();
     testDefaults();
     testModulation();
     testEngine();
+    testLocks();
     if (failures)
         printf("perc_test: %d FAILED\n", failures);
     else

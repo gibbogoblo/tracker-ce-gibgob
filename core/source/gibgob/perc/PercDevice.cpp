@@ -33,9 +33,11 @@ bool s_mode = false;
 bool s_assigned = false;   // the drum tracks got kick, snare, hat, cowbell
 uint8_t s_sampleMask = 0;  // drum tracks whose source is their sample
 bool s_dirty = false;
+uint8_t s_look = 1;         // the editor's look (1 BLAST, 2 CLUB, 3 RED)
 
 // hits for the audio interrupt: voice -> 0x8000 | note << 8 | velocity (the last one wins)
-volatile uint32_t s_pending[Engine::kVoices];
+__BSS(SRAM_OC) volatile uint32_t s_pending[Engine::kVoices];
+__BSS(SRAM_OC) volatile uint32_t s_pendingLocks[Engine::kVoices]; // its locks: kind, value, kind, value (a byte each)
 
 const char* const kWorkspaceFile = "Workspace/perc.bin";
 const char* const kFileName = "perc.bin";
@@ -50,7 +52,8 @@ struct FileHeader
     uint8_t sampleMask;
     uint8_t paramCount; // the values stored per sound (more can be added: the rest keep defaults)
     uint8_t flags;      // 1: the default sounds were given
-    uint8_t reserved[7];
+    uint8_t look;       // the editor's look (0: the first, BLAST)
+    uint8_t reserved[6];
 };
 static_assert(sizeof(FileHeader) == 16, "perc.bin header");
 
@@ -83,13 +86,13 @@ bool isDrumTrack(int t)
     return p != nullptr && !gibgob::isMelodic(p, t) && !gibgob::isSliceTrack(p, t);
 }
 
-bool hookHit(int track, uint8_t pitch, uint8_t velocity)
+bool hookHit(int track, uint8_t pitch, uint8_t velocity, const uint8_t* locks)
 {
     if (!playsPerc(track))
         return false;
     const Sequencer::strPattern* p = gibgob::current();
     const int note = 60 + (int)pitch - (int)gibgob::laneNote(p, track);
-    play(track, velocity, note);
+    play(track, velocity, note, locks);
     return true;
 }
 
@@ -110,6 +113,7 @@ void defaults()
     s_mode = false;
     s_assigned = false;
     s_sampleMask = 0;
+    s_look = 1;
     s_loaded = true;
 }
 } // namespace
@@ -230,12 +234,16 @@ void loadKit(int kit)
     }
 }
 
-void play(int track, uint8_t velocity, int note)
+void play(int track, uint8_t velocity, int note, const uint8_t* locks)
 {
     if (!validTrack(track))
         return;
     note = note < 0 ? 0 : (note > 127 ? 127 : note);
     velocity = velocity < 1 ? 1 : (velocity > 127 ? 127 : velocity);
+    const uint32_t l = locks == nullptr ? 0u
+                                        : (uint32_t)locks[0] | ((uint32_t)locks[1] << 8) | ((uint32_t)locks[2] << 16) |
+                                            ((uint32_t)locks[3] << 24);
+    __atomic_store_n(&s_pendingLocks[track], l, __ATOMIC_RELAXED); // before the hit itself (released with it)
     __atomic_store_n(&s_pending[track], 0x8000u | ((uint32_t)note << 8) | velocity, __ATOMIC_RELEASE);
 }
 
@@ -261,7 +269,11 @@ AUDIO_CORE_RAM void render(float* left, float* right, int n)
     {
         const uint32_t hit = __atomic_exchange_n(&s_pending[t], 0u, __ATOMIC_ACQ_REL);
         if (hit & 0x8000u)
-            s_engine.trigger(t, (uint8_t)(hit & 0x7F), (int)((hit >> 8) & 0x7F));
+        {
+            const uint32_t l = __atomic_load_n(&s_pendingLocks[t], __ATOMIC_RELAXED);
+            const uint8_t locks[4] = { (uint8_t)l, (uint8_t)(l >> 8), (uint8_t)(l >> 16), (uint8_t)(l >> 24) };
+            s_engine.trigger(t, (uint8_t)(hit & 0x7F), (int)((hit >> 8) & 0x7F), l ? locks : nullptr);
+        }
         float g = 0.f;
         if (!mtProject.values.dryMixMute && !instrumentPlayer[t].gibgobMuted())
         {
@@ -272,6 +284,17 @@ AUDIO_CORE_RAM void render(float* left, float* right, int n)
         s_engine.setGain(t, g);
     }
     s_engine.render(left, right, n);
+}
+
+int look()
+{
+    return s_look;
+}
+
+void setLook(int l)
+{
+    s_look = (uint8_t)(l >= 1 && l <= 3 ? l : 1);
+    markChanged();
 }
 
 // ---- the file ----
@@ -331,6 +354,7 @@ void loadWorkspace()
             s_mode = hd.mode != 0;
             s_sampleMask = hd.sampleMask;
             s_assigned = (hd.flags & 1) != 0;
+            s_look = hd.look >= 1 && hd.look <= 3 ? hd.look : 1;
         }
     }
     f->closeFile(h);
@@ -356,6 +380,7 @@ void saveWorkspace()
     hd.sampleMask = s_sampleMask;
     hd.paramCount = kParamCount;
     hd.flags = s_assigned ? 1 : 0;
+    hd.look = s_look;
     bool good = f->writeFile(&hd, sizeof(hd), h) == (int32_t)sizeof(hd);
     for (int t = 0; t < Engine::kVoices && good; t++)
     {

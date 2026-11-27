@@ -95,9 +95,9 @@ void DrumOverviewControl::update()
     else if (v.count > 0 && !v.message[0])
         snprintf(title, sizeof(title), "%.10s  %s  %s", v.tracks[v.sel].name, v.pageText, v.lengthText);
     else
-        snprintf(title, sizeof(title), "%s", v.perc ? "PERC" : "Drums");
+        snprintf(title, sizeof(title), "%s", v.perc ? "BONOBONGO" : "Drums");
     // on the name: the track's length, no step values
-    drawInfoStrip(12, title, v.fillOn ? "FILL" : (v.perc ? "PERC" : nullptr), color::kBox, (v.count > 0 && !onName) ? boxes : nullptr,
+    drawInfoStrip(12, title, v.fillOn ? "FILL" : nullptr, color::kBox, (v.count > 0 && !onName) ? boxes : nullptr,
                   v.cloudLit, fRegular, fBold);
 
     if (v.count <= 0 || v.message[0])

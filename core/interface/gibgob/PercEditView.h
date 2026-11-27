@@ -35,6 +35,7 @@ struct Info
     bool shift = false;
     const char* message = "";
     char (*tabNames)[10] = nullptr; // where the tab names are kept (8)
+    int look = kLookBlast;          // BONOBONGO's look (SynthEditControl.h)
 };
 
 // lays the page out and fills every text and picture; the cursor is kept inside the page

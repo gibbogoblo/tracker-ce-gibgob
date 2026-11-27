@@ -25,7 +25,7 @@ namespace gibgob
 
 // told about every note the sequencer starts (the master duck listens)
 void (*g_noteStartHook)(int track) = nullptr;
-bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity) = nullptr;
+bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity, const uint8_t* locks) = nullptr;
 void (*g_trackTickHook)(int track, int tick, int trackTicks) = nullptr;
 bool (*g_singsSyllables)(uint8_t instrument) = nullptr;
 int g_liveSyllable = 0;
@@ -413,6 +413,7 @@ struct TrackPlayState
     uint8_t rollVel;
     uint8_t rollInstrument;
     uint8_t rollFx[4]; // its step's effects (type, value, type, value)
+    uint8_t rollLocks[4]; // its step's BONOBONGO locks (kind, value, kind, value)
     uint32_t pass; // times round the track since playback started (trig conditions)
 };
 
@@ -655,7 +656,8 @@ void startNote(int track,
                int lengthTicks,
                bool oneShot,
                uint8_t noteFlags = 0,
-               const uint8_t* stepFx = nullptr) // a drum step's effects: type, value, type, value
+               const uint8_t* stepFx = nullptr, // a drum step's effects: type, value, type, value
+               const uint8_t* locks = nullptr)  // its BONOBONGO locks: kind, value, kind, value
 {
     if (g_noteStartHook != nullptr)
         g_noteStartHook(track);
@@ -665,7 +667,7 @@ void startNote(int track,
         velocity = (uint8_t)clampInt(velocity + 27, 1, 127);
 
     // a PERC track: the hit goes to its drum synth voice (which rings on by itself)
-    if (g_percHit != nullptr && g_percHit(track, pitch, velocity))
+    if (g_percHit != nullptr && g_percHit(track, pitch, velocity, locks))
     {
         s_lastStartPitch[track & (kTracks - 1)] = pitch;
         return;
@@ -975,7 +977,8 @@ void enableDrumSteps(Sequencer::strPattern* p, int track)
 
 namespace
 {
-constexpr int8_t kStepFxMark = 0x47; // in the stock step's micromove byte: "GibGob step effects here"
+constexpr int8_t kStepFxMark = 0x47;   // in the stock step's micromove byte: "GibGob step effects here"
+constexpr int8_t kStepLockMark = 0x48; // ... "BONOBONGO parameter locks here"
 }
 
 const char* const kStepFxNames[kStepFxCount] = { "Off",     "Delay",  "Reverb", "Crush",   "Reverse", "Lowpass",
@@ -1198,13 +1201,26 @@ void stepFxValueText(int kind, int value, char* out, int outLen)
 
 StepFx getStepFx(const Sequencer::strPattern* p, int track, int step)
 {
-    StepFx fx{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
+    StepFx fx{ { kStepFxOff, kStepFxOff }, { 0, 0 }, kStepFxSetSample };
     if (!validTrack(track) || p == nullptr || step < 0 || step > Sequencer::MAXSTEP || !hasHeader(p, track))
         return fx;
     const auto& st = p->track[track].step[step];
-    if (st.micromove != kStepFxMark || st.note != Sequencer::STEP_NOTE_EMPTY)
+    if ((st.micromove != kStepFxMark && st.micromove != kStepLockMark) || st.note != Sequencer::STEP_NOTE_EMPTY)
         return fx;
     const uint8_t kinds = (uint8_t)st.volume;
+    if (st.micromove == kStepLockMark)
+    {
+        fx.set = kStepFxSetLocks;
+        for (int i = 0; i < 2; i++)
+        {
+            const int k = i == 0 ? (kinds & 0x0F) : (kinds >> 4);
+            if (k == 0)
+                continue;
+            fx.kind[i] = (uint8_t)k;
+            fx.value[i] = (uint8_t)clampInt(st.fx[i].value, 0, kStepLockMax);
+        }
+        return fx;
+    }
     for (int i = 0; i < 2; i++)
     {
         const int k = i == 0 ? (kinds & 0x0F) : (kinds >> 4);
@@ -1243,23 +1259,27 @@ void setStepFx(Sequencer::strPattern* p, int track, int step, const StepFx& fx)
         return;
     }
     uint8_t kinds = 0;
+    const bool locks = fx.set == kStepFxSetLocks;
     for (int i = 0; i < 2; i++)
     {
-        const int k = fx.kind[i] < kStepFxCount ? fx.kind[i] : kStepFxOff;
+        const int k = fx.kind[i] < 16 && (locks || fx.kind[i] < kStepFxCount) ? (int)fx.kind[i] : (int)kStepFxOff;
         kinds |= (uint8_t)(k << (4 * i));
-        st.fx[i].value = k == kStepFxOff ? 0 : (uint8_t)clampInt(fx.value[i], stepFxMin(k), stepFxMax(k));
+        if (locks)
+            st.fx[i].value = k == 0 ? 0 : (uint8_t)clampInt(fx.value[i], 0, kStepLockMax);
+        else
+            st.fx[i].value = k == kStepFxOff ? 0 : (uint8_t)clampInt(fx.value[i], stepFxMin(k), stepFxMax(k));
     }
     st.volume = (int8_t)kinds;
-    st.micromove = kStepFxMark;
+    st.micromove = locks ? kStepLockMark : kStepFxMark;
 }
 
 void clearAllStepFx(Sequencer::strPattern* p, int track)
 {
     if (!validTrack(track) || p == nullptr || !hasHeader(p, track))
         return;
-    const StepFx none{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
+    const StepFx none{ { kStepFxOff, kStepFxOff }, { 0, 0 }, kStepFxSetSample };
     for (int s = 0; s <= Sequencer::MAXSTEP; s++)
-        if (p->track[track].step[s].micromove == kStepFxMark)
+        if (p->track[track].step[s].micromove == kStepFxMark || p->track[track].step[s].micromove == kStepLockMark)
             setStepFx(p, track, s, none);
 }
 
@@ -2293,11 +2313,15 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
                         ins = (uint8_t)(v - 1);
                 }
                 // the step's effects (FX1, FX2), for every hit of its ratchet too
+                // (a step with BONOBONGO locks has no sample effects, and the other way round)
                 const StepFx sfx = getStepFx(p, track, (n.start + kTicksPerStep / 2) / kTicksPerStep);
+                const bool locks = sfx.set == kStepFxSetLocks;
                 for (int k2 = 0; k2 < 2; k2++)
                 {
-                    st.rollFx[2 * k2] = stepFxEngineType(sfx.kind[k2]);
-                    st.rollFx[2 * k2 + 1] = sfx.value[k2];
+                    st.rollFx[2 * k2] = locks ? 0 : stepFxEngineType(sfx.kind[k2]);
+                    st.rollFx[2 * k2 + 1] = locks ? 0 : sfx.value[k2];
+                    st.rollLocks[2 * k2] = locks ? sfx.kind[k2] : 0;
+                    st.rollLocks[2 * k2 + 1] = locks ? sfx.value[k2] : 0;
                 }
                 const int hits = kRatchetHits[noteRatchet(n)];
                 if (hits > 1)
@@ -2305,7 +2329,7 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
                     const int interval = kTicksPerStep / hits;
                     int span = (n.length + kTicksPerStep / 2) / kTicksPerStep;
                     span = span < 1 ? 1 : (span > 8 ? 8 : span);
-                    startNote(track, st, ins, n.pitch, velocity, interval, true, 0, st.rollFx);
+                    startNote(track, st, ins, n.pitch, velocity, interval, true, 0, st.rollFx, st.rollLocks);
                     st.rollLeft = (int16_t)(span * hits - 1);
                     st.rollIn = (int16_t)interval;
                     st.rollInterval = (int16_t)interval;
@@ -2314,7 +2338,7 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
                     st.rollInstrument = ins;
                 }
                 else
-                    startNote(track, st, ins, n.pitch, velocity, n.length, oneShot, 0, st.rollFx);
+                    startNote(track, st, ins, n.pitch, velocity, n.length, oneShot, 0, st.rollFx, st.rollLocks);
             }
             else if (sliceTrk)
             {
@@ -2368,7 +2392,7 @@ AUDIO_CORE_RAM void playMicroStep(int track, int tickInPattern, int patternTicks
     if (rollDue && st.rollLeft > 0)
     {
         chokeTrack(track, st);
-        startNote(track, st, st.rollInstrument, st.rollPitch, st.rollVel, st.rollInterval, true, 0, st.rollFx);
+        startNote(track, st, st.rollInstrument, st.rollPitch, st.rollVel, st.rollInterval, true, 0, st.rollFx, st.rollLocks);
         st.rollLeft--;
         st.rollIn = st.rollInterval;
     }
@@ -2496,7 +2520,7 @@ void auditionChordWith(int track, int forceInstrument, const uint8_t* pitches, i
         return;
     auditionOff(track);
     // a PERC track plays its drum synth (a sample picked from the library still plays the sample)
-    if (forceInstrument < 0 && g_percHit != nullptr && g_percHit(track, pitches[0] > 127 ? 127 : pitches[0], velocity))
+    if (forceInstrument < 0 && g_percHit != nullptr && g_percHit(track, pitches[0] > 127 ? 127 : pitches[0], velocity, nullptr))
         return;
 
     const Sequencer::strPattern* p = current();
@@ -2552,7 +2576,7 @@ void auditionAdd(int track, uint8_t pitch, uint8_t velocity)
     const Sequencer::strPattern* p = current();
     const uint8_t instrument = getSound(p, track);
     const bool sample = isSampleInstrument(instrument);
-    if (g_percHit != nullptr && g_percHit(track, pitch > 127 ? 127 : pitch, velocity))
+    if (g_percHit != nullptr && g_percHit(track, pitch > 127 ? 127 : pitch, velocity, nullptr))
         return;
     if (sample && mtProject.instrument[instrument].isActive != 1)
         return;

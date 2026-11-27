@@ -39,7 +39,8 @@ void setHatOpen(int track, bool open);
 // a whole kit onto the PERC tracks: the drum tracks in order take D1, SN, CH, D2, D3, OH, CY
 void loadKit(int kit);
 // a hit from the UI (pads, editor preview): 60 = the sound's own pitch
-void play(int track, uint8_t velocity, int note = 60);
+// locks: the hit's parameter locks (kind, value, kind, value; Perc.h LockKind) or nullptr
+void play(int track, uint8_t velocity, int note = 60, const uint8_t* locks = nullptr);
 float level(int track);
 bool sounding(int track);
 
@@ -52,6 +53,9 @@ void saveWorkspace();                 // when the workspace project is saved
 void newProject();                    // a new project: PERC off, the default sounds
 void copyProjectFile(const char* fromFolder, const char* toFolder); // project <-> workspace
 void markChanged();
+// the editor's look (SynthEditControl.h: kLookBlast, kLookClub, kLookRed), saved with the project
+int look();
+void setLook(int look);
 
 } // namespace perc
 } // namespace gibgob

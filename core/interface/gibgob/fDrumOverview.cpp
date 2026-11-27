@@ -93,6 +93,45 @@ bool isDrumTrack(const Sequencer::strPattern* p, int t)
 {
     return !isMelodic(p, t) && !isSliceTrack(p, t);
 }
+
+// a BONOBONGO track's steps hold parameter locks, a sample track's step effects: each sees only its own
+StepFx stepFxFor(const Sequencer::strPattern* p, int t, int step)
+{
+    const bool locks = perc::playsPerc(t);
+    const StepFx fx = getStepFx(p, t, step);
+    if ((fx.set == kStepFxSetLocks) == locks)
+        return fx;
+    return StepFx{ { 0, 0 }, { 0, 0 }, (uint8_t)(locks ? kStepFxSetLocks : kStepFxSetSample) };
+}
+
+// the locks this voice type has, in list order (index 0: off)
+int lockList(int type, uint8_t* kinds)
+{
+    int n = 0;
+    kinds[n++] = perc::kLockOff;
+    for (int k = 1; k < perc::kLockKinds; k++)
+        if (perc::lockUsed(k, type))
+            kinds[n++] = (uint8_t)k;
+    return n;
+}
+
+// a step's slot as "Dec 34" / "Rvb 70"
+void stepFxText(int t, const StepFx& fx, int k, char* out, int len)
+{
+    char val[12];
+    if (fx.set == kStepFxSetLocks)
+    {
+        const int type = perc::sound(t).type;
+        perc::lockText(fx.kind[k], type, fx.value[k], val, sizeof(val));
+        snprintf(out, (size_t)len, "%s %s", perc::lockShort(fx.kind[k], type), val);
+        return;
+    }
+    stepFxValueText(fx.kind[k], fx.value[k], val, sizeof(val));
+    if (fx.kind[k] == kStepFxReverse)
+        snprintf(out, (size_t)len, "%s", kStepFxShort[fx.kind[k]]);
+    else
+        snprintf(out, (size_t)len, "%s %s", kStepFxShort[fx.kind[k]], val);
+}
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -141,7 +180,7 @@ void cDrumOverview::start(uint32_t options)
 
     songTimer.show();
     titleBar->show();
-    titleBar->setTitle(perc::modeOn() ? "Drum overview - PERC" : "Drum overview");
+    titleBar->setTitle(perc::modeOn() ? "Drum overview - BONOBONGO" : "Drum overview");
 
     setDefaultScreenFunct();
     refresh();
@@ -290,8 +329,9 @@ void cDrumOverview::refresh()
     snprintf(v.labelTop[0], sizeof(v.labelTop[0]), "%s", shift ? "ratchet" : "prob");
     snprintf(v.labelTop[1], sizeof(v.labelTop[1]), "%s", shift ? "sample" : "vel");
     const bool steps2 = drumStepsOn(p, t);
-    snprintf(v.labelBot[0], sizeof(v.labelBot[0]), "%s", shift ? "fx1" : "nudge");
-    snprintf(v.labelBot[1], sizeof(v.labelBot[1]), "%s", shift ? "fx2" : "pitch");
+    const bool lockTrack = perc::playsPerc(t);
+    snprintf(v.labelBot[0], sizeof(v.labelBot[0]), "%s", shift ? (lockTrack ? "lock1" : "fx1") : "nudge");
+    snprintf(v.labelBot[1], sizeof(v.labelBot[1]), "%s", shift ? (lockTrack ? "lock2" : "fx2") : "pitch");
     for (int s = 0; s < kSteps; s++)
     {
         v.lockTop[s][0][0] = v.lockTop[s][1][0] = v.lockBot[s][0][0] = v.lockBot[s][1][0] = 0;
@@ -303,10 +343,11 @@ void cDrumOverview::refresh()
         {
             // Shift: the step's effects under it ("Rvb", "LP"), the ratchet ("x4",
             // "x4/2" = for 2 steps) and the step's own sample ("S2") over it
-            const StepFx fx = getStepFx(p, t, step);
+            const StepFx fx = stepFxFor(p, t, step);
             for (int k = 0; k < 2; k++)
                 if (fx.kind[k] != kStepFxOff)
-                    snprintf(v.lockBot[s][k], 8, "%s", kStepFxShort[fx.kind[k]]);
+                    snprintf(v.lockBot[s][k], 8, "%s",
+                             fx.set == kStepFxSetLocks ? perc::lockShort(fx.kind[k], perc::sound(t).type) : kStepFxShort[fx.kind[k]]);
             if (!steps2)
                 continue;
             const int hits = kRatchetHits[noteRatchet(n)];
@@ -333,7 +374,8 @@ void cDrumOverview::refresh()
     static const char* const kShiftNames[4] = { "ratchet", "sample", "fx1", "fx2" };
     for (int k = 0; k < 4; k++)
     {
-        snprintf(v.cloudLabel[k], sizeof(v.cloudLabel[k]), "%s", shift ? kShiftNames[k] : kNames[k]);
+        snprintf(v.cloudLabel[k], sizeof(v.cloudLabel[k]), "%s",
+                 shift ? (lockTrack && k >= 2 ? (k == 2 ? "lock1" : "lock2") : kShiftNames[k]) : kNames[k]);
         snprintf(v.cloudValue[k], sizeof(v.cloudValue[k]), "-");
     }
     if (shift && stepNotes(t, cursor, idx, 1) > 0)
@@ -354,34 +396,44 @@ void cDrumOverview::refresh()
     }
     if (shift && !onName)
     {
-        // the cursor step's effects: "Rvb 70"
-        const StepFx fx = getStepFx(p, t, cursor);
+        // the cursor step's effects: "Rvb 70" (BONOBONGO: its locks, "Dec 34")
+        const StepFx fx = stepFxFor(p, t, cursor);
         for (int k = 0; k < 2; k++)
-        {
-            if (fx.kind[k] == kStepFxOff)
-                continue;
-            char val[8];
-            stepFxValueText(fx.kind[k], fx.value[k], val, sizeof(val));
-            if (fx.kind[k] == kStepFxReverse)
-                snprintf(v.cloudValue[2 + k], sizeof(v.cloudValue[2 + k]), "%s", kStepFxShort[fx.kind[k]]);
-            else
-                snprintf(v.cloudValue[2 + k], sizeof(v.cloudValue[2 + k]), "%s %s", kStepFxShort[fx.kind[k]], val);
-        }
+            if (fx.kind[k] != kStepFxOff)
+                stepFxText(t, fx, k, v.cloudValue[2 + k], sizeof(v.cloudValue[2 + k]));
     }
     // the steps with effects (a small mark), and the effect list while FX1 / FX2 is held
     v.fxMark = 0;
     for (int s = 0; s < kSteps; s++)
-        if (first + s < steps && hasStepFx(p, t, first + s))
+        if (first + s < steps && (stepFxFor(p, t, first + s).kind[0] || stepFxFor(p, t, first + s).kind[1]))
             v.fxMark |= (uint8_t)(1u << s);
     v.fxList = -1;
     if ((param == kParamFx1 || param == kParamFx2) && !onName)
     {
         const int k = param == kParamFx1 ? 0 : 1;
         v.fxList = 2 + k;
-        v.fxCount = kStepFxCount;
-        for (int i = 0; i < kStepFxCount && i < DrumOverviewView::kFxListMax; i++)
-            v.fxNames[i] = kStepFxNames[i];
-        v.fxSel = getStepFx(p, t, cursor).kind[k];
+        const StepFx fx = stepFxFor(p, t, cursor);
+        if (fx.set == kStepFxSetLocks)
+        {
+            // BONOBONGO: the locks its voice type has
+            const int type = perc::sound(t).type;
+            uint8_t kinds[perc::kLockKinds];
+            v.fxCount = lockList(type, kinds);
+            v.fxSel = 0;
+            for (int i = 0; i < v.fxCount && i < DrumOverviewView::kFxListMax; i++)
+            {
+                v.fxNames[i] = perc::lockName(kinds[i], type);
+                if (kinds[i] == fx.kind[k])
+                    v.fxSel = i;
+            }
+        }
+        else
+        {
+            v.fxCount = kStepFxCount;
+            for (int i = 0; i < kStepFxCount && i < DrumOverviewView::kFxListMax; i++)
+                v.fxNames[i] = kStepFxNames[i];
+            v.fxSel = fx.kind[k];
+        }
     }
     if (!shift && stepNotes(t, cursor, idx, 1) > 0)
     {
@@ -423,7 +475,7 @@ void cDrumOverview::update()
     if (takeWhistleRequest())
     {
         perc::setMode(!perc::modeOn());
-        titleBar->setTitle(perc::modeOn() ? "Drum overview - PERC" : "Drum overview");
+        titleBar->setTitle(perc::modeOn() ? "Drum overview - BONOBONGO" : "Drum overview");
         changed = true;
     }
     if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
@@ -576,7 +628,7 @@ void cDrumOverview::deleteStep()
     beginEdit(kEditStep);
     for (int i = n - 1; i >= 0; i--)
         removeNote(p, t, idx[i]);
-    setStepFx(p, t, cursor, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } }); // its effects go with it
+    setStepFx(p, t, cursor, StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 }, kStepFxSetSample }); // its effects go with it
     markChanged();
     refresh();
 }
@@ -668,26 +720,44 @@ void cDrumOverview::changeParam(int dir, bool big)
     refresh();
 }
 
+// stopped: a BONOBONGO lock just changed plays the step's hit with it
+void cDrumOverview::previewLocks(const StepFx& fx)
+{
+    const int t = track();
+    if (fx.set != kStepFxSetLocks || sequencer.isPlay() || t < 0)
+        return;
+    int idx[kMaxNotes];
+    if (stepNotes(t, cursor, idx, 1) == 0)
+        return;
+    const Note n = getNote(current(), t, idx[0]);
+    const uint8_t locks[4] = { fx.kind[0], fx.value[0], fx.kind[1], fx.value[1] };
+    perc::play(t, n.velocity, 60 + (int)n.pitch - (int)laneNote(current(), t), locks);
+}
+
 // Shift + FX1 / FX2 held, +/-: how much of the step's effect (big: 10 at a time)
 void cDrumOverview::changeStepFx(int dir, bool big)
 {
     const int t = track();
     Sequencer::strPattern* p = current();
     const int k = param == kParamFx1 ? 0 : 1;
-    StepFx fx = getStepFx(p, t, cursor);
+    StepFx fx = stepFxFor(p, t, cursor);
+    const bool locks = fx.set == kStepFxSetLocks;
     if (fx.kind[k] == kStepFxOff)
     {
-        mtPopups.show(0, "Up/Down: pick an effect first", 1);
+        mtPopups.show(0, locks ? "Up/Down: pick a lock first" : "Up/Down: pick an effect first", 1);
         return;
     }
-    const int lo = stepFxMin(fx.kind[k]), hi = stepFxMax(fx.kind[k]);
-    const int v = clampInt((int)fx.value[k] + dir * (big ? 10 : 1), lo, hi);
+    const int lo = locks ? 0 : stepFxMin(fx.kind[k]);
+    const int hi = locks ? perc::lockMax(fx.kind[k], perc::sound(t).type) : stepFxMax(fx.kind[k]);
+    const int v = clampInt((int)fx.value[k] + dir * (big ? (locks ? 8 : 10) : 1), lo, hi);
     if (v == fx.value[k])
         return;
     beginEdit(kEditParam);
+    enableDrumSteps(p, t); // (the step's effects play with the track's per-step data)
     fx.value[k] = (uint8_t)v;
     setStepFx(p, t, cursor, fx);
     markChanged();
+    previewLocks(fx);
     refresh();
 }
 
@@ -705,15 +775,36 @@ void cDrumOverview::pickStepFx(int dir)
         return;
     }
     const int k = param == kParamFx1 ? 0 : 1;
-    StepFx fx = getStepFx(p, t, cursor);
-    const int kind = clampInt((int)fx.kind[k] + dir, kStepFxOff, kStepFxCount - 1);
-    if (kind == fx.kind[k])
-        return;
+    StepFx fx = stepFxFor(p, t, cursor);
+    int kind;
+    if (fx.set == kStepFxSetLocks)
+    {
+        // BONOBONGO: the next lock its voice type has; a new lock starts where the sound has it
+        const perc::Sound& snd = perc::sound(t);
+        uint8_t kinds[perc::kLockKinds];
+        const int n = lockList(snd.type, kinds);
+        int at = 0;
+        for (int i = 0; i < n; i++)
+            if (kinds[i] == fx.kind[k])
+                at = i;
+        kind = kinds[clampInt(at + dir, 0, n - 1)];
+        if (kind == fx.kind[k])
+            return;
+        fx.value[k] = kind == perc::kLockOff ? 0 : (uint8_t)perc::lockValueOf(kind, snd);
+    }
+    else
+    {
+        kind = clampInt((int)fx.kind[k] + dir, kStepFxOff, kStepFxCount - 1);
+        if (kind == fx.kind[k])
+            return;
+        fx.value[k] = kind == kStepFxOff ? 0 : (uint8_t)stepFxDefault(kind);
+    }
     beginEdit(kEditParam);
+    enableDrumSteps(p, t); // (the step's effects play with the track's per-step data)
     fx.kind[k] = (uint8_t)kind;
-    fx.value[k] = kind == kStepFxOff ? 0 : (uint8_t)stepFxDefault(kind);
     setStepFx(p, t, cursor, fx);
     markChanged();
+    previewLocks(fx);
     refresh();
 }
 
@@ -899,7 +990,7 @@ void cDrumOverview::copyPage()
             s_clip.note[s] = n;
             s_clip.has[s] = true;
         }
-        s_clip.fx[s] = step < steps ? getStepFx(p, t, step) : StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 } };
+        s_clip.fx[s] = step < steps ? getStepFx(p, t, step) : StepFx{ { kStepFxOff, kStepFxOff }, { 0, 0 }, kStepFxSetSample };
     }
     s_clip.full = true;
     mtPopups.show(0, "8 steps copied (Shift + Copy: paste)", 1);
@@ -938,6 +1029,8 @@ void cDrumOverview::pastePage()
                 full = true;
         }
         setStepFx(p, t, step, s_clip.fx[s]);
+        if (s_clip.fx[s].kind[0] || s_clip.fx[s].kind[1])
+            enableDrumSteps(p, t); // (the step's effects play with the track's per-step data)
     }
     markChanged();
     mtPopups.show(0, full ? "Track is full: not every step pasted" : "8 steps pasted", 1);

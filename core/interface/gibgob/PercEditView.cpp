@@ -14,7 +14,7 @@ namespace percui
 using namespace synthui;
 namespace pc = gibgob::perc;
 
-const char* const kTools[8] = { "INIT", "GO APE", "", "", "COMPARE", "UNDO", "", "BACK" };
+const char* const kTools[8] = { "INIT", "GO APE", "LOOK", "", "COMPARE", "UNDO", "", "BACK" };
 
 namespace
 {
@@ -92,7 +92,7 @@ void itemText(int item, const pc::Sound& s, const Info& info, SynthCellText& t)
     {
         case kItemVoices:
             snprintf(t.label, sizeof(t.label), "Source");
-            snprintf(t.value, sizeof(t.value), "%s", info.sourcePerc ? "PERC" : "Sample");
+            snprintf(t.value, sizeof(t.value), "%s", info.sourcePerc ? "BONOBONGO" : "Sample");
             break;
         case kItemDelay:
             snprintf(t.label, sizeof(t.label), "Hat");
@@ -103,7 +103,7 @@ void itemText(int item, const pc::Sound& s, const Info& info, SynthCellText& t)
             snprintf(t.value, sizeof(t.value), "%.15s", info.presetName ? info.presetName : "");
             break;
         case kItemSave:
-            snprintf(t.label, sizeof(t.label), "Kit: all PERC");
+            snprintf(t.label, sizeof(t.label), "Kit: all tracks");
             snprintf(t.value, sizeof(t.value), "%.15s", info.kitName ? info.kitName : "");
             break;
         case kItemSaveAs: snprintf(t.label, sizeof(t.label), "Revert"); break;
@@ -149,7 +149,7 @@ void fillGraph(const Group& g, const pc::Sound& s, SynthGraph& out)
 void buildModel(SynthModel& m, int voiceType)
 {
     clearModel(m);
-    snprintf(m.theme, sizeof(m.theme), "PERC");
+    snprintf(m.theme, sizeof(m.theme), "BONOBONGO");
     snprintf(m.page[kPageMain].title, sizeof(m.page[kPageMain].title), "Voice");
     {
         static const int osc[] = { pc::pWave, pc::pCoarse, pc::pFine, pc::pPwm };
@@ -221,8 +221,9 @@ void fillView(SynthView& v, const SynthModel& m, int page, int view, int cursor,
     v.shift = info.shift;
     v.editing = true;
     v.cute = v.jungle = v.angelic = false;
+    v.look = (uint8_t)(info.look >= kLookBlast && info.look < kLookCount ? info.look : kLookBlast);
 
-    snprintf(v.synthName, sizeof(v.synthName), "PERC %s", kTypeUpper[s.type % pc::kVoiceTypeCount]);
+    snprintf(v.synthName, sizeof(v.synthName), "BONOBONGO %s", kTypeUpper[s.type % pc::kVoiceTypeCount]);
     {
         char name[16];
         upper(name, sizeof(name), s.name);
