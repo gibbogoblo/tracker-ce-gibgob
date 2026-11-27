@@ -1,6 +1,8 @@
 // GibGob OS - drum overview: every drum track, 8 steps on screen
 // (shortcuts: gibgobHelp.h kHelpDrumOverview, Shift + Menu)
 
+#include "gibgob/gibgobPerc.h"
+#include "gibgob/perc/PercDevice.h"
 #include "gibgob/drumOverview.h"
 
 #include "core/interface.h"
@@ -139,7 +141,7 @@ void cDrumOverview::start(uint32_t options)
 
     songTimer.show();
     titleBar->show();
-    titleBar->setTitle("Drum overview");
+    titleBar->setTitle(perc::modeOn() ? "Drum overview - PERC" : "Drum overview");
 
     setDefaultScreenFunct();
     refresh();
@@ -219,6 +221,7 @@ void cDrumOverview::refresh()
         }
     v.shift = shiftActive();
     v.fillOn = g_fillActive;
+    v.perc = perc::modeOn();
     v.message[0] = 0;
     if (drumCount == 0)
     {
@@ -253,7 +256,12 @@ void cDrumOverview::refresh()
         DrumOverviewTrack& row = v.tracks[k];
         char name[12];
         trackDisplayName(tk, name, sizeof(name));
-        snprintf(row.name, sizeof(row.name), "%s", name);
+        // PERC mode: a PERC track shows its sound, a sample track gets its mark
+        row.sampleTag = v.perc && !perc::trackSource(tk);
+        if (v.perc && perc::trackSource(tk))
+            snprintf(row.name, sizeof(row.name), "%s", perc::sound(tk).name);
+        else
+            snprintf(row.name, sizeof(row.name), "%s", name);
         row.muted = mtProject.values.trackMute[tk] != 0;
         row.hit = row.exists = row.fillOnly = row.noFill = 0;
         const int len = trackSteps(p, tk);
@@ -411,6 +419,13 @@ void cDrumOverview::update()
 {
     perform::uiTick();
     bool changed = recPoll();
+    // Rec held for a second: PERC (the drum synth) or the samples
+    if (takeWhistleRequest())
+    {
+        perc::setMode(!perc::modeOn());
+        titleBar->setTitle(perc::modeOn() ? "Drum overview - PERC" : "Drum overview");
+        changed = true;
+    }
     if (auditionOffAt != 0 && (uint32_t)s_clock >= auditionOffAt)
     {
         auditionOffAt = 0;
@@ -496,6 +511,13 @@ void cDrumOverview::openTrackPage()
     const int t = track();
     if (t < 0)
         return;
+    if (perc::modeOn())
+    {
+        // PERC mode: the track's drum synth sound (Source there: PERC or its sample)
+        mtInterface.deactivateModule(this);
+        mtInterface.activateModule(&gibgobPerc, (uint32_t)t);
+        return;
+    }
     const uint32_t options = cGibGobPages::makeOptions(cGibGobPages::kPageTrack, cGibGobPages::kFromDrums, t);
     mtInterface.deactivateModule(this);
     mtInterface.activateModule(&gibgobPages, options);

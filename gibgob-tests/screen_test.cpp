@@ -221,6 +221,7 @@ static int render(cDisplayControl& c, const char* name, int limit, bool expectBo
 }
 
 #include "synth_screen.inc"
+#include "perc_screen.inc"
 
 void gibgobMiddleEvent(uint8_t value);
 
@@ -718,6 +719,30 @@ int main()
             }
             fillAll(4, true); dv.cursor = -1; // the cursor on the track name
             render(dc2, "drum overview, cursor on the name, full", kLimit, false);
+            // PERC mode: the teal look, a sample track among the PERC ones, the selected one too
+            for (int count : { 4, 8 })
+            {
+                fillAll(count, true); dv.perc = true;
+                for (int t = 0; t < count; t++) dv.tracks[t].sampleTag = (t % 2) == 1;
+                dv.tracks[6 < count ? 6 : 0].muted = true;
+                char nm[48]; snprintf(nm, sizeof(nm), "drum overview PERC, %d tracks, full", count);
+                render(dc2, nm, kLimit, false);
+                dv.shift = true;
+                snprintf(nm, sizeof(nm), "drum overview PERC, %d tracks, shift, full", count);
+                render(dc2, nm, kLimit, true);
+            }
+            if (const char* out = getenv("DRUM_SVG"))
+            {
+                fillAll(4, false); dv.perc = true; dv.tracks[3].sampleTag = true;
+                static const char* const kPercNm[4] = { "Badonka D1", "Badonka SN", "Badonka CH", "clap" };
+                for (int t = 0; t < 4; t++) snprintf(dv.tracks[t].name, sizeof(dv.tracks[t].name), "%s", kPercNm[t]);
+                char path[256]; snprintf(path, sizeof(path), "%s.perc.svg", out);
+                g_svg = fopen(path, "w");
+                fprintf(g_svg, "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='480'>\n");
+                words = 0; dc2.update();
+                fprintf(g_svg, "</svg>\n");
+                fclose(g_svg); g_svg = nullptr;
+            }
             fillAll(4, false); snprintf(dv.message, sizeof(dv.message), "No drum tracks in this pattern");
             render(dc2, "drum overview, no drum tracks", kLimit, false);
             dv.help.active = true; dv.help.lines = kHelpDrumOverview; dv.help.count = (int)(sizeof(kHelpDrumOverview) / sizeof(kHelpDrumOverview[0])); dv.help.title = "Drum overview - shortcuts";
@@ -963,7 +988,9 @@ int main()
                                 { "help: palette", kHelpPalette, (int)(sizeof(kHelpPalette) / sizeof(kHelpPalette[0])) },
                                 { "help: library", kHelpLibrary, (int)(sizeof(kHelpLibrary) / sizeof(kHelpLibrary[0])) },
                                 { "help: master fx", kHelpMasterFx, (int)(sizeof(kHelpMasterFx) / sizeof(kHelpMasterFx[0])) },
-                                { "help: synth editor", kHelpSynth, (int)(sizeof(kHelpSynth) / sizeof(kHelpSynth[0])) } };
+                                { "help: synth editor", kHelpSynth, (int)(sizeof(kHelpSynth) / sizeof(kHelpSynth[0])) },
+                                { "help: PERC", kHelpPerc, (int)(sizeof(kHelpPerc) / sizeof(kHelpPerc[0])) },
+                                { "help: drum overview (lines)", kHelpDrumOverview, (int)(sizeof(kHelpDrumOverview) / sizeof(kHelpDrumOverview[0])) } };
             for (const H& h : lists)
             {
                 dv.help.lines = h.lines; dv.help.count = h.count;
@@ -976,6 +1003,7 @@ int main()
     }
 
     synthTests(kLimit);
+    percTests(kLimit);
     printf(fails ? "UI TEST FAILED: %d\n" : "ALL SCREEN TESTS PASSED\n", fails);
     return fails ? 1 : 0;
 }

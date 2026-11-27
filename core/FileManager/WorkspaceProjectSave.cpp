@@ -1,3 +1,4 @@
+#include "gibgob/perc/PercDevice.h"
 #include "WorkspaceProjectSave.h"
 
 #include "fileManager.h"
@@ -118,6 +119,7 @@ void WorkspaceProjectSave::saveProjectToWorkspaceInit()
 
 void WorkspaceProjectSave::saveProjectToWorkspaceFinish()
 {
+    gibgob::perc::saveWorkspace(); // GibGob OS: the project's PERC sounds
 #if FILEMANAGER_HANDLE_SYNTH == 1
     newFileManager.getSynth()->saveDirtyWorkspacePatches();
 #endif

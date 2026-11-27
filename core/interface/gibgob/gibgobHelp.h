@@ -217,7 +217,8 @@ static const char* const kHelpLibrary[] = {
 static const char* const kHelpDrumOverview[] = {
     "Up/Down: pick a drum   Left/Right: a step",
     "Left from step 1: the name (Middle: settings,",
-    "  +/-: length one step, big +/-: 8/16/32/64/128)",
+    "  PERC: its sound; +/-: length, big: 8/16..128)",
+    "Hold Rec 1 s: PERC drum synth / samples",
     "Top row: the 8 steps on screen on / off",
     "Small +/-: next / previous 8 steps",
     "Big +/-: length 8 / 16 / 32 / 64 / 128",
@@ -239,6 +240,24 @@ static const char* const kHelpDrumOverview[] = {
     "Rec: REC > Q REC > off   Shift+Rec: undo",
     "Play: play / stop   Shift+Play: song",
     "Button 1: main screen  Button 2: sound",
+};
+
+static const char* const kHelpPerc[] = {
+    "Top row: Main Osc Filter Amp LFO LFO2 FX Patch",
+    "  the same page again: its next columns",
+    "D-pad: pick a value   +/-: change it (big: more)",
+    "Colour buttons: the 4 boxes at the top",
+    "Delete: the value back to its default",
+    "Middle / pads: play it",
+    "Main: Middle on a type = Drum/Snare/Cymbal/Hihat",
+    "  Source: PERC or the track's own sample",
+    "Patch: Preset +/- (the LXR-02 kits' voices)",
+    "  Kit +/- then Middle: onto all PERC tracks",
+    "  Revert, Init, Go Ape (+ its amount)",
+    "LFO / Velocity Dest: the value they move",
+    "Shift+1: init  Shift+2: Go Ape",
+    "Shift+5: compare  Shift+6: undo  Shift+8: back",
+    "Play: play / stop   Pattern: main screen",
 };
 
 #define GIBGOB_HELP(arr) (arr), (int)(sizeof(arr) / sizeof((arr)[0]))

@@ -404,6 +404,9 @@ void playMicroStep(int track, int tickInPattern, int patternTicks);
 void stopAll();
 // called (audio context) whenever the sequencer starts a note on a track
 extern void (*g_noteStartHook)(int track);
+// set by PERC (gibgob/perc/PercDevice): plays a drum track's hit on its drum synth voice and says
+// true when the track is a PERC one (the sample engine then leaves the hit alone)
+extern bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity);
 // called (audio context) on every micro step each track plays: the tick
 // inside the track and the track's length (the whistle take times itself by it)
 extern void (*g_trackTickHook)(int track, int tick, int trackTicks);

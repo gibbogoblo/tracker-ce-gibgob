@@ -1,3 +1,4 @@
+#include "gibgob/perc/PercDevice.h"
 #include "ProjectSave.h"
 
 #include "VoiceStreamManager.h"
@@ -541,6 +542,13 @@ void ProjectSave::saveProjectFinish()
 
     newFileManager.getSynth()->copyWorkspacePatches(cWorkspacePath, destFilePath);
 #endif
+    {
+        // GibGob OS: the project's PERC sounds
+        char projectFolder[255];
+        snprintf(projectFolder, sizeof(projectFolder), cProjectsPathFormat, newFileManager.getCurrentProjectPath(),
+                 newFileManager.getCurrentProjectName());
+        gibgob::perc::copyProjectFile(cWorkspacePath, projectFolder);
+    }
 
     //-----------------------------------
 

@@ -2,6 +2,7 @@
 
 #include "gibgob/Master.h"
 #include "gibgob/Perform.h"
+#include "gibgob/perc/PercDevice.h"
 #include "config.h"
 #include <string.h>
 
@@ -67,6 +68,8 @@ AUDIO_CORE_RAM void AudioEffectGibGobPerform::update(void)
         l[i] = (float)left->data[i] * (1.0f / 32768.0f);
         r[i] = (float)right->data[i] * (1.0f / 32768.0f);
     }
+    // PERC's drum voices join the mix here: CHIMP OUT and the master effects work on them too
+    gibgob::perc::render(l, r, AUDIO_BLOCK_SAMPLES);
     engine.process(l, r, AUDIO_BLOCK_SAMPLES, gibgob::perform::currentClock());
     // then the master effects (colour, glue) and the duck for the next block
     gibgob::master::audioBlock(l, r, AUDIO_BLOCK_SAMPLES);

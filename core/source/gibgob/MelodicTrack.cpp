@@ -25,6 +25,7 @@ namespace gibgob
 
 // told about every note the sequencer starts (the master duck listens)
 void (*g_noteStartHook)(int track) = nullptr;
+bool (*g_percHit)(int track, uint8_t pitch, uint8_t velocity) = nullptr;
 void (*g_trackTickHook)(int track, int tick, int trackTicks) = nullptr;
 bool (*g_singsSyllables)(uint8_t instrument) = nullptr;
 int g_liveSyllable = 0;
@@ -662,6 +663,13 @@ void startNote(int track,
 
     if (noteFlags & kNoteFlagAccent)
         velocity = (uint8_t)clampInt(velocity + 27, 1, 127);
+
+    // a PERC track: the hit goes to its drum synth voice (which rings on by itself)
+    if (g_percHit != nullptr && g_percHit(track, pitch, velocity))
+    {
+        s_lastStartPitch[track & (kTracks - 1)] = pitch;
+        return;
+    }
 
     // a slide continues on the voice of the note still sounding before it
     int legatoVoice = -1;
@@ -2487,6 +2495,9 @@ void auditionChordWith(int track, int forceInstrument, const uint8_t* pitches, i
     if (!validTrack(track) || count <= 0 || pitches == nullptr)
         return;
     auditionOff(track);
+    // a PERC track plays its drum synth (a sample picked from the library still plays the sample)
+    if (forceInstrument < 0 && g_percHit != nullptr && g_percHit(track, pitches[0] > 127 ? 127 : pitches[0], velocity))
+        return;
 
     const Sequencer::strPattern* p = current();
     uint8_t instrument = forceInstrument >= 0 ? (uint8_t)forceInstrument : getSound(p, track);
@@ -2541,6 +2552,8 @@ void auditionAdd(int track, uint8_t pitch, uint8_t velocity)
     const Sequencer::strPattern* p = current();
     const uint8_t instrument = getSound(p, track);
     const bool sample = isSampleInstrument(instrument);
+    if (g_percHit != nullptr && g_percHit(track, pitch > 127 ? 127 : pitch, velocity))
+        return;
     if (sample && mtProject.instrument[instrument].isActive != 1)
         return;
     if (!a.on || a.instrument != instrument)

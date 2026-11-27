@@ -274,6 +274,8 @@ class audioEngine
 class playerEngine
 {
   public:
+    // GibGob OS: PERC follows the voice's mute (mute, solo, drum cut)
+    uint8_t gibgobMuted() const { return muteState; }
     playerEngine();
 
     static bool isZeroInPointZone(uint16_t position, uint32_t sampleLength, int16_t* sampleAddress);

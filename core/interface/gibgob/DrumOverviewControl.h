@@ -19,6 +19,7 @@ struct DrumOverviewTrack
     uint8_t exists = 0;   // bit per step on screen: inside the track's length
     uint8_t fillOnly = 0; // bit per step: plays only in fills
     uint8_t noFill = 0;   // bit per step: left out of fills
+    bool sampleTag = false; // PERC mode: this track plays its sample ("smp")
 };
 
 struct DrumOverviewView
@@ -32,6 +33,7 @@ struct DrumOverviewView
     int cursor = 0;  // step on screen 0..7, -1 = on the track name
     int play = -1;   // playing step on screen, -1 = not on this page
     bool fillOn = false; // Insert held while playing
+    bool perc = false;   // PERC mode: the drum synth (teal), else the samples (drum red)
 
     // the selected track: the parameter names and each step's locked values
     char labelTop[2][10] = { { 0 } };

@@ -16,6 +16,8 @@ namespace
 // the bands: GibGob greys, the selected drum in the drum colour
 constexpr uint32_t kBand[2] = { 0x26262E, 0x2E2E38 };
 constexpr uint32_t kBandSel = 0x6E3730; // the drum red, deep enough for white on it
+constexpr uint32_t kBandSelPerc = 0x1F5459; // PERC mode: a deep teal
+constexpr uint32_t kPercEdge = 0x4FD1C5;    // PERC mode: the selected band's edge
 constexpr uint32_t kBandMuted = 0x1A1A20;
 constexpr uint32_t kHit = 0xFFFFFF;
 constexpr uint32_t kHitMuted = 0x8A8A94;
@@ -93,9 +95,9 @@ void DrumOverviewControl::update()
     else if (v.count > 0 && !v.message[0])
         snprintf(title, sizeof(title), "%.10s  %s  %s", v.tracks[v.sel].name, v.pageText, v.lengthText);
     else
-        snprintf(title, sizeof(title), "Drums");
+        snprintf(title, sizeof(title), "%s", v.perc ? "PERC" : "Drums");
     // on the name: the track's length, no step values
-    drawInfoStrip(12, title, v.fillOn ? "FILL" : nullptr, color::kBox, (v.count > 0 && !onName) ? boxes : nullptr,
+    drawInfoStrip(12, title, v.fillOn ? "FILL" : (v.perc ? "PERC" : nullptr), color::kBox, (v.count > 0 && !onName) ? boxes : nullptr,
                   v.cloudLit, fRegular, fBold);
 
     if (v.count <= 0 || v.message[0])
@@ -119,7 +121,7 @@ void DrumOverviewControl::update()
     edge[n] = kBot;
     uint32_t col[DrumOverviewView::kMaxTracks];
     for (int i = 0; i < n; i++)
-        col[i] = v.tracks[i].muted ? kBandMuted : (i == v.sel ? kBandSel : kBand[i & 1]);
+        col[i] = v.tracks[i].muted ? kBandMuted : (i == v.sel ? (v.perc ? kBandSelPerc : kBandSel) : kBand[i & 1]);
     float amp = n > 1 ? (float)small * 0.14f : 7.0f;
     amp = amp > 7.0f ? 7.0f : amp;
 
@@ -132,7 +134,7 @@ void DrumOverviewControl::update()
     }
     // the selected band's edge in the drum colour
     wave(edge[v.sel] - (v.sel == 0 ? 4 : 0), v.sel == 0 ? 3.0f : amp, v.sel * 90, xy);
-    draw::color(color::kDrum);
+    draw::color(v.perc ? kPercEdge : color::kDrum);
     draw::lineWidth(40);
     draw::lineStrip(xy, kWavePts);
     draw::lineWidth(16);
@@ -173,6 +175,12 @@ void DrumOverviewControl::update()
         {
             draw::color(color::kTextDim);
             draw::text(150, mid, fSmall, OPT_CENTERY | OPT_RIGHTX, "mute");
+        }
+        else if (t.sampleTag)
+        {
+            // PERC mode: a track that plays its sample
+            draw::color(color::kBox);
+            draw::text(150, sel ? edge[i] + 24 : mid, fSmall, OPT_CENTERY | OPT_RIGHTX, "smp");
         }
         if (sel && v.cursor < 0)
         {

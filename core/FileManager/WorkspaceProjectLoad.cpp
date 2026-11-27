@@ -1,3 +1,4 @@
+#include "gibgob/perc/PercDevice.h"
 #include "WorkspaceProjectLoad.h"
 
 #include "fileManager.h"
@@ -187,6 +188,8 @@ void WorkspaceProjectLoad::loadProjectFromWorkspaceFinish()
         }
     }
 #endif
+
+    gibgob::perc::loadWorkspace(); // GibGob OS: the project's PERC sounds
 
     newFileManager.loadProjectValues();
 

@@ -2,6 +2,7 @@
 
 #include "TrackerImpl.h"
 #include "gibgob/Master.h"
+#include "gibgob/perc/PercDevice.h"
 #include "gibgob/MelodicTrack.h"
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
@@ -78,6 +79,7 @@ void loadSaved()
     // until now the effects stage passed audio through untouched
     s_engine.attach(s_memory);
     gibgob::master::init(); // the master effects start with it
+    gibgob::perc::init();   // and PERC, the drum synth
 }
 
 // ---- Drum cut / Melodic cut: mute the tracks of a type, sounds keep playing

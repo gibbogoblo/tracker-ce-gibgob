@@ -7,6 +7,7 @@
 #include "gibgob/gibgobSynth.h"
 #include "gibgob/gibgobLibrary.h"
 #include "gibgob/drumOverview.h"
+#include "gibgob/gibgobPerc.h"
 #include "gibgob/MelodicTrack.h"
 #include <string.h>
 
@@ -64,7 +65,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 21;
+const uint8_t Interface::modulesCount = 22;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -87,6 +88,7 @@ const hModule Interface::modules[modulesCount] = {
     &gibgobSynth,       // 18  GibGob OS synth editor (synths with the GibGob layout)
     &gibgobLibrary,     // 19  GibGob OS sample library (track assign)
     &drumOverview,      // 20  GibGob OS drum overview (every drum track)
+    &gibgobPerc,        // 21  GibGob OS PERC editor (a PERC track's drum synth)
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;
